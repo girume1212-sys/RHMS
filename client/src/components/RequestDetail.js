@@ -1,12 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import Toast from './Toast';
+import { showStatusToast } from '../notify';
 
 export default function RequestDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fileInputRef = useRef(null);
   const [request, setRequest] = useState(null);
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState('');
@@ -15,13 +19,36 @@ export default function RequestDetail() {
   const [users, setUsers] = useState([]);
   const [categories, setCategories] = useState([]);
   const [prioritiesList, setPriorities] = useState([]);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(searchParams.get('edit') === 'true');
   const [editForm, setEditForm] = useState({});
+  const [editAttachments, setEditAttachments] = useState([]);
+  const [newFiles, setNewFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const [activityLog, setActivityLog] = useState([]);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+  const [showHistory, setShowHistory] = useState(true);
+
+  const isClient = user?.role === 'client';
+  const basePath = isClient ? '/client' : '';
+
+  const addToast = useCallback((message, type = 'success') => {
+    const tid = Date.now();
+    setToasts(prev => [...prev, { id: tid, message, type }]);
+  }, []);
+
+  const removeToast = useCallback((tid) => {
+    setToasts(prev => prev.filter(t => t.id !== tid));
+  }, []);
 
   useEffect(() => {
     loadRequest();
+    loadActivity();
     api.get('/api/statuses').then(setStatuses);
-    api.get('/api/users').then(setUsers);
+    if (!isClient) {
+      api.get('/api/users').then(setUsers);
+    }
     api.get('/api/categories').then(setCategories);
     api.get('/api/priorities').then(setPriorities);
   }, [id]);
@@ -29,35 +56,143 @@ export default function RequestDetail() {
   const loadRequest = () => {
     api.get(`/api/requests/${id}`).then(data => {
       setRequest(data);
-      setEditForm({ subject: data.subject, description: data.description, categoryId: data.categoryId, priorityId: data.priorityId, statusId: data.statusId, assignedTo: data.assignedTo || '' });
+      const attachments = data.attachments || [];
+      setEditForm({ subject: data.subject, description: data.description, categoryId: data.categoryId, priorityId: data.priorityId, statusId: data.statusId, assignedTo: data.assignedTo || '', attachments });
+      setEditAttachments(attachments);
       setLoading(false);
     });
   };
 
+  const loadActivity = () => {
+    setLoadingActivity(true);
+    api.get(`/api/requests/${id}/activity`).then(data => {
+      setActivityLog(data);
+      setLoadingActivity(false);
+    }).catch(err => {
+      console.error('Failed to load activity:', err);
+      setActivityLog([]);
+      setLoadingActivity(false);
+    });
+  };
+
   const handleStatusChange = async (statusId) => {
-    await api.put(`/api/requests/${id}`, { statusId });
-    loadRequest();
+    try {
+      await api.put(`/api/requests/${id}`, { statusId });
+      loadRequest();
+      loadActivity();
+      addToast('Status updated successfully!');
+      showStatusToast(`Request #${id} status updated`, 'status', id);
+    } catch (err) {
+      addToast('Failed to update status: ' + err.message, 'error');
+    }
   };
 
   const handleAssign = async (assignedTo) => {
-    await api.put(`/api/requests/${id}`, { assignedTo });
-    loadRequest();
+    try {
+      await api.put(`/api/requests/${id}`, { assignedTo });
+      loadRequest();
+      loadActivity();
+      addToast('Assignee updated successfully!');
+      showStatusToast(`Request #${id} assignee updated`, 'assignment', id);
+    } catch (err) {
+      addToast('Failed to update assignee: ' + err.message, 'error');
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const selected = Array.from(e.target.files);
+    setNewFiles(prev => [...prev, ...selected]);
+  };
+
+  const removeNewFile = (index) => {
+    setNewFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingAttachment = (index) => {
+    setEditAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadFiles = async () => {
+    const uploaded = [];
+    for (const file of newFiles) {
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res = await fetch('http://localhost:5000/api/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${localStorage.getItem('rhms_token')}` },
+          body: formData
+        });
+        const data = await res.json();
+        if (data.path) uploaded.push(data.path);
+      } catch (err) {
+        console.error('Upload failed:', err);
+        addToast('File upload failed: ' + err.message, 'error');
+      }
+    }
+    return uploaded;
   };
 
   const handleSave = async () => {
-    await api.put(`/api/requests/${id}`, editForm);
-    setEditing(false);
-    loadRequest();
+    setUploading(true);
+    try {
+      let uploadedPaths = [];
+      if (newFiles.length > 0) {
+        uploadedPaths = await uploadFiles();
+      }
+      const allAttachments = [...editAttachments, ...uploadedPaths];
+      await api.put(`/api/requests/${id}`, { ...editForm, attachments: allAttachments });
+      setEditing(false);
+      setNewFiles([]);
+      loadRequest();
+      loadActivity();
+      addToast('Request updated successfully!');
+      showStatusToast(`Request #${id} updated`, 'status', id);
+    } catch (err) {
+      console.error('Save failed:', err);
+      addToast('Failed to save changes: ' + err.message, 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUploadAdditional = async () => {
+    if (newFiles.length === 0) return;
+    setUploading(true);
+    try {
+      const uploadedPaths = await uploadFiles();
+      if (uploadedPaths.length > 0) {
+        const allAttachments = [...(request.attachments || []), ...uploadedPaths];
+        await api.put(`/api/requests/${id}`, { attachments: allAttachments });
+        setNewFiles([]);
+        loadRequest();
+        loadActivity();
+        addToast('Files uploaded successfully!');
+        showStatusToast(`Files uploaded to Request #${id}`, 'status', id);
+      }
+    } catch (err) {
+      addToast('Failed to upload files: ' + err.message, 'error');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleComment = async (e) => {
     e.preventDefault();
     if (!comment.trim()) return;
     setSubmitting(true);
-    await api.post(`/api/requests/${id}/comments`, { content: comment });
-    setComment('');
-    setSubmitting(false);
-    loadRequest();
+    try {
+      await api.post(`/api/requests/${id}/comments`, { content: comment });
+      setComment('');
+      addToast('Comment added successfully!');
+      loadRequest();
+      loadActivity();
+      showStatusToast(`Comment added to Request #${id}`, 'comment', id);
+    } catch (err) {
+      addToast('Failed to add comment: ' + err.message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -70,37 +205,93 @@ export default function RequestDetail() {
     return colors[priority?.name] || '#6B7280';
   };
 
+  const getActivityIcon = (type) => {
+    const icons = { created: '📋', status_update: '🔄', assigned: '👤', comment: '💬', updated: '✏️' };
+    return icons[type] || '📝';
+  };
+
+  const getActivityColor = (type) => {
+    const colors = { created: '#3B82F6', status_update: '#F59E0B', assigned: '#8B5CF6', comment: '#10B981', updated: '#6B7280' };
+    return colors[type] || '#6B7280';
+  };
+
+  const getStatusFlow = () => {
+    const lifecycle = ['Open', 'Assigned', 'In Progress', 'Waiting for Client', 'Resolved', 'Closed'];
+    const visitedStatuses = new Set();
+    const statusTimestamps = {};
+
+    activityLog.forEach(a => {
+      if (a.type === 'status_update') {
+        const match = a.message.match(/to\s+(.+)/i);
+        if (match) {
+          const name = match[1].trim();
+          visitedStatuses.add(name);
+          if (!statusTimestamps[name]) {
+            statusTimestamps[name] = { time: a.createdAt, user: a.user?.name };
+          }
+        }
+      }
+    });
+
+    if (request.status) {
+      visitedStatuses.add(request.status.name);
+      if (!statusTimestamps[request.status.name]) {
+        statusTimestamps[request.status.name] = { time: request.createdAt, user: request.client?.name };
+      }
+    }
+
+    const currentStatus = request.status?.name;
+    const currentIdx = lifecycle.indexOf(currentStatus);
+
+    return lifecycle.map((name, idx) => ({
+      name,
+      color: getStatusColor({ name }),
+      visited: visitedStatuses.has(name),
+      current: name === currentStatus,
+      isPast: currentIdx >= 0 && idx < currentIdx,
+      time: statusTimestamps[name]?.time,
+      user: statusTimestamps[name]?.user
+    }));
+  };
+
+  const isImageFile = (path) => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(path);
+  const getFileName = (path) => path.split('/').pop();
+
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
   if (!request) return <div className="empty-state">Request not found</div>;
 
-  const canEdit = user.role !== 'client';
-  const developers = users.filter(u => u.role === 'developer');
+  const developers = users.filter(u => u.role === 'developer' || u.role === 'support');
+  const attachments = request.attachments || [];
 
   return (
     <div className="page-container">
+      <div className="toast-container">
+        {toasts.map(t => (
+          <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)} />
+        ))}
+      </div>
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => navigate('/requests')}>← Back to Requests</button>
+          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← Back to Requests</button>
           <h1>Request #{request.id}</h1>
           <p>{request.subject}</p>
-        </div>
-        <div className="header-actions">
-          {canEdit && !editing && (
-            <button className="btn btn-outline" onClick={() => setEditing(true)}>✏️ Edit</button>
-          )}
         </div>
       </div>
 
       <div className="detail-grid">
         <div className="detail-main">
+          {/* Request Details Card */}
           <div className="detail-card">
             <div className="detail-card-header">
               <h3>Request Details</h3>
+              {!isClient && !editing && (
+                <button className="btn btn-sm btn-outline" onClick={() => setEditing(true)}>Edit</button>
+              )}
             </div>
             {editing ? (
               <div className="edit-form">
                 <div className="form-group">
-                  <label>Subject</label>
+                  <label>Request Title</label>
                   <input type="text" value={editForm.subject} onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })} />
                 </div>
                 <div className="form-group">
@@ -121,27 +312,135 @@ export default function RequestDetail() {
                     </select>
                   </div>
                 </div>
+                <div className="form-group">
+                  <label>Attachments</label>
+                  <div className="attachments-grid">
+                    {editAttachments.map((path, i) => (
+                      <div key={`existing-${i}`} className="attachment-item">
+                        {isImageFile(path) ? (
+                          <img src={`http://localhost:5000${path}`} alt={getFileName(path)} className="attachment-image" onClick={() => setLightbox(`http://localhost:5000${path}`)} />
+                        ) : (
+                          <a href={`http://localhost:5000${path}`} target="_blank" rel="noopener noreferrer" className="attachment-file">
+                            <span className="attachment-file-icon">📄</span>
+                            <span>{getFileName(path)}</span>
+                          </a>
+                        )}
+                        <button type="button" className="file-preview-remove" onClick={() => removeExistingAttachment(i)} style={{ position: 'absolute', top: 4, right: 4, background: '#EF4444', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                      </div>
+                    ))}
+                    {newFiles.map((file, i) => (
+                      <div key={`new-${i}`} className="attachment-item" style={{ position: 'relative' }}>
+                        {file.type.startsWith('image/') ? (
+                          <img src={URL.createObjectURL(file)} alt={file.name} className="attachment-image" />
+                        ) : (
+                          <div className="attachment-file">
+                            <span className="attachment-file-icon">📄</span>
+                            <span>{file.name}</span>
+                          </div>
+                        )}
+                        <button type="button" className="file-preview-remove" onClick={() => removeNewFile(i)} style={{ position: 'absolute', top: 4, right: 4, background: '#EF4444', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="file-upload" onClick={() => fileInputRef.current.click()} style={{ marginTop: 12 }}>
+                    <input type="file" ref={fileInputRef} multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style={{ display: 'none' }} onChange={handleFileChange} />
+                    <div className="file-upload-icon">📤</div>
+                    <div className="file-upload-text">Click to upload files</div>
+                    <div className="file-upload-hint">Images, PDF, DOCX, XLSX (Max 10MB each)</div>
+                  </div>
+                </div>
                 <div className="form-actions">
-                  <button className="btn btn-outline" onClick={() => setEditing(false)}>Cancel</button>
-                  <button className="btn btn-primary" onClick={handleSave}>Save Changes</button>
+                  <button className="btn btn-outline" onClick={() => { setEditing(false); setNewFiles([]); loadRequest(); }}>Cancel</button>
+                  <button className="btn btn-primary" onClick={handleSave} disabled={uploading}>
+                    {uploading ? 'Saving...' : 'Save Changes'}
+                  </button>
                 </div>
               </div>
             ) : (
               <div className="detail-content">
                 <p className="detail-description">{request.description}</p>
+                {attachments.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    <h4 style={{ marginBottom: 8, fontSize: 14, color: '#6B7280' }}>Attachments ({attachments.length})</h4>
+                    <div className="attachments-grid">
+                      {attachments.map((path, i) => (
+                        <div key={i} className="attachment-item">
+                          {isImageFile(path) ? (
+                            <img src={`http://localhost:5000${path}`} alt={getFileName(path)} className="attachment-image" onClick={() => setLightbox(`http://localhost:5000${path}`)} />
+                          ) : (
+                            <a href={`http://localhost:5000${path}`} target="_blank" rel="noopener noreferrer" className="attachment-file">
+                              <span className="attachment-file-icon">📄</span>
+                              <span>{getFileName(path)}</span>
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
+          {/* Upload Additional Files (Client) */}
+          {isClient && !editing && (
+            <div className="detail-card">
+              <h3>📎 Upload Additional Files</h3>
+              <div className="file-upload" onClick={() => fileInputRef.current.click()}>
+                <input type="file" ref={fileInputRef} multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style={{ display: 'none' }} onChange={handleFileChange} />
+                <div className="file-upload-icon">📤</div>
+                <div className="file-upload-text">Click to upload additional files</div>
+                <div className="file-upload-hint">Images, PDF, DOCX, XLSX (Max 10MB each)</div>
+              </div>
+              {newFiles.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div className="attachments-grid">
+                    {newFiles.map((file, i) => (
+                      <div key={`new-${i}`} className="attachment-item" style={{ position: 'relative' }}>
+                        {file.type.startsWith('image/') ? (
+                          <img src={URL.createObjectURL(file)} alt={file.name} className="attachment-image" />
+                        ) : (
+                          <div className="attachment-file">
+                            <span className="attachment-file-icon">📄</span>
+                            <span>{file.name}</span>
+                          </div>
+                        )}
+                        <button type="button" className="file-preview-remove" onClick={() => removeNewFile(i)} style={{ position: 'absolute', top: 4, right: 4, background: '#EF4444', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="btn btn-primary" onClick={handleUploadAdditional} disabled={uploading} style={{ marginTop: 12 }}>
+                    {uploading ? 'Uploading...' : 'Upload Files'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Timeline / History removed from main - moved to sidebar */}
+
+          {/* Comments / Reply */}
           <div className="detail-card">
-            <h3>Comments ({request.comments?.length || 0})</h3>
+            <h3>💬 Comments ({request.comments?.length || 0})</h3>
             <div className="comments-list">
               {request.comments?.map((c) => (
                 <div key={c.id} className="comment-item">
-                  <div className="comment-avatar">{c.user?.name?.charAt(0) || 'U'}</div>
+                  <div className="comment-avatar" style={{ background: c.user?.role === 'client' ? '#7c3aed' : '#3B82F6' }}>
+                    {c.user?.name?.charAt(0) || 'U'}
+                  </div>
                   <div className="comment-body">
                     <div className="comment-header">
                       <strong>{c.user?.name || 'Unknown'}</strong>
+                      <span className="comment-role" style={{ 
+                        background: c.user?.role === 'client' ? '#7c3aed20' : '#3B82F620',
+                        color: c.user?.role === 'client' ? '#7c3aed' : '#3B82F6',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: '600'
+                      }}>
+                        {c.user?.role === 'client' ? 'Client' : c.user?.role === 'admin' ? 'Admin' : c.user?.role === 'support' ? 'Support' : 'Developer'}
+                      </span>
                       <span className="comment-time">{new Date(c.createdAt).toLocaleString()}</span>
                     </div>
                     <p>{c.content}</p>
@@ -149,18 +448,24 @@ export default function RequestDetail() {
                 </div>
               ))}
               {(!request.comments || request.comments.length === 0) && (
-                <div className="empty-state">No comments yet</div>
+                <div className="empty-state">No comments yet. Be the first to reply!</div>
               )}
             </div>
             <form onSubmit={handleComment} className="comment-form">
-              <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Write a comment..." rows={3} />
+              <textarea 
+                value={comment} 
+                onChange={(e) => setComment(e.target.value)} 
+                placeholder="Write a reply..." 
+                rows={3} 
+              />
               <button type="submit" className="btn btn-primary" disabled={submitting || !comment.trim()}>
-                {submitting ? 'Sending...' : 'Send Comment'}
+                {submitting ? 'Sending...' : '💬 Send Reply'}
               </button>
             </form>
           </div>
         </div>
 
+        {/* Sidebar */}
         <div className="detail-sidebar">
           <div className="detail-card">
             <h3>Information</h3>
@@ -189,30 +494,49 @@ export default function RequestDetail() {
                 <span className="info-label">Last Updated</span>
                 <span>{new Date(request.updatedAt).toLocaleDateString()}</span>
               </div>
+              {attachments.length > 0 && (
+                <div className="info-row">
+                  <span className="info-label">Attachments</span>
+                  <span>{attachments.length} file{attachments.length !== 1 ? 's' : ''}</span>
+                </div>
+              )}
             </div>
           </div>
 
-          {canEdit && (
+          {/* Actions (Admin/Support only) */}
+          {!isClient && (
             <div className="detail-card">
               <h3>Actions</h3>
               <div className="action-list">
                 <div className="action-group">
                   <label>Change Status</label>
                   <select value={request.statusId} onChange={(e) => handleStatusChange(e.target.value)}>
-                    {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {statuses
+                      .filter(s => !(user.role === 'support' && s.name === 'Escalated'))
+                      .map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div className="action-group">
                   <label>Assign To</label>
                   <select value={request.assignedTo || ''} onChange={(e) => handleAssign(e.target.value)}>
                     <option value="">Unassigned</option>
-                    {developers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    <optgroup label="Escalation Team">
+                      {users.filter(u => u.role === 'support').map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Developers">
+                      {users.filter(u => u.role === 'developer').map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
               </div>
             </div>
           )}
 
+          {/* Assignee */}
           <div className="detail-card">
             <h3>Assignee</h3>
             {request.assignee ? (
@@ -220,15 +544,120 @@ export default function RequestDetail() {
                 <div className="assignee-avatar-lg" style={{ background: '#3B82F6' }}>{request.assignee.name.charAt(0)}</div>
                 <div>
                   <div className="assignee-name">{request.assignee.name}</div>
-                  <div className="assignee-role">Developer</div>
+                  <div className="assignee-role">{request.assignee.role === 'support' ? 'Support' : 'Developer'}</div>
                 </div>
               </div>
             ) : (
               <p className="unassigned">Not assigned yet</p>
             )}
           </div>
+
+          {/* Timeline / History */}
+          <div className="detail-card">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, border: 'none', padding: 0 }}>📜 History</h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="action-btn-text edit"
+                  onClick={() => setShowHistory(!showHistory)}
+                >
+                  {showHistory ? 'Hide History' : 'Show History'}
+                </button>
+                {activityLog.length > 0 && (
+                  <button
+                    className="action-btn-text delete"
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to clear the history view?')) {
+                        setActivityLog([]);
+                      }
+                    }}
+                  >
+                    Clear History
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {showHistory && (
+              <>
+                {/* Status Lifecycle Flow */}
+                <div className="status-lifecycle">
+                  <div className="lifecycle-header">
+                    <span className="lifecycle-icon">🔄</span>
+                    <span className="lifecycle-title">Status Flow</span>
+                  </div>
+                  <div className="lifecycle-flow">
+                    {getStatusFlow().map((step, idx) => (
+                      <React.Fragment key={step.name}>
+                        <div className={`lifecycle-step ${step.visited ? 'visited' : ''} ${step.current ? 'current' : ''} ${step.isPast ? 'past' : ''}`}>
+                          <div className="lifecycle-dot" style={{
+                            background: step.visited ? step.color : '#d1d5db',
+                            boxShadow: step.current ? `0 0 0 4px ${step.color}30, 0 0 12px ${step.color}50` : 'none'
+                          }}>
+                            {step.visited && <span className="lifecycle-check">✓</span>}
+                            {step.current && <span className="lifecycle-pulse" style={{ borderColor: step.color }}></span>}
+                          </div>
+                          <span className="lifecycle-label" style={{ color: step.visited ? step.color : 'rgb(156, 163, 175)', fontWeight: step.current ? 700 : step.visited ? 600 : 400 }}>
+                            {step.name}
+                          </span>
+                          {step.time && (
+                            <span className="lifecycle-time">
+                              {step.user && <span className="lifecycle-user">{step.user}</span>}
+                              {new Date(step.time).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        {idx < getStatusFlow().length - 1 && (
+                          <div className="lifecycle-connector" style={{
+                            background: step.isPast ? `linear-gradient(90deg, ${step.color}, ${getStatusFlow()[idx + 1].color})` : '#e5e7eb'
+                          }}></div>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="timeline">
+                  {loadingActivity ? (
+                    <div className="loading-screen" style={{ minHeight: 'auto', padding: '20px' }}><div className="spinner"></div></div>
+                  ) : activityLog.length === 0 ? (
+                    <div className="empty-state">No activity yet</div>
+                  ) : (
+                    <div className="timeline-list">
+                      {activityLog.map((activity) => (
+                        <div key={activity.id} className="timeline-item">
+                          <div className="timeline-marker" style={{ background: getActivityColor(activity.type) }}></div>
+                          <div className="timeline-connector"></div>
+                          <div className="timeline-content">
+                            <div className="timeline-header">
+                              <span className="timeline-icon" style={{ color: getActivityColor(activity.type) }}>
+                                {getActivityIcon(activity.type)}
+                              </span>
+                              <span className="timeline-message">{activity.message}</span>
+                            </div>
+                            <div className="timeline-meta">
+                              <span className="timeline-user">{activity.user?.name || 'System'}</span>
+                              <span className="timeline-dot">·</span>
+                              <span className="timeline-time">{new Date(activity.createdAt).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
+
+      {lightbox && (
+        <div className="lightbox-overlay" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="Preview" style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: 8 }} />
+          <button className="lightbox-close" onClick={() => setLightbox(null)} style={{ position: 'absolute', top: 20, right: 20, background: '#fff', border: 'none', borderRadius: '50%', width: 36, height: 36, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+        </div>
+      )}
     </div>
   );
 }

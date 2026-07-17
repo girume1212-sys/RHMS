@@ -1,18 +1,13 @@
-DROP DATABASE IF EXISTS rhms;
-CREATE DATABASE rhms;
-
-\c rhms;
-
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE groups (
+CREATE TABLE IF NOT EXISTS groups (
   id VARCHAR(50) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   description TEXT,
   color VARCHAR(20) DEFAULT '#6B7280'
 );
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(50) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
@@ -24,27 +19,27 @@ CREATE TABLE users (
   FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE SET NULL
 );
 
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
   id VARCHAR(50) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   description TEXT,
   color VARCHAR(20) DEFAULT '#6B7280'
 );
 
-CREATE TABLE priorities (
+CREATE TABLE IF NOT EXISTS priorities (
   id VARCHAR(50) PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   color VARCHAR(20) DEFAULT '#6B7280',
   level INTEGER DEFAULT 1
 );
 
-CREATE TABLE statuses (
+CREATE TABLE IF NOT EXISTS statuses (
   id VARCHAR(50) PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   color VARCHAR(20) DEFAULT '#6B7280'
 );
 
-CREATE TABLE requests (
+CREATE TABLE IF NOT EXISTS requests (
   id VARCHAR(50) PRIMARY KEY,
   subject VARCHAR(500) NOT NULL,
   description TEXT NOT NULL,
@@ -53,12 +48,12 @@ CREATE TABLE requests (
   priority_id VARCHAR(50) REFERENCES priorities(id),
   status_id VARCHAR(50) REFERENCES statuses(id),
   assigned_to VARCHAR(50) REFERENCES users(id),
-  attachments JSONB DEFAULT '[]',
+  attachments JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE TABLE comments (
+CREATE TABLE IF NOT EXISTS comments (
   id VARCHAR(50) PRIMARY KEY,
   request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
   user_id VARCHAR(50) REFERENCES users(id),
@@ -66,7 +61,7 @@ CREATE TABLE comments (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE TABLE activity_log (
+CREATE TABLE IF NOT EXISTS activity_log (
   id VARCHAR(50) PRIMARY KEY,
   type VARCHAR(50) NOT NULL,
   request_id VARCHAR(50),
@@ -75,21 +70,11 @@ CREATE TABLE activity_log (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE TABLE feedback (
-  id VARCHAR(50) PRIMARY KEY,
-  request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
-  user_id VARCHAR(50) REFERENCES users(id),
-  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
-  comment TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(request_id, user_id)
-);
-
-CREATE INDEX idx_requests_client_id ON requests(client_id);
-CREATE INDEX idx_requests_category_id ON requests(category_id);
-CREATE INDEX idx_requests_priority_id ON requests(priority_id);
-CREATE INDEX idx_requests_status_id ON requests(status_id);
-CREATE INDEX idx_requests_assigned_to ON requests(assigned_to);
-CREATE INDEX idx_comments_request_id ON comments(request_id);
-CREATE INDEX idx_activity_log_request_id ON activity_log(request_id);
-CREATE INDEX idx_activity_log_user_id ON activity_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_requests_client_id ON requests(client_id);
+CREATE INDEX IF NOT EXISTS idx_requests_category_id ON requests(category_id);
+CREATE INDEX IF NOT EXISTS idx_requests_priority_id ON requests(priority_id);
+CREATE INDEX IF NOT EXISTS idx_requests_status_id ON requests(status_id);
+CREATE INDEX IF NOT EXISTS idx_requests_assigned_to ON requests(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_comments_request_id ON comments(request_id);
+CREATE INDEX IF NOT EXISTS idx_activity_log_request_id ON activity_log(request_id);
+CREATE INDEX IF NOT EXISTS idx_activity_log_user_id ON activity_log(user_id);

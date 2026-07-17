@@ -3,8 +3,13 @@ import { api } from '../api';
 
 export default function ActivityLog() {
   const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  useEffect(() => { api.get('/api/activity').then(setActivities); }, []);
+  useEffect(() => {
+    api.get('/api/activity').then(data => { setActivities(data); setLoading(false); })
+      .catch(err => { setError('Failed to load activity log: ' + err.message); setLoading(false); });
+  }, []);
 
   const getActivityIcon = (type) => {
     const icons = { status_update: '🔄', comment: '💬', resolved: '✅', created: '➕', closed: '🔒', assigned: '👤' };
@@ -18,25 +23,44 @@ export default function ActivityLog() {
 
   return (
     <div className="page-container">
-      <div className="page-header"><div><h1>Activity Log</h1><p>Track all system activities and changes</p></div></div>
-      <div className="activity-timeline">
-        {activities.map(a => (
-          <div key={a.id} className="timeline-item">
-            <div className="timeline-icon" style={{ background: getActivityColor(a.type) + '20', color: getActivityColor(a.type) }}>
-              {getActivityIcon(a.type)}
-            </div>
-            <div className="timeline-content">
-              <div className="timeline-header">
-                <span className="timeline-action">{a.message}</span>
-                <span className="timeline-request">#{a.requestId}</span>
-              </div>
-              <div className="timeline-meta">
-                by <strong>{a.user?.name || 'Unknown'}</strong> · {new Date(a.createdAt).toLocaleString()}
-              </div>
-            </div>
-          </div>
-        ))}
+      <div className="page-header">
+        <div>
+          <button className="back-link" onClick={() => window.history.back()}>← Back</button>
+          <h1>Activity Log</h1>
+          <p>Track all system activities and changes</p>
+        </div>
       </div>
+      {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{error}</div>}
+      {loading ? (
+        <div className="loading-screen"><div className="spinner"></div></div>
+      ) : (
+        <div className="activity-timeline">
+          {activities.length === 0 ? (
+            <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
+              <h3 style={{ margin: '0 0 8px 0', color: '#374151' }}>No activity yet</h3>
+              <p style={{ margin: 0, fontSize: '14px' }}>Activity will appear here when requests are created, updated, or commented on.</p>
+            </div>
+          ) : (
+            activities.map(a => (
+              <div key={a.id} className="timeline-item">
+                <div className="timeline-icon" style={{ background: getActivityColor(a.type) + '20', color: getActivityColor(a.type) }}>
+                  {getActivityIcon(a.type)}
+                </div>
+                <div className="timeline-content">
+                  <div className="timeline-header">
+                    <span className="timeline-action">{a.message}</span>
+                    <span className="timeline-request">#{a.requestId}</span>
+                  </div>
+                  <div className="timeline-meta">
+                    by <strong>{a.user?.name || 'Unknown'}</strong> · {new Date(a.createdAt).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
