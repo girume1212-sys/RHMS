@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
+import { useAuth } from '../AuthContext';
 
 export default function ActivityLog() {
+  const { user } = useAuth();
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -35,14 +37,14 @@ export default function ActivityLog() {
         <div className="loading-screen"><div className="spinner"></div></div>
       ) : (
         <div className="activity-timeline">
-          {activities.length === 0 ? (
+          {activities.filter(a => a.user?.id !== user?.id).length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af' }}>
               <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
               <h3 style={{ margin: '0 0 8px 0', color: '#374151' }}>No activity yet</h3>
               <p style={{ margin: 0, fontSize: '14px' }}>Activity will appear here when requests are created, updated, or commented on.</p>
             </div>
           ) : (
-            activities.map(a => (
+            activities.filter(a => a.user?.id !== user?.id).map(a => (
               <div key={a.id} className="timeline-item">
                 <div className="timeline-icon" style={{ background: getActivityColor(a.type) + '20', color: getActivityColor(a.type) }}>
                   {getActivityIcon(a.type)}

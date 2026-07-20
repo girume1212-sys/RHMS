@@ -4,11 +4,14 @@
   box-sizing: border-box;
 }
 
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;500;600;700&display=swap');
+
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter', 'Noto Sans Ethiopic', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #f5f7fa;
   color: #1a1a2e;
   line-height: 1.5;
+  overflow-x: hidden;
 }
 
 /* Loading */
@@ -3682,6 +3685,59 @@ body.dark-mode .category-modal-header {
 .input-unit {
   font-size: 13px;
   color: #6b7280;
+}
+
+/* Color Input */
+.settings-field input[type="color"] {
+  width: 48px;
+  height: 48px;
+  padding: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  background: white;
+}
+.settings-field input[type="color"]:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+body.dark-mode .settings-field input[type="color"] {
+  background: #0f172a;
+  border-color: #475569;
+}
+
+/* Time Input */
+.settings-field input[type="time"] {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #1f2937;
+  background: white;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.settings-field input[type="time"]:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+body.dark-mode .settings-field input[type="time"] {
+  background: #0f172a;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+
+/* Inline flex for color + select */
+.settings-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settings-inline > * {
+  flex: 1;
 }
 
 /* Checkbox List */

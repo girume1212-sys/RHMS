@@ -38,6 +38,7 @@ const pool = require('./db');
       SELECT id, group_id FROM users WHERE group_id IS NOT NULL
       ON CONFLICT DO NOTHING
     `);
+    await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL`);
     console.log('user_groups table and groups ready');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS categories (
@@ -75,6 +76,7 @@ const pool = require('./db');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255) DEFAULT ''`);
     console.log('company_name column ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS login_attempts INTEGER DEFAULT 0`);
     console.log('approved column ready');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS companies (
@@ -100,6 +102,104 @@ const pool = require('./db');
       )
     `);
     console.log('activity_log table ready');
+    await pool.query(`
+      INSERT INTO statuses (id, name, color) VALUES ('8', 'Rejected', '#DC2626')
+      ON CONFLICT (id) DO NOTHING
+    `);
+    console.log('statuses ready');
+
+    // --- New tables ---
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS knowledge_base (
+        id VARCHAR(50) PRIMARY KEY,
+        title VARCHAR(500) NOT NULL,
+        content TEXT NOT NULL,
+        category_id VARCHAR(50) REFERENCES categories(id) ON DELETE SET NULL,
+        tags TEXT[],
+        status VARCHAR(20) DEFAULT 'published',
+        views INTEGER DEFAULT 0,
+        created_by VARCHAR(50) REFERENCES users(id),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    console.log('knowledge_base table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS announcements (
+        id VARCHAR(50) PRIMARY KEY,
+        title VARCHAR(500) NOT NULL,
+        content TEXT NOT NULL,
+        priority VARCHAR(20) DEFAULT 'normal',
+        target_role VARCHAR(20),
+        created_by VARCHAR(50) REFERENCES users(id),
+        expires_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    console.log('announcements table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sla_policies (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        category_id VARCHAR(50) REFERENCES categories(id) ON DELETE CASCADE,
+        priority_id VARCHAR(50) REFERENCES priorities(id) ON DELETE CASCADE,
+        response_time_minutes INTEGER NOT NULL,
+        resolution_time_minutes INTEGER NOT NULL,
+        escalation_enabled BOOLEAN DEFAULT false,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    console.log('sla_policies table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tags (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(100) NOT NULL UNIQUE,
+        color VARCHAR(20) DEFAULT '#6B7280',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS request_tags (
+        request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
+        tag_id VARCHAR(50) REFERENCES tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (request_id, tag_id)
+      )
+    `);
+    console.log('tags and request_tags tables ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS templates (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        subject VARCHAR(500) NOT NULL,
+        description TEXT,
+        category_id VARCHAR(50) REFERENCES categories(id) ON DELETE SET NULL,
+        priority_id VARCHAR(50) REFERENCES priorities(id) ON DELETE SET NULL,
+        is_public BOOLEAN DEFAULT true,
+        created_by VARCHAR(50) REFERENCES users(id),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    console.log('templates table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS attachments (
+        id VARCHAR(50) PRIMARY KEY,
+        request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
+        user_id VARCHAR(50) REFERENCES users(id),
+        filename VARCHAR(500) NOT NULL,
+        original_name VARCHAR(500) NOT NULL,
+        mime_type VARCHAR(100),
+        size_bytes BIGINT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    console.log('attachments table ready');
   } catch (err) {
     console.log('Init error:', err.message);
   }
@@ -117,13 +217,17 @@ app.use(cors());
 app.use(express.json());
 app.use((req, res, next) => { console.log(new Date().toISOString(), req.method, req.url, 'Content-Type:', req.headers['content-type'] || 'none'); next(); });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api', maintenanceMiddleware);
 
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
   filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
 });
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
 
 const authMiddleware = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -144,6 +248,16 @@ const roleMiddleware = (...roles) => (req, res, next) => {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
   next();
+};
+
+async function maintenanceMiddleware(req, res, next) {
+  try {
+    const result = await pool.query("SELECT value FROM system_settings WHERE key = 'maintenanceMode'");
+    if (result.rows.length > 0 && result.rows[0].value === 'true' && req.user?.role !== 'admin') {
+      return res.status(503).json({ error: 'System is under maintenance. Please try again later.' });
+    }
+    next();
+  } catch { next(); }
 };
 
 // SSE notification helper
@@ -276,6 +390,11 @@ app.post('/api/auth/signup', async (req, res) => {
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
     }
+    const pwResult = await pool.query("SELECT value FROM system_settings WHERE key = 'passwordLength'");
+    const minLength = pwResult.rows.length > 0 ? parseInt(pwResult.rows[0].value) || 8 : 8;
+    if (password.length < minLength) {
+      return res.status(400).json({ error: `Password must be at least ${minLength} characters` });
+    }
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email already exists' });
@@ -295,13 +414,38 @@ app.post('/api/auth/signup', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const { username, email, password } = req.body;
+    const result = await pool.query(
+      'SELECT * FROM users WHERE (name = $1 AND email = $2) OR email = $1',
+      [username, email]
+    );
     const user = result.rows[0];
+
+    const attemptResult = await pool.query("SELECT value FROM system_settings WHERE key = 'maxLoginAttempts'");
+    const maxAttempts = attemptResult.rows.length > 0 ? parseInt(attemptResult.rows[0].value) || 5 : 5;
+
     if (!user || !bcrypt.compareSync(password, user.password)) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      if (user) {
+        const currentAttempts = (user.login_attempts || 0) + 1;
+        await pool.query('UPDATE users SET login_attempts = $1 WHERE id = $2', [currentAttempts, user.id]);
+        if (currentAttempts >= maxAttempts) {
+          await pool.query("UPDATE users SET approved = false WHERE id = $1", [user.id]);
+        }
+      }
+      return res.status(401).json({ error: 'Invalid username, email or password' });
     }
-    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+
+    if (user.login_attempts >= maxAttempts) {
+      return res.status(423).json({ error: 'Account locked due to too many failed attempts. Contact administrator.' });
+    }
+
+    await pool.query('UPDATE users SET login_attempts = 0 WHERE id = $1', [user.id]);
+
+    const sessionResult = await pool.query("SELECT value FROM system_settings WHERE key = 'sessionTimeout'");
+    const sessionTimeout = sessionResult.rows.length > 0 ? parseInt(sessionResult.rows[0].value) || 30 : 30;
+    const expiresIn = sessionTimeout > 0 ? `${sessionTimeout}m` : '24h';
+
+    const token = jwt.sign({ id: user.id, role: user.role, sessionTimeout }, JWT_SECRET, { expiresIn });
     res.json({ token, user: mapUser(user) });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -348,7 +492,7 @@ app.post('/api/auth/google', async (req, res) => {
 });
 
 // Users Routes
-app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
+app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.approved, u.created_at
@@ -433,15 +577,15 @@ app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res)
 
 app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const { name, email, role, groupIds, password } = req.body;
+    const { name, email, role, groupIds, password, companyName } = req.body;
     let query, params;
     if (password) {
       const hashedPassword = bcrypt.hashSync(password, 10);
-      query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role), password = $4 WHERE id = $5 RETURNING *';
-      params = [name, email, role, hashedPassword, req.params.id];
+      query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role), password = $4, company_name = COALESCE($5, company_name) WHERE id = $6 RETURNING *';
+      params = [name, email, role, hashedPassword, companyName, req.params.id];
     } else {
-      query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role) WHERE id = $4 RETURNING *';
-      params = [name, email, role, req.params.id];
+      query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role), company_name = COALESCE($4, company_name) WHERE id = $5 RETURNING *';
+      params = [name, email, role, companyName, req.params.id];
     }
     const result = await pool.query(query, params);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -809,9 +953,15 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     const clientId = req.user.role === 'client' ? req.user.id : req.body.clientId;
     const now = new Date().toISOString();
 
+    const defResult = await pool.query("SELECT value FROM system_settings WHERE key IN ('defaultStatus', 'defaultPriority')");
+    const defMap = {};
+    for (const row of defResult.rows) defMap[row.key] = row.value;
+    const defaultStatusId = defMap.defaultStatus || '1';
+    const defaultPriorityId = defMap.defaultPriority || '2';
+
     await pool.query(
       'INSERT INTO requests (id, subject, description, client_id, category_id, priority_id, status_id, attachments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-      [id, subject, description, clientId, categoryId, priorityId || '2', '1', JSON.stringify(attachments || []), now, now]
+      [id, subject, description, clientId, categoryId, priorityId || defaultPriorityId, defaultStatusId, JSON.stringify(attachments || []), now, now]
     );
 
     await pool.query(
@@ -837,6 +987,18 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
     const existing = await pool.query('SELECT * FROM requests WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
 
+    // Check allowReopen setting
+    if (statusId) {
+      const reopenResult = await pool.query("SELECT value FROM system_settings WHERE key = 'allowReopen'");
+      const allowReopen = reopenResult.rows.length > 0 ? reopenResult.rows[0].value === 'true' : true;
+      const closedStatusIds = ['5', '6', '8'];
+      if (closedStatusIds.includes(existing.rows[0].status_id) && closedStatusIds.includes(statusId)) {
+        if (!allowReopen && req.user.role === 'client') {
+          return res.status(403).json({ error: 'Reopening requests is not allowed. Contact an administrator.' });
+        }
+      }
+    }
+
     let newStatusId = existing.rows[0].status_id;
     let newAssignedTo = existing.rows[0].assigned_to;
 
@@ -854,6 +1016,12 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       [subject, description, categoryId, priorityId, newStatusId, newAssignedTo, JSON.stringify(newAttachments), now, req.params.id]
     );
 
+    const notifResult = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('notifyClientStatusChange', 'notifyDeveloperAssignment', 'emailNotifications', 'inAppNotifications')");
+    const notifSettings = {};
+    for (const row of notifResult.rows) {
+      notifSettings[row.key] = row.value === 'true';
+    }
+
     if (statusId && statusId !== existing.rows[0].status_id) {
       const [statusResult, oldStatusResult] = await Promise.all([
         pool.query('SELECT name FROM statuses WHERE id = $1', [statusId]),
@@ -865,12 +1033,10 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
         'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
         [uuidv4(), 'status_update', req.params.id, req.user.id, `Changed status from ${oldStatusName} to ${newStatusName}`, now]
       );
-      // Real-time notification for status change
       const statusName = newStatusName;
       const clientId = existing.rows[0].client_id;
       notifyAdmins(`Request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id });
-      // Notify the client
-      if (clientId && clientId !== req.user.id) {
+      if (clientId && clientId !== req.user.id && notifSettings.notifyClientStatusChange !== false) {
         notifyUser(clientId, `Your request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id });
       }
     }
@@ -881,13 +1047,12 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
         'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
         [uuidv4(), 'assigned', req.params.id, req.user.id, `Assigned to ${assigneeResult.rows[0]?.name || 'Unknown'}`, now]
       );
-      // Real-time notification for assignment
       const assigneeName = assigneeResult.rows[0]?.name || 'Unknown';
       const clientId = existing.rows[0].client_id;
       notifyAdmins(`Request #${req.params.id} assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id });
-      // Notify the assigned user
-      notifyUser(assignedTo, `You have been assigned to Request #${req.params.id}`, { type: 'assigned', requestId: req.params.id, userId: req.user.id });
-      // Notify the client
+      if (notifSettings.notifyDeveloperAssignment !== false) {
+        notifyUser(assignedTo, `You have been assigned to Request #${req.params.id}`, { type: 'assigned', requestId: req.params.id, userId: req.user.id });
+      }
       if (clientId && clientId !== req.user.id) {
         notifyUser(clientId, `Your request #${req.params.id} has been assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id });
       }
@@ -985,9 +1150,23 @@ app.post('/api/requests/:id/feedback', authMiddleware, async (req, res) => {
 });
 
 // Upload Route
-app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  res.json({ filename: req.file.filename, path: `/uploads/${req.file.filename}` });
+app.post('/api/upload', authMiddleware, async (req, res, next) => {
+  try {
+    const sizeResult = await pool.query("SELECT value FROM system_settings WHERE key = 'maxUploadSize'");
+    const maxMB = sizeResult.rows.length > 0 ? parseInt(sizeResult.rows[0].value) || 10 : 10;
+    const maxBytes = maxMB * 1024 * 1024;
+    const m = multer({ storage, limits: { fileSize: maxBytes } });
+    m.single('file')(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `File too large. Maximum size is ${maxMB}MB` });
+        return res.status(400).json({ error: err.message });
+      }
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      res.json({ filename: req.file.filename, path: `/uploads/${req.file.filename}` });
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Dashboard Stats
@@ -1055,6 +1234,11 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       count: categoryMap[c.id] || 0
     }));
 
+    const companyCounts = await pool.query(
+      `SELECT COALESCE(NULLIF(u.company_name, ''), 'Unknown') as name, COUNT(*) as count FROM requests r LEFT JOIN users u ON r.client_id = u.id ${whereClause} GROUP BY u.company_name ORDER BY count DESC`, params
+    );
+    const byCompany = companyCounts.rows.map(r => ({ ...r, count: parseInt(r.count) }));
+
     const dailyData = [];
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
@@ -1093,6 +1277,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       byStatus,
       byPriority,
       byCategory,
+      byCompany,
       dailyData,
       totalLastWeek: Math.floor(total * 0.88),
       openLastWeek: Math.floor(open * 0.92),
@@ -1213,6 +1398,20 @@ app.get('/api/activity', authMiddleware, async (req, res) => {
 });
 
 // Activity log for a specific request
+app.delete('/api/requests/:id/activity', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role === 'client') {
+      const ownership = await pool.query('SELECT id FROM requests WHERE id = $1 AND client_id = $2', [req.params.id, req.user.id]);
+      if (ownership.rows.length === 0) return res.status(403).json({ error: 'Access denied' });
+    }
+    await pool.query('DELETE FROM activity_log WHERE request_id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to clear activity log' });
+  }
+});
+
 app.get('/api/requests/:id/activity', authMiddleware, async (req, res) => {
   try {
     if (req.user.role === 'client') {
@@ -1264,6 +1463,12 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
       GROUP BY c.name, c.id ORDER BY c.name
     `);
 
+    const byCompanyResult = await pool.query(`
+      SELECT COALESCE(NULLIF(u.company_name, ''), 'Unknown') as name, COUNT(r.id) as count FROM requests r
+      LEFT JOIN users u ON r.client_id = u.id
+      GROUP BY u.company_name ORDER BY count DESC
+    `);
+
     const totalUsersResult = await pool.query('SELECT COUNT(*) FROM users');
     const activeUsersResult = await pool.query("SELECT COUNT(*) FROM users WHERE role != 'admin'");
 
@@ -1281,7 +1486,7 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
         COUNT(r.id) AS total_assigned,
         COUNT(CASE WHEN s.name = 'Resolved' OR s.name = 'Closed' THEN 1 END) AS resolved,
         COUNT(CASE WHEN s.name = 'In Progress' THEN 1 END) AS in_progress,
-        COUNT(CASE WHEN s.name = 'Open' OR s.name = 'Assigned' THEN 1 END) AS pending
+        COUNT(CASE WHEN s.name = 'New' OR s.name = 'Assigned' THEN 1 END) AS pending
       FROM users u
       LEFT JOIN requests r ON r.assigned_to = u.id
       LEFT JOIN statuses s ON r.status_id = s.id
@@ -1295,6 +1500,7 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
       byStatus: byStatusResult.rows,
       byPriority: byPriorityResult.rows,
       byCategory: byCategoryResult.rows,
+      byCompany: byCompanyResult.rows,
       avgResolutionTime: '2.5 days',
       clientSatisfaction: '87%',
       totalUsers: parseInt(totalUsersResult.rows[0].count),
@@ -1321,7 +1527,13 @@ app.get('/api/roles', authMiddleware, roleMiddleware('admin'), (req, res) => {
 // Groups Routes
 app.get('/api/groups', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM groups ORDER BY name');
+    const result = await pool.query(`
+      SELECT g.*, c.name as company_name,
+        (SELECT COUNT(*) FROM user_groups ug WHERE ug.group_id = g.id) as "memberCount"
+      FROM groups g
+      LEFT JOIN companies c ON c.id = g.company_id
+      ORDER BY g.name
+    `);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -1330,12 +1542,12 @@ app.get('/api/groups', authMiddleware, roleMiddleware('admin', 'support'), async
 
 app.post('/api/groups', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const { name, description, color } = req.body;
+    const { name, description, color, company_id } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const id = uuidv4();
     const result = await pool.query(
-      'INSERT INTO groups (id, name, description, color) VALUES ($1, $2, $3, $4) RETURNING *',
-      [id, name, description || '', color || '#6B7280']
+      'INSERT INTO groups (id, name, description, color, company_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [id, name, description || '', color || '#6B7280', company_id || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -1345,10 +1557,10 @@ app.post('/api/groups', authMiddleware, roleMiddleware('admin'), async (req, res
 
 app.put('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const { name, description, color } = req.body;
+    const { name, description, color, company_id } = req.body;
     const result = await pool.query(
-      'UPDATE groups SET name = COALESCE($1, name), description = COALESCE($2, description), color = COALESCE($3, color) WHERE id = $4 RETURNING *',
-      [name, description, color, req.params.id]
+      'UPDATE groups SET name = COALESCE($1, name), description = COALESCE($2, description), color = COALESCE($3, color), company_id = $4 WHERE id = $5 RETURNING *',
+      [name, description, color, company_id ?? null, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Group not found' });
     res.json(result.rows[0]);
@@ -1363,6 +1575,48 @@ app.delete('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (re
     await pool.query('UPDATE users SET group_id = NULL WHERE group_id = $1', [req.params.id]);
     await pool.query('DELETE FROM groups WHERE id = $1', [req.params.id]);
     res.json({ message: 'Group deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Group Members Routes
+app.get('/api/groups/:id/members', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT u.id, u.name, u.email, u.role, u.approved
+      FROM user_groups ug
+      JOIN users u ON u.id = ug.user_id
+      WHERE ug.group_id = $1
+      ORDER BY u.name
+    `, [req.params.id]);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/groups/:id/members', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const { user_id } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'User ID is required' });
+    await pool.query(
+      'INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [user_id, req.params.id]
+    );
+    res.status(201).json({ message: 'Member added' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/groups/:id/members/:userId', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    await pool.query(
+      'DELETE FROM user_groups WHERE user_id = $1 AND group_id = $2',
+      [req.params.userId, req.params.id]
+    );
+    res.json({ message: 'Member removed' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -1468,21 +1722,36 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
       )
     `);
     const defaultSettings = [
+      { key: 'systemName', value: 'RHMS Support System' },
       { key: 'companyName', value: 'RHMS' },
-      { key: 'supportEmail', value: 'support@rhms.com' },
+      { key: 'systemEmail', value: 'support@rhms.com' },
+      { key: 'timeZone', value: 'Africa/Addis_Ababa' },
+      { key: 'language', value: 'en' },
       { key: 'requestPrefix', value: 'REQ' },
       { key: 'phoneNumber', value: '' },
       { key: 'address', value: '' },
       { key: 'maxFileSize', value: '10' },
       { key: 'allowedFileTypes', value: JSON.stringify(['jpg', 'png', 'gif', 'pdf', 'docx', 'xlsx']) },
       { key: 'emailNotifications', value: 'true' },
+      { key: 'inAppNotifications', value: 'true' },
+      { key: 'notifyClientStatusChange', value: 'true' },
+      { key: 'notifyDeveloperAssignment', value: 'true' },
       { key: 'autoAssign', value: 'false' },
       { key: 'soundAlerts', value: 'true' },
       { key: 'desktopNotifications', value: 'true' },
       { key: 'sessionTimeout', value: '30' },
       { key: 'passwordExpiry', value: '90' },
+      { key: 'passwordLength', value: '8' },
       { key: 'twoFactorAuth', value: 'false' },
       { key: 'maxLoginAttempts', value: '5' },
+      { key: 'defaultStatus', value: '1' },
+      { key: 'defaultPriority', value: '2' },
+      { key: 'autoRequestId', value: 'true' },
+      { key: 'allowReopen', value: 'true' },
+      { key: 'theme', value: 'dark' },
+      { key: 'assignmentMode', value: 'group-based' },
+      { key: 'defaultGroup', value: '' },
+      { key: 'maintenanceMode', value: 'false' },
       { key: 'responseHours', value: '4' },
       { key: 'resolutionHours', value: '48' },
       { key: 'escalationEnabled', value: 'true' },
@@ -1492,10 +1761,8 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
       { key: 'holidaysEnabled', value: 'true' },
       { key: 'autoBackup', value: 'false' },
       { key: 'backupFrequency', value: 'weekly' },
-      { key: 'maintenanceMode', value: 'false' },
       { key: 'accentColor', value: '#00b4d8' },
       { key: 'sidebarStyle', value: 'comfortable' },
-      { key: 'language', value: 'en' },
     ];
     for (const s of defaultSettings) {
       await pool.query(
@@ -1508,6 +1775,21 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
     console.log('Settings table init error:', err.message);
   }
 })();
+
+app.get('/api/settings/public', async (req, res) => {
+  try {
+    const result = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('theme', 'language', 'systemName', 'maintenanceMode', 'companyName')");
+    const settings = {};
+    for (const row of result.rows) {
+      if (row.value === 'true') settings[row.key] = true;
+      else if (row.value === 'false') settings[row.key] = false;
+      else settings[row.key] = row.value;
+    }
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 app.get('/api/settings', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
@@ -1546,6 +1828,64 @@ app.put('/api/settings', authMiddleware, roleMiddleware('admin'), async (req, re
     res.json({ message: 'Settings updated successfully' });
   } catch (err) {
     console.error('Update settings error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const defaults = [
+      { key: 'systemName', value: 'RHMS Support System' },
+      { key: 'companyName', value: 'RHMS' },
+      { key: 'systemEmail', value: 'support@rhms.com' },
+      { key: 'timeZone', value: 'Africa/Addis_Ababa' },
+      { key: 'language', value: 'en' },
+      { key: 'requestPrefix', value: 'REQ' },
+      { key: 'phoneNumber', value: '' },
+      { key: 'address', value: '' },
+      { key: 'maxFileSize', value: '10' },
+      { key: 'allowedFileTypes', value: JSON.stringify(['jpg', 'png', 'gif', 'pdf', 'docx', 'xlsx']) },
+      { key: 'emailNotifications', value: 'true' },
+      { key: 'inAppNotifications', value: 'true' },
+      { key: 'notifyClientStatusChange', value: 'true' },
+      { key: 'notifyDeveloperAssignment', value: 'true' },
+      { key: 'autoAssign', value: 'false' },
+      { key: 'soundAlerts', value: 'true' },
+      { key: 'desktopNotifications', value: 'true' },
+      { key: 'sessionTimeout', value: '30' },
+      { key: 'passwordExpiry', value: '90' },
+      { key: 'passwordLength', value: '8' },
+      { key: 'twoFactorAuth', value: 'false' },
+      { key: 'maxLoginAttempts', value: '5' },
+      { key: 'defaultStatus', value: '1' },
+      { key: 'defaultPriority', value: '2' },
+      { key: 'autoRequestId', value: 'true' },
+      { key: 'allowReopen', value: 'true' },
+      { key: 'theme', value: 'dark' },
+      { key: 'accentColor', value: '#00b4d8' },
+      { key: 'sidebarStyle', value: 'comfortable' },
+      { key: 'assignmentMode', value: 'group-based' },
+      { key: 'defaultGroup', value: '' },
+      { key: 'maintenanceMode', value: 'false' },
+      { key: 'responseHours', value: '4' },
+      { key: 'resolutionHours', value: '48' },
+      { key: 'escalationEnabled', value: 'true' },
+      { key: 'workStart', value: '09:00' },
+      { key: 'workEnd', value: '17:00' },
+      { key: 'weekendDays', value: JSON.stringify(['saturday', 'sunday']) },
+      { key: 'holidaysEnabled', value: 'true' },
+      { key: 'autoBackup', value: 'false' },
+      { key: 'backupFrequency', value: 'weekly' },
+    ];
+    for (const s of defaults) {
+      await pool.query(
+        'INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
+        [s.key, s.value]
+      );
+    }
+    res.json({ message: 'Settings reset to defaults' });
+  } catch (err) {
+    console.error('Reset settings error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

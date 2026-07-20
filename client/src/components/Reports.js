@@ -148,6 +148,30 @@ export default function Reports() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        <div className="chart-card">
+          <h3>Requests by Category</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={(report.byCategory || []).map(c => ({ ...c, count: Number(c.count) }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
+              <YAxis stroke="#9ca3af" fontSize={12} />
+              <Tooltip />
+              <Bar dataKey="count" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="chart-card">
+          <h3>Requests by Company</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={(report.byCompany || []).map(c => ({ ...c, count: Number(c.count) }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
+              <YAxis stroke="#9ca3af" fontSize={12} />
+              <Tooltip />
+              <Bar dataKey="count" fill="#06B6D4" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       <div className="charts-row">
@@ -158,7 +182,7 @@ export default function Reports() {
               <thead>
                 <tr>
                   <th className="sortable">ID {getTasksSortIcon('id')}</th>
-                  <th className="sortable">Subject {getTasksSortIcon('subject')}</th>
+                  <th className="sortable">Request Title {getTasksSortIcon('subject')}</th>
                   <th className="sortable">Client {getTasksSortIcon('client')}</th>
                   <th className="sortable">Category {getTasksSortIcon('category')}</th>
                   <th className="sortable">Priority {getTasksSortIcon('priority')}</th>
@@ -177,9 +201,15 @@ export default function Reports() {
                     <td>{new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td>
                       <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
-                        <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
-                        <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
-                      </div>
+                      {r.status_name === 'New' ? (
+                        <>
+                          <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
+                          <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                        </>
+                      ) : (
+                        <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>—</span>
+                      )}
+                    </div>
                     </td>
                   </tr>
                 ))}

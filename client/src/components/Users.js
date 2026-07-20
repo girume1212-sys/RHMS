@@ -10,7 +10,7 @@ export default function Users() {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'client', groupIds: [] });
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', companyName: '', role: 'client', groupIds: [] });
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [roleFilter, setRoleFilter] = useState('');
@@ -113,9 +113,14 @@ export default function Users() {
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
+      if (form.password !== form.confirmPassword) {
+        setError('Passwords do not match');
+        addToast('Passwords do not match', 'error');
+        return;
+      }
       await api.post('/api/users', form);
       setShowModal(false);
-      setForm({ name: '', email: '', password: '', role: 'client', groupIds: [] });
+      setForm({ name: '', email: '', password: '', confirmPassword: '', companyName: '', role: 'client', groupIds: [] });
       loadUsers();
       addToast('User created successfully!');
       showStatusToast(`User "${form.name}" created`, 'request_created');
@@ -128,11 +133,11 @@ export default function Users() {
   const handleEdit = async (e) => {
     e.preventDefault();
     try {
-      const body = { name: form.name, email: form.email, role: form.role, groupIds: form.groupIds };
+      const body = { name: form.name, email: form.email, companyName: form.companyName, role: form.role, groupIds: form.groupIds };
       if (form.password) body.password = form.password;
       await api.put(`/api/users/${editingUser.id}`, body);
       setEditingUser(null);
-      setForm({ name: '', email: '', password: '', role: 'client', groupIds: [] });
+      setForm({ name: '', email: '', password: '', confirmPassword: '', companyName: '', role: 'client', groupIds: [] });
       loadUsers();
       addToast('User updated successfully!');
       showStatusToast(`User "${form.name}" updated`, 'status');
@@ -144,7 +149,7 @@ export default function Users() {
 
   const openEdit = (user) => {
     setEditingUser(user);
-    setForm({ name: user.name, email: user.email, password: '', role: user.role, groupIds: user.groupIds || [] });
+    setForm({ name: user.name, email: user.email, password: '', confirmPassword: '', companyName: user.companyName || '', role: user.role, groupIds: user.groupIds || [] });
     setShowModal(false);
   };
 
@@ -182,7 +187,7 @@ export default function Users() {
 
   const openCreate = () => {
     setEditingUser(null);
-    setForm({ name: '', email: '', password: '', role: 'client', groupIds: [] });
+    setForm({ name: '', email: '', password: '', confirmPassword: '', companyName: '', role: 'client', groupIds: [] });
     setShowModal(true);
   };
 
@@ -292,7 +297,6 @@ export default function Users() {
                     <td>
                       <div className="actions-cell-inline">
                         <button className="action-btn-text edit" onClick={() => openEdit(u)}>Edit</button>
-                        <button className="action-btn-text edit" style={{ background: '#f0fdf4', color: '#16a34a' }} onClick={() => handleApprove(u.id, u.name, !u.approved)}>{u.approved ? 'Unapprove' : 'Approve'}</button>
                         <button className="action-btn-text delete" onClick={() => handleDelete(u.id, u.name)}>Delete</button>
                       </div>
                     </td>
@@ -334,7 +338,7 @@ export default function Users() {
             <h2>{editingUser ? 'Edit User' : 'Add New User'}</h2>
             <form onSubmit={editingUser ? handleEdit : handleCreate}>
               <div className="form-group">
-                <label>Full Name</label>
+                <label>User Name</label>
                 <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div className="form-group">
@@ -342,9 +346,19 @@ export default function Users() {
                 <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
               </div>
               <div className="form-group">
+                <label>Company Name</label>
+                <input type="text" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} />
+              </div>
+              <div className="form-group">
                 <label>{editingUser ? 'New Password (leave blank to keep)' : 'Password'}</label>
                 <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editingUser} />
               </div>
+              {!editingUser && (
+                <div className="form-group">
+                  <label>Confirm Password</label>
+                  <input type="password" value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} required />
+                </div>
+              )}
               <div className="form-group">
                 <label>Role</label>
                 <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>

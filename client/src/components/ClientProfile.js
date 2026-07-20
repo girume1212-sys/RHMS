@@ -2,10 +2,12 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
 
 const API_URL = 'http://localhost:5000';
 
 export default function ClientProfile() {
+  const { t } = useTranslation();
   const { user, token, updateUser } = useAuth();
   const fileInputRef = useRef(null);
   const [editing, setEditing] = useState(false);
@@ -70,11 +72,11 @@ export default function ClientProfile() {
     setError('');
 
     if (form.password && form.password !== form.confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('common.passwordMismatch'));
       return;
     }
     if (form.password && form.password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t('common.passwordLength'));
       return;
     }
 
@@ -97,18 +99,18 @@ export default function ClientProfile() {
         body: formData,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update profile');
+      if (!res.ok) throw new Error(data.error || t('common.failedToSave').replace('{item}', t('common.profile')));
 
       updateUser(data);
       setEditing(false);
       setAvatarFile(null);
       setAvatarPreview(null);
       setForm({ ...form, password: '', confirmPassword: '' });
-      addToast('Profile updated successfully!');
+      addToast(t('common.profileUpdated'));
       showStatusToast('Profile updated', 'status');
     } catch (err) {
-      setError(err.message || 'Failed to update profile');
-      addToast(err.message || 'Failed to update profile', 'error');
+      setError(err.message || t('common.failedToSave').replace('{item}', t('common.profile')));
+      addToast(err.message || t('common.failedToSave').replace('{item}', t('common.profile')), 'error');
     } finally {
       setLoading(false);
     }
@@ -139,9 +141,9 @@ export default function ClientProfile() {
       </div>
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← Back</button>
-          <h1>My Profile</h1>
-          <p>Manage your account information</p>
+          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <h1>{t('common.myProfile')}</h1>
+          <p>{t('common.accountDetails')}</p>
         </div>
         {!editing && (
           <button
@@ -156,7 +158,7 @@ export default function ClientProfile() {
             onMouseOver={(e) => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 20px rgba(59,130,246,0.4)'; }}
             onMouseOut={(e) => { e.target.style.transform = 'none'; e.target.style.boxShadow = '0 4px 12px rgba(59,130,246,0.3)'; }}
           >
-            Edit Profile
+            {t('common.edit')} {t('common.profile')}
           </button>
         )}
       </div>
@@ -272,19 +274,19 @@ export default function ClientProfile() {
             borderRadius: '20px', fontSize: '13px', fontWeight: '600',
             backdropFilter: 'blur(10px)'
           }}>
-            Client
+            {t('common.client')}
           </div>
           <div style={{ marginTop: '20px', width: '100%', opacity: 0.9, fontSize: '13px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-              <span>Company</span>
+              <span>{t('common.company')}</span>
               <span style={{ fontWeight: '600' }}>{editing ? (form.companyName || '-') : (user?.companyName || '-')}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-              <span>Role</span>
+              <span>{t('common.role')}</span>
               <span style={{ fontWeight: '600', textTransform: 'capitalize' }}>{user?.role}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-              <span>Member Since</span>
+              <span>{t('common.memberSince')}</span>
               <span style={{ fontWeight: '600' }}>{user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</span>
             </div>
           </div>
@@ -305,7 +307,7 @@ export default function ClientProfile() {
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               color: '#fff', fontSize: '16px'
             }}>✏️</span>
-            {editing ? 'Edit Information' : 'Account Details'}
+            {editing ? t('common.editInfo') : t('common.accountDetails')}
           </h3>
 
           {editing ? (
@@ -317,7 +319,7 @@ export default function ClientProfile() {
                     width: '22px', height: '22px', borderRadius: '6px',
                     background: '#dbeafe', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
                   }}>👤</span>
-                  Full Name
+                  {t('common.fullName')}
                 </label>
                 <input
                   type="text"
@@ -343,7 +345,7 @@ export default function ClientProfile() {
                     width: '22px', height: '22px', borderRadius: '6px',
                     background: '#e0f2fe', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
                   }}>📧</span>
-                  Email Address
+                  {t('common.emailAddress')}
                 </label>
                 <input
                   type="email"
@@ -369,14 +371,14 @@ export default function ClientProfile() {
                     width: '22px', height: '22px', borderRadius: '6px',
                     background: '#dbeafe', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
                   }}>🏢</span>
-                  Company Name
+                  {t('common.companyName')}
                 </label>
                 <input
                   type="text"
                   name="companyName"
                   value={form.companyName}
                   onChange={handleChange}
-                  placeholder="Enter company name"
+                  placeholder={t('common.enterCompanyName')}
                   style={{
                     width: '100%', padding: '12px 14px 12px 40px', borderRadius: '12px',
                     border: '2px solid #e5e7eb', fontSize: '14px', outline: 'none', boxSizing: 'border-box',
@@ -395,14 +397,14 @@ export default function ClientProfile() {
                     width: '22px', height: '22px', borderRadius: '6px',
                     background: '#e0e7ff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
                   }}>🔒</span>
-                  New Password
+                  {t('common.newPassword')}
                 </label>
                 <input
                   type="password"
                   name="password"
                   value={form.password}
                   onChange={handleChange}
-                  placeholder="Leave blank to keep current"
+                  placeholder={t('common.leaveBlank')}
                   minLength={6}
                   style={{
                     width: '100%', padding: '12px 14px 12px 40px', borderRadius: '12px',
@@ -423,14 +425,14 @@ export default function ClientProfile() {
                       width: '22px', height: '22px', borderRadius: '6px',
                       background: '#dbeafe', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
                     }}>🔐</span>
-                    Confirm New Password
-                  </label>
+                  {t('common.confirmPassword')}
+                </label>
                   <input
                     type="password"
                     name="confirmPassword"
                     value={form.confirmPassword}
                     onChange={handleChange}
-                    placeholder="Confirm new password"
+                    placeholder={t('common.confirmPassword')}
                     minLength={6}
                     style={{
                       width: '100%', padding: '12px 14px 12px 40px', borderRadius: '12px',
@@ -457,7 +459,7 @@ export default function ClientProfile() {
                   }}
                   onMouseOver={(e) => { e.target.style.borderColor = '#EF4444'; e.target.style.color = '#EF4444'; e.target.style.background = '#fef2f2'; }}
                   onMouseOut={(e) => { e.target.style.borderColor = '#e5e7eb'; e.target.style.color = '#6b7280'; e.target.style.background = 'linear-gradient(135deg, #f9fafb, #f3f4f6)'; }}
-                >Cancel</button>
+                >{t('common.cancel')}</button>
                 <button
                   onClick={handleSave}
                   disabled={loading}
@@ -473,18 +475,18 @@ export default function ClientProfile() {
                   onMouseOver={(e) => { if (!loading) { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 20px rgba(59,130,246,0.5)'; }}}
                   onMouseOut={(e) => { e.target.style.transform = 'none'; e.target.style.boxShadow = loading ? '0 4px 12px rgba(96,165,250,0.3)' : '0 4px 16px rgba(59,130,246,0.4)'; }}
                 >
-                  {loading ? 'Saving...' : 'Save Changes'}
+                  {loading ? t('common.saving') : t('common.saveChanges')}
                 </button>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
               {[
-                { label: 'Full Name', value: user?.name, icon: '👤', color: '#2563EB' },
-                { label: 'Email', value: user?.email, icon: '📧', color: '#0284c7' },
-                { label: 'Company', value: user?.companyName || '-', icon: '🏢', color: '#1e40af' },
-                { label: 'Role', value: user?.role, icon: '🛡️', color: '#3730a3', capitalize: true },
-                { label: 'Member Since', value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-', icon: '📅', color: '#1d4ed8' },
+                { label: t('common.fullName'), value: user?.name, icon: '👤', color: '#2563EB' },
+                { label: t('common.email'), value: user?.email, icon: '📧', color: '#0284c7' },
+                { label: t('common.company'), value: user?.companyName || '-', icon: '🏢', color: '#1e40af' },
+                { label: t('common.role'), value: user?.role, icon: '🛡️', color: '#3730a3', capitalize: true },
+                { label: t('common.memberSince'), value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-', icon: '📅', color: '#1d4ed8' },
               ].map((item, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: '14px',

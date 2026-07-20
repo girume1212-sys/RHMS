@@ -7,7 +7,7 @@ import { api } from '../api';
 const API_BASE = 'http://localhost:5000';
 
 export default function Layout() {
-  const { user, logout, darkMode, toggleDarkMode } = useAuth();
+  const { user, logout, darkMode, toggleDarkMode, systemName } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -105,6 +105,7 @@ export default function Layout() {
       { path: '/users', label: t('sidebar.users'), icon: '👥', roles: ['admin', 'support'] },
       { path: '/categories', label: t('sidebar.categories'), icon: '📁', roles: ['admin'] },
       { path: '/company', label: 'Company', icon: '🏢', roles: ['admin'] },
+      { path: '/groups', label: 'Groups', icon: '👤', roles: ['admin'] },
     ]},
     { section: t('sidebar.reports'), items: [
       { path: '/reports', label: t('sidebar.reportsAnalytics'), icon: '📊', roles: ['admin', 'support'] },
@@ -262,7 +263,7 @@ export default function Layout() {
             </svg>
             {sidebarOpen && (
               <div>
-                <h2>{t('general.appName')}</h2>
+                <h2>{systemName || t('general.appName')}</h2>
                 <span>{t('general.supportSystem')}</span>
               </div>
             )}

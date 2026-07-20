@@ -1,55 +1,94 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
-import { useTranslation } from '../i18n/useTranslation';
-import { availableLanguages } from '../i18n/translations';
+import { useAuth } from '../AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useTranslation } from '../i18n/useTranslation';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 
+const TIMEZONES = [
+  'Africa/Addis_Ababa', 'Africa/Nairobi', 'Africa/Cairo', 'Africa/Lagos',
+  'Africa/Johannesburg', 'America/New_York', 'America/Chicago',
+  'America/Denver', 'America/Los_Angeles', 'Europe/London',
+  'Europe/Paris', 'Europe/Berlin', 'Asia/Dubai', 'Asia/Riyadh',
+  'Asia/Kolkata', 'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Sydney',
+  'Pacific/Auckland', 'UTC'
+];
+
+const LANGUAGES = [
+  { code: 'en', name: 'English' },
+  { code: 'am', name: 'አማርኛ (Amharic)' },
+  { code: 'or', name: 'Afaan Oromo' },
+  { code: 'so', name: 'Soomaali' },
+  { code: 'ar', name: 'العربية (Arabic)' },
+  { code: 'fr', name: 'Français (French)' },
+  { code: 'es', name: 'Español (Spanish)' },
+  { code: 'pt', name: 'Português (Portuguese)' },
+];
+
+const DAYS_OF_WEEK = [
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
+];
+
+const FILE_TYPE_OPTIONS = ['jpg', 'png', 'gif', 'svg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'mp4', 'csv'];
+
 export default function Settings() {
-  const { t, language } = useTranslation();
+  const { toggleDarkMode } = useAuth();
   const { changeLanguage } = useLanguage();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [priorities, setPriorities] = useState([]);
 
-  const [form, setForm] = useState({
-    companyName: 'RHMS Support System',
-    supportEmail: '',
+  const initialForm = {
+    systemName: 'RHMS Support System',
+    companyName: '',
+    systemEmail: '',
     requestPrefix: 'REQ',
-    defaultPriority: ['Low', 'Medium', 'High'],
-    ticketAutoClose: 5,
-    defaultAssignmentRule: '',
-    escalationTrigger: '',
-    slaBreachAction: '',
-    primaryLanguage: 'en',
-    emailOnNewTicket: true,
-    emailOnStatusChange: true,
-    emailOnEscalation: true,
-    inAppAlerts: true,
-    inAppEscalation: true,
-    desktopNotifications: false,
-    soundEnabled: true,
-  });
+    phoneNumber: '',
+    address: '',
+    timeZone: 'Africa/Addis_Ababa',
+    language: 'en',
+    defaultStatus: '',
+    defaultPriority: '',
+    autoRequestId: true,
+    maxFileSize: 10,
+    allowedFileTypes: ['jpg', 'png', 'gif', 'pdf', 'docx', 'xlsx'],
+    allowReopen: true,
+    emailNotifications: true,
+    inAppNotifications: true,
+    notifyClientStatusChange: true,
+    notifyDeveloperAssignment: true,
+    autoAssign: false,
+    soundAlerts: true,
+    desktopNotifications: true,
+    passwordLength: 8,
+    passwordExpiry: 90,
+    sessionTimeout: 30,
+    maxLoginAttempts: 5,
+    twoFactorAuth: false,
+    theme: 'dark',
+    accentColor: '#00b4d8',
+    sidebarStyle: 'comfortable',
+    assignmentMode: 'group-based',
+    defaultGroup: '',
+    maintenanceMode: false,
+    responseHours: 4,
+    resolutionHours: 48,
+    escalationEnabled: true,
+    workStart: '09:00',
+    workEnd: '17:00',
+    weekendDays: ['saturday', 'sunday'],
+    holidaysEnabled: true,
+    autoBackup: false,
+    backupFrequency: 'weekly',
+  };
 
-  const fetchSettings = useCallback(async () => {
-    try {
-      const data = await api.get('/api/settings');
-      const parsed = { ...data };
-      if (typeof parsed.defaultPriority === 'string') {
-        try { parsed.defaultPriority = JSON.parse(parsed.defaultPriority); } catch {}
-      }
-      ['emailOnNewTicket','emailOnStatusChange','emailOnEscalation','inAppAlerts','inAppEscalation','desktopNotifications','soundEnabled'].forEach(k => {
-        if (typeof parsed[k] === 'string') parsed[k] = parsed[k] === 'true';
-      });
-      if (typeof parsed.ticketAutoClose === 'string') parsed.ticketAutoClose = Number(parsed.ticketAutoClose);
-      setForm(prev => ({ ...prev, ...parsed }));
-    } catch (err) {
-      console.error('Failed to load settings:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [form, setForm] = useState({ ...initialForm });
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -60,52 +99,135 @@ export default function Settings() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+  useEffect(() => {
+    Promise.all([
+      api.get('/api/settings'),
+      api.get('/api/companies'),
+      api.get('/api/groups'),
+      api.get('/api/statuses'),
+      api.get('/api/priorities'),
+    ]).then(([settingsData, companiesData, groupsData, statusesData, prioritiesData]) => {
+      setCompanies(Array.isArray(companiesData) ? companiesData : []);
+      setGroups(Array.isArray(groupsData) ? groupsData : []);
+      setStatuses(Array.isArray(statusesData) ? statusesData : []);
+      setPriorities(Array.isArray(prioritiesData) ? prioritiesData : []);
+      setForm(prev => {
+        const merged = { ...prev, ...settingsData };
+        const boolKeys = [
+          'autoRequestId', 'allowReopen', 'emailNotifications', 'inAppNotifications',
+          'notifyClientStatusChange', 'notifyDeveloperAssignment', 'autoAssign',
+          'soundAlerts', 'desktopNotifications', 'twoFactorAuth', 'maintenanceMode',
+          'escalationEnabled', 'holidaysEnabled', 'autoBackup'
+        ];
+        const numKeys = [
+          'maxFileSize', 'passwordLength', 'passwordExpiry', 'sessionTimeout',
+          'maxLoginAttempts', 'responseHours', 'resolutionHours'
+        ];
+        const arrKeys = ['allowedFileTypes', 'weekendDays'];
+        for (const key of boolKeys) {
+          if (typeof merged[key] === 'string') merged[key] = merged[key] === 'true';
+        }
+        for (const key of numKeys) {
+          if (typeof merged[key] === 'string') merged[key] = Number(merged[key]);
+        }
+        for (const key of arrKeys) {
+          if (typeof merged[key] === 'string') {
+            try { merged[key] = JSON.parse(merged[key]); } catch { merged[key] = []; }
+          }
+          if (!Array.isArray(merged[key])) merged[key] = [];
+        }
+        return merged;
+      });
+    }).catch(err => {
+      addToast('Failed to load settings', 'error');
+    }).finally(() => setLoading(false));
+  }, []);
 
   const handleChange = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }));
   };
 
-  const togglePriority = (p) => {
+  const handleArrayToggle = (key, item) => {
     setForm(prev => {
-      const current = prev.defaultPriority || [];
-      return {
-        ...prev,
-        defaultPriority: current.includes(p) ? current.filter(x => x !== p) : [...current, p]
-      };
+      const arr = [...(prev[key] || [])];
+      const idx = arr.indexOf(item);
+      if (idx === -1) arr.push(item);
+      else arr.splice(idx, 1);
+      return { ...prev, [key]: arr };
     });
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = {
+      await api.put('/api/settings', {
+        systemName: form.systemName,
         companyName: form.companyName,
-        supportEmail: form.supportEmail,
+        systemEmail: form.systemEmail,
         requestPrefix: form.requestPrefix,
-        defaultPriority: JSON.stringify(form.defaultPriority),
-        ticketAutoClose: String(form.ticketAutoClose),
-        defaultAssignmentRule: form.defaultAssignmentRule,
-        escalationTrigger: form.escalationTrigger,
-        slaBreachAction: form.slaBreachAction,
-        primaryLanguage: form.primaryLanguage,
-        emailOnNewTicket: String(form.emailOnNewTicket),
-        emailOnStatusChange: String(form.emailOnStatusChange),
-        emailOnEscalation: String(form.emailOnEscalation),
-        inAppAlerts: String(form.inAppAlerts),
-        inAppEscalation: String(form.inAppEscalation),
+        phoneNumber: form.phoneNumber,
+        address: form.address,
+        timeZone: form.timeZone,
+        language: form.language,
+        defaultStatus: String(form.defaultStatus || ''),
+        defaultPriority: String(form.defaultPriority || ''),
+        autoRequestId: String(form.autoRequestId),
+        maxFileSize: String(form.maxFileSize),
+        allowedFileTypes: JSON.stringify(form.allowedFileTypes || []),
+        allowReopen: String(form.allowReopen),
+        emailNotifications: String(form.emailNotifications),
+        inAppNotifications: String(form.inAppNotifications),
+        notifyClientStatusChange: String(form.notifyClientStatusChange),
+        notifyDeveloperAssignment: String(form.notifyDeveloperAssignment),
+        autoAssign: String(form.autoAssign),
+        soundAlerts: String(form.soundAlerts),
         desktopNotifications: String(form.desktopNotifications),
-        soundEnabled: String(form.soundEnabled),
-      };
-      await api.put('/api/settings', payload);
-      if (form.primaryLanguage !== language) {
-        changeLanguage(form.primaryLanguage);
+        passwordLength: String(form.passwordLength),
+        passwordExpiry: String(form.passwordExpiry),
+        sessionTimeout: String(form.sessionTimeout),
+        maxLoginAttempts: String(form.maxLoginAttempts),
+        twoFactorAuth: String(form.twoFactorAuth),
+        theme: form.theme,
+        accentColor: form.accentColor,
+        sidebarStyle: form.sidebarStyle,
+        assignmentMode: form.assignmentMode,
+        defaultGroup: form.defaultGroup || '',
+        maintenanceMode: String(form.maintenanceMode),
+        responseHours: String(form.responseHours),
+        resolutionHours: String(form.resolutionHours),
+        escalationEnabled: String(form.escalationEnabled),
+        workStart: form.workStart,
+        workEnd: form.workEnd,
+        weekendDays: JSON.stringify(form.weekendDays || []),
+        holidaysEnabled: String(form.holidaysEnabled),
+        autoBackup: String(form.autoBackup),
+        backupFrequency: form.backupFrequency,
+      });
+      if (form.theme === 'dark') {
+        if (!document.body.classList.contains('dark-mode')) toggleDarkMode();
+      } else {
+        if (document.body.classList.contains('dark-mode')) toggleDarkMode();
       }
+      if (form.language) changeLanguage(form.language);
       addToast(t('settings.saved'));
-      showStatusToast('System settings updated', 'status');
+      showStatusToast(t('settings.saved'), 'status');
     } catch (err) {
-      console.error('Save settings error:', err);
-      addToast(err.message || t('settings.saveFailed'), 'error');
+      addToast(t('settings.saveFailed') + ': ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!window.confirm('Reset all settings to default values?')) return;
+    setSaving(true);
+    try {
+      await api.post('/api/settings/reset');
+      setForm({ ...initialForm });
+      addToast('Settings reset to defaults');
+      showStatusToast('Settings reset', 'status');
+    } catch (err) {
+      addToast('Failed to reset settings: ' + err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -114,199 +236,417 @@ export default function Settings() {
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
 
   return (
-    <div className="settings-page">
+    <div className="page-container">
       <div className="toast-container">
         {toasts.map(t => (
           <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)} />
         ))}
       </div>
 
-      <div className="settings-header">
-        <h1>{t('settings.title')}</h1>
-        <div className="settings-header-right">
-          <div className="settings-date">
-            <span className="settings-date-icon">📅</span>
-            <span>{new Date().toLocaleDateString(language === 'am' ? 'am-ET' : language === 'ar' ? 'ar-SA' : language === 'fr' ? 'fr-FR' : language === 'es' ? 'es-ES' : language === 'pt' ? 'pt-PT' : language === 'zh' ? 'zh-CN' : language === 'or' ? 'om-ET' : language === 'so' ? 'so-SO' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
-          </div>
-          <button className="btn-save" onClick={handleSave} disabled={saving}>
-            {saving ? t('common.saving') : t('common.save')}
-          </button>
+      <div className="page-header">
+        <div>
+          <button className="back-link" onClick={() => window.history.back()}>{t('common.back')}</button>
+          <h1>{t('settings.title')}</h1>
+          <p>{t('settings.subtitle')}</p>
         </div>
       </div>
 
-      <div className="settings-grid-2col">
-        {/* Left Column */}
-        <div className="settings-col">
-          {/* General Settings */}
-          <div className="settings-card">
-            <h3>{t('settings.general')}</h3>
-            <div className="settings-field">
-              <label>{t('settings.companyName')}</label>
-              <input type="text" value={form.companyName} onChange={e => handleChange('companyName', e.target.value)} />
-            </div>
-            <div className="settings-field">
-              <label>{t('settings.supportEmail')}</label>
-              <input type="email" placeholder={t('settings.supportEmail')} value={form.supportEmail} onChange={e => handleChange('supportEmail', e.target.value)} />
-            </div>
-            <div className="settings-field">
-              <label>{t('settings.requestPrefix')}</label>
-              <input type="text" value={form.requestPrefix} onChange={e => handleChange('requestPrefix', e.target.value)} />
-            </div>
-            <div className="settings-field">
-              <label>{t('settings.defaultPriority')}</label>
-              <div className="checkbox-list">
-                {[t('settings.low'), t('settings.medium'), t('settings.high'), t('settings.critical')].map((label, i) => {
-                  const val = ['Low', 'Medium', 'High', 'Critical'][i];
-                  return (
-                    <label key={val} className="checkbox-item">
-                      <input type="checkbox" checked={(form.defaultPriority || []).includes(val)} onChange={() => togglePriority(val)} />
-                      <span>{label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
+      <div className="settings-page">
+        {/* General */}
+        <div className="settings-card">
+          <h3>{t('settings.general')}</h3>
+          <div className="settings-field">
+            <label>System Name</label>
+            <input type="text" value={form.systemName} onChange={e => handleChange('systemName', e.target.value)} />
           </div>
-
-          {/* Request & Escalation */}
-          <div className="settings-card">
-            <h3>{t('settings.requestEscalation')}</h3>
-            <div className="settings-field">
-              <label>{t('settings.ticketAutoClose')}</label>
-              <div className="input-with-unit">
-                <input type="number" value={form.ticketAutoClose} onChange={e => handleChange('ticketAutoClose', parseInt(e.target.value) || 0)} min="1" />
-                <span className="input-unit">[{t('settings.days').toLowerCase()}]</span>
-              </div>
-            </div>
-            <div className="settings-field">
-              <label>{t('settings.assignmentRule')}</label>
-              <select value={form.defaultAssignmentRule} onChange={e => handleChange('defaultAssignmentRule', e.target.value)}>
-                <option value="">{t('settings.selectAssignmentRule')}</option>
-                <option value="round_robin">{t('settings.roundRobin')}</option>
-                <option value="least_load">{t('settings.leastLoad')}</option>
-                <option value="manual">{t('settings.manual')}</option>
-              </select>
-            </div>
-            <div className="settings-field">
-              <label>{t('settings.escalationTrigger')}</label>
-              <select value={form.escalationTrigger} onChange={e => handleChange('escalationTrigger', e.target.value)}>
-                <option value="">{t('settings.selectEscalationTrigger')}</option>
-                <option value="timeout">{t('settings.timeout')}</option>
-                <option value="priority">{t('settings.priorityBased')}</option>
-                <option value="no_response">{t('settings.noResponse')}</option>
-                <option value="manual">{t('settings.manual')}</option>
-              </select>
-            </div>
-            <div className="settings-field">
-              <label>{t('settings.slaBreachAction')}</label>
-              <select value={form.slaBreachAction} onChange={e => handleChange('slaBreachAction', e.target.value)}>
-                <option value="">{t('settings.selectSlaBreachAction')}</option>
-                <option value="escalate">{t('settings.escalateImmediately')}</option>
-                <option value="notify">{t('settings.notifyManager')}</option>
-                <option value="auto_assign">{t('settings.autoAssignSenior')}</option>
-                <option value="none">{t('settings.noAction')}</option>
-              </select>
-            </div>
+          <div className="settings-field">
+            <label>{t('settings.companyName')}</label>
+            <select value={form.companyName} onChange={e => handleChange('companyName', e.target.value)}>
+              <option value="">Select Company</option>
+              {companies.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.supportEmail')}</label>
+            <input type="email" value={form.systemEmail} onChange={e => handleChange('systemEmail', e.target.value)} />
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.requestPrefix')}</label>
+            <input type="text" value={form.requestPrefix} onChange={e => handleChange('requestPrefix', e.target.value)} />
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.phoneNumber')}</label>
+            <input type="text" value={form.phoneNumber} onChange={e => handleChange('phoneNumber', e.target.value)} />
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.address')}</label>
+            <input type="text" value={form.address} onChange={e => handleChange('address', e.target.value)} />
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.language')} - Time Zone</label>
+            <select value={form.timeZone} onChange={e => handleChange('timeZone', e.target.value)}>
+              {TIMEZONES.map(tz => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.language')}</label>
+            <select value={form.language} onChange={e => handleChange('language', e.target.value)}>
+              {LANGUAGES.map(l => (
+                <option key={l.code} value={l.code}>{l.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="settings-field">
+            <label>Company Logo</label>
+            <input type="file" accept="image/*" disabled title="Upload via Company page" />
+            <span style={{ fontSize: '12px', color: '#9ca3af' }}>Upload logo in the Company management page</span>
           </div>
         </div>
 
-        {/* Right Column */}
-        <div className="settings-col">
-          {/* Language Options */}
-          <div className="settings-card">
-            <h3>{t('settings.languageOptions')}</h3>
-            <div className="settings-field">
-              <label>{t('settings.primaryLanguage')}</label>
-              <div className="language-select">
-                <span className="language-select-icon">🌐</span>
-                <select value={form.primaryLanguage} onChange={e => handleChange('primaryLanguage', e.target.value)}>
-                  {availableLanguages.map(lang => (
-                    <option key={lang.code} value={lang.code}>{lang.nativeName} ({lang.name})</option>
-                  ))}
-                </select>
-              </div>
+        {/* Request Settings */}
+        <div className="settings-card">
+          <h3>Request Settings</h3>
+          <div className="settings-field">
+            <label>Default Status</label>
+            <select value={form.defaultStatus} onChange={e => handleChange('defaultStatus', e.target.value)}>
+              <option value="">Select Default Status</option>
+              {statuses.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.defaultPriority')}</label>
+            <select value={form.defaultPriority} onChange={e => handleChange('defaultPriority', e.target.value)}>
+              <option value="">Select Default Priority</option>
+              {priorities.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">Auto Request ID</span>
+              <span className="toggle-sublabel">Automatically generate request IDs</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.autoRequestId} onChange={e => handleChange('autoRequestId', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.maxFileSize')}</label>
+            <input type="number" value={form.maxFileSize} onChange={e => handleChange('maxFileSize', parseInt(e.target.value) || 0)} min="1" />
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.allowedFileTypes')}</label>
+            <div className="checkbox-list">
+              {FILE_TYPE_OPTIONS.map(ft => (
+                <label key={ft} className="checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={(form.allowedFileTypes || []).includes(ft)}
+                    onChange={() => handleArrayToggle('allowedFileTypes', ft)}
+                  />
+                  .{ft}
+                </label>
+              ))}
             </div>
           </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">Allow Reopen</span>
+              <span className="toggle-sublabel">Allow clients to reopen resolved requests</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.allowReopen} onChange={e => handleChange('allowReopen', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+        </div>
 
-          {/* Email Notifications */}
-          <div className="settings-card">
-            <h3>{t('settings.emailNotifications')}</h3>
-            <div className="toggle-row-settings">
-              <div>
-                <span className="toggle-label">{t('settings.emailOnNewTicket')}</span>
-                <span className="toggle-sublabel">{t('settings.emailOnNewTicketDesc')}</span>
-              </div>
-              <label className="toggle">
-                <input type="checkbox" checked={form.emailOnNewTicket} onChange={e => handleChange('emailOnNewTicket', e.target.checked)} />
-                <span className="slider"></span>
-              </label>
+        {/* Notification Settings */}
+        <div className="settings-card">
+          <h3>{t('settings.notifications')}</h3>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">{t('settings.emailNotifications')}</span>
+              <span className="toggle-sublabel">{t('settings.emailNotificationsDesc')}</span>
             </div>
-            <div className="toggle-row-settings">
-              <div>
-                <span className="toggle-label">{t('settings.emailOnStatusChange')}</span>
-                <span className="toggle-sublabel">{t('settings.emailOnStatusChangeDesc')}</span>
-              </div>
-              <label className="toggle">
-                <input type="checkbox" checked={form.emailOnStatusChange} onChange={e => handleChange('emailOnStatusChange', e.target.checked)} />
-                <span className="slider"></span>
-              </label>
-            </div>
-            <div className="toggle-row-settings">
-              <div>
-                <span className="toggle-label">{t('settings.emailOnEscalation')}</span>
-                <span className="toggle-sublabel">{t('settings.emailOnEscalationDesc')}</span>
-              </div>
-              <label className="toggle">
-                <input type="checkbox" checked={form.emailOnEscalation} onChange={e => handleChange('emailOnEscalation', e.target.checked)} />
-                <span className="slider"></span>
-              </label>
-            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.emailNotifications} onChange={e => handleChange('emailNotifications', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
           </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">{t('settings.inAppNotifications')}</span>
+              <span className="toggle-sublabel">Show notifications inside the application</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.inAppNotifications} onChange={e => handleChange('inAppNotifications', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">{t('settings.autoAssign')}</span>
+              <span className="toggle-sublabel">{t('settings.autoAssignDesc')}</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.autoAssign} onChange={e => handleChange('autoAssign', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">{t('settings.soundAlerts')}</span>
+              <span className="toggle-sublabel">{t('settings.soundAlertsDesc')}</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.soundAlerts} onChange={e => handleChange('soundAlerts', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">{t('settings.desktopNotifications')}</span>
+              <span className="toggle-sublabel">{t('settings.desktopNotificationsDesc')}</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.desktopNotifications} onChange={e => handleChange('desktopNotifications', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">Notify Client on Status Change</span>
+              <span className="toggle-sublabel">Alert clients when their request status changes</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.notifyClientStatusChange} onChange={e => handleChange('notifyClientStatusChange', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">Notify Developer on Assignment</span>
+              <span className="toggle-sublabel">Alert developers when assigned to a request</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.notifyDeveloperAssignment} onChange={e => handleChange('notifyDeveloperAssignment', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+        </div>
 
-          {/* In-App Notifications */}
-          <div className="settings-card">
-            <h3>{t('settings.inAppNotifications')}</h3>
-            <div className="toggle-row-settings">
-              <div>
-                <span className="toggle-label">{t('settings.inAppAlerts')}</span>
-                <span className="toggle-sublabel">{t('settings.inAppAlertsDesc')}</span>
-              </div>
-              <label className="toggle">
-                <input type="checkbox" checked={form.inAppAlerts} onChange={e => handleChange('inAppAlerts', e.target.checked)} />
-                <span className="slider"></span>
-              </label>
+        {/* SLA Settings */}
+        <div className="settings-card">
+          <h3>{t('settings.sla')}</h3>
+          <div className="settings-field">
+            <label>{t('settings.responseHours')}</label>
+            <div className="input-with-unit">
+              <input type="number" value={form.responseHours} onChange={e => handleChange('responseHours', parseInt(e.target.value) || 0)} min="1" />
+              <span className="input-unit">Hours</span>
             </div>
-            <div className="toggle-row-settings">
-              <div>
-                <span className="toggle-label">{t('settings.escalationAlerts')}</span>
-                <span className="toggle-sublabel">{t('settings.escalationAlertsDesc')}</span>
-              </div>
-              <label className="toggle">
-                <input type="checkbox" checked={form.inAppEscalation} onChange={e => handleChange('inAppEscalation', e.target.checked)} />
-                <span className="slider"></span>
-              </label>
+            <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.responseHoursDesc')}</span>
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.resolutionHours')}</label>
+            <div className="input-with-unit">
+              <input type="number" value={form.resolutionHours} onChange={e => handleChange('resolutionHours', parseInt(e.target.value) || 0)} min="1" />
+              <span className="input-unit">Hours</span>
             </div>
-            <div className="toggle-row-settings">
-              <div>
-                <span className="toggle-label">{t('settings.desktopNotifications')}</span>
-                <span className="toggle-sublabel">{t('settings.desktopNotificationsDesc')}</span>
-              </div>
-              <label className="toggle">
-                <input type="checkbox" checked={form.desktopNotifications} onChange={e => handleChange('desktopNotifications', e.target.checked)} />
-                <span className="slider"></span>
-              </label>
+            <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.resolutionHoursDesc')}</span>
+          </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">{t('settings.escalationEnabled')}</span>
+              <span className="toggle-sublabel">{t('settings.escalationEnabledDesc')}</span>
             </div>
-            <div className="toggle-row-settings">
-              <div>
-                <span className="toggle-label">{t('settings.soundAlerts')}</span>
-                <span className="toggle-sublabel">{t('settings.soundAlertsDesc')}</span>
-              </div>
-              <label className="toggle">
-                <input type="checkbox" checked={form.soundEnabled} onChange={e => handleChange('soundEnabled', e.target.checked)} />
-                <span className="slider"></span>
-              </label>
+            <label className="toggle">
+              <input type="checkbox" checked={form.escalationEnabled} onChange={e => handleChange('escalationEnabled', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        {/* Working Hours */}
+        <div className="settings-card">
+          <h3>{t('settings.workingHours')}</h3>
+          <div className="settings-field">
+            <label>{t('settings.workStart')}</label>
+            <input type="time" value={form.workStart} onChange={e => handleChange('workStart', e.target.value)} />
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.workEnd')}</label>
+            <input type="time" value={form.workEnd} onChange={e => handleChange('workEnd', e.target.value)} />
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.weekendDays')}</label>
+            <div className="checkbox-list">
+              {DAYS_OF_WEEK.map(day => (
+                <label key={day} className="checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={(form.weekendDays || []).includes(day)}
+                    onChange={() => handleArrayToggle('weekendDays', day)}
+                  />
+                  {t('days.' + day)}
+                </label>
+              ))}
             </div>
           </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">{t('settings.holidaysEnabled')}</span>
+              <span className="toggle-sublabel">{t('settings.holidaysEnabledDesc')}</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.holidaysEnabled} onChange={e => handleChange('holidaysEnabled', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        {/* Security Settings */}
+        <div className="settings-card">
+          <h3>{t('settings.security')}</h3>
+          <div className="settings-field">
+            <label>{t('settings.passwordExpiry')}</label>
+            <div className="input-with-unit">
+              <input type="number" value={form.passwordExpiry} onChange={e => handleChange('passwordExpiry', parseInt(e.target.value) || 0)} min="0" max="365" />
+              <span className="input-unit">{t('settings.days')}</span>
+            </div>
+            <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.passwordExpiryDesc')}</span>
+          </div>
+          <div className="settings-field">
+            <label>Password Length</label>
+            <div className="input-with-unit">
+              <input type="number" value={form.passwordLength} onChange={e => handleChange('passwordLength', parseInt(e.target.value) || 0)} min="4" max="64" />
+              <span className="input-unit">Characters</span>
+            </div>
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.sessionTimeout')}</label>
+            <select value={form.sessionTimeout} onChange={e => handleChange('sessionTimeout', Number(e.target.value))}>
+              <option value={15}>15 Minutes</option>
+              <option value={30}>30 Minutes</option>
+              <option value={45}>45 Minutes</option>
+              <option value={60}>60 Minutes</option>
+              <option value={120}>2 Hours</option>
+              <option value={240}>4 Hours</option>
+              <option value={480}>8 Hours</option>
+              <option value={0}>Never</option>
+            </select>
+            <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.sessionTimeoutDesc')}</span>
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.maxLoginAttempts')}</label>
+            <input type="number" value={form.maxLoginAttempts} onChange={e => handleChange('maxLoginAttempts', parseInt(e.target.value) || 0)} min="1" max="20" />
+            <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.maxLoginAttemptsDesc')}</span>
+          </div>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">{t('settings.twoFactorAuth')}</span>
+              <span className="toggle-sublabel">{t('settings.twoFactorAuthDesc')}</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.twoFactorAuth} onChange={e => handleChange('twoFactorAuth', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        {/* Appearance */}
+        <div className="settings-card">
+          <h3>{t('settings.appearance')}</h3>
+          <div className="settings-field">
+            <label>{t('settings.theme')}</label>
+            <select value={form.theme} onChange={e => handleChange('theme', e.target.value)}>
+              <option value="light">{t('settings.lightMode')}</option>
+              <option value="dark">{t('settings.darkMode')}</option>
+            </select>
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.accentColor')}</label>
+            <input type="color" value={form.accentColor} onChange={e => handleChange('accentColor', e.target.value)} />
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.sidebarStyle')}</label>
+            <select value={form.sidebarStyle} onChange={e => handleChange('sidebarStyle', e.target.value)}>
+              <option value="compact">{t('settings.compact')}</option>
+              <option value="comfortable">{t('settings.comfortable')}</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Assignment Settings */}
+        <div className="settings-card">
+          <h3>Assignment Settings</h3>
+          <div className="settings-field">
+            <label>Assignment Mode</label>
+            <select value={form.assignmentMode} onChange={e => handleChange('assignmentMode', e.target.value)}>
+              <option value="group-based">Group-Based</option>
+              <option value="manual">Manual</option>
+              <option value="auto">Auto</option>
+            </select>
+          </div>
+          <div className="settings-field">
+            <label>Default Group</label>
+            <select value={form.defaultGroup} onChange={e => handleChange('defaultGroup', e.target.value)}>
+              <option value="">No Default Group</option>
+              {groups.map(g => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Backup & Maintenance */}
+        <div className="settings-card">
+          <h3>{t('settings.backupMaintenance')}</h3>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">{t('settings.autoBackup')}</span>
+              <span className="toggle-sublabel">{t('settings.autoBackupDesc')}</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.autoBackup} onChange={e => handleChange('autoBackup', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.backupFrequency')}</label>
+            <select value={form.backupFrequency} onChange={e => handleChange('backupFrequency', e.target.value)} disabled={!form.autoBackup}>
+              <option value="daily">{t('settings.daily')}</option>
+              <option value="weekly">{t('settings.weekly')}</option>
+              <option value="monthly">{t('settings.monthly')}</option>
+            </select>
+          </div>
+          <div className="toggle-row-settings" style={{ marginTop: '8px' }}>
+            <div>
+              <span className="toggle-label">{t('settings.maintenanceMode')}</span>
+              <span className="toggle-sublabel">{t('settings.maintenanceModeDesc')}</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.maintenanceMode} onChange={e => handleChange('maintenanceMode', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ minWidth: '160px' }}>
+            {saving ? t('common.saving') : t('common.save')}
+          </button>
+          <button className="btn btn-outline" onClick={handleReset} disabled={saving} style={{ minWidth: '120px' }}>
+            Reset
+          </button>
         </div>
       </div>
     </div>

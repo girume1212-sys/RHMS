@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import Toast from './Toast';
@@ -7,15 +7,17 @@ import { showStatusToast } from '../notify';
 
 export default function ClientDashboard() {
   const [requests, setRequests] = useState([]);
+  const [statuses, setStatuses] = useState([]);
   const [stats, setStats] = useState({ total: 0, open: 0, inProgress: 0, resolved: 0 });
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
-  const [searchQuery, setSearchQuery] = useState('');
   const [toasts, setToasts] = useState([]);
+  const [updatingStatus, setUpdatingStatus] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -27,20 +29,22 @@ export default function ClientDashboard() {
   }, []);
 
   useEffect(() => {
-    api.get('/api/requests')
-      .then(data => {
-        setRequests(data);
-        const total = data.length;
-        const open = data.filter(r => r.status?.name === 'Open').length;
-        const inProgress = data.filter(r => r.status?.name === 'In Progress' || r.status?.name === 'Assigned').length;
-        const resolved = data.filter(r => r.status?.name === 'Resolved' || r.status?.name === 'Closed').length;
-        setStats({ total, open, inProgress, resolved });
-      })
-      .catch(err => setError('Failed to load requests: ' + err.message));
+    Promise.all([
+      api.get('/api/requests'),
+      api.get('/api/statuses')
+    ]).then(([requestsData, statusesData]) => {
+      setRequests(requestsData);
+      setStatuses(statusesData);
+      const total = requestsData.length;
+      const open = requestsData.filter(r => r.status?.name === 'New').length;
+      const inProgress = requestsData.filter(r => r.status?.name === 'In Progress' || r.status?.name === 'Assigned').length;
+      const resolved = requestsData.filter(r => r.status?.name === 'Resolved' || r.status?.name === 'Closed').length;
+      setStats({ total, open, inProgress, resolved });
+    }).catch(err => setError('Failed to load data: ' + err.message));
   }, []);
 
   const getStatusColor = (status) => {
-    const colors = { Open: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444' };
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444', Rejected: '#DC2626' };
     return colors[status?.name] || '#6B7280';
   };
 
@@ -65,6 +69,23 @@ export default function ClientDashboard() {
     navigate(`/client/requests/${id}?edit=true`);
   };
 
+  const handleClientStatusChange = async (e, requestId, statusName) => {
+    e.stopPropagation();
+    const status = statuses.find(s => s.name === statusName);
+    if (!status) return;
+    setUpdatingStatus(requestId);
+    try {
+      await api.put(`/api/requests/${requestId}`, { statusId: status.id });
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status } : r));
+      addToast(`Request #${requestId} status changed to ${statusName}`);
+      showStatusToast(`Request #${requestId} → ${statusName}`, 'status', requestId);
+    } catch (err) {
+      addToast('Failed to update status: ' + err.message, 'error');
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
+
   const handleDelete = async (e, id) => {
     e.stopPropagation();
     if (!window.confirm('Are you sure you want to delete this request?')) return;
@@ -79,17 +100,16 @@ export default function ClientDashboard() {
     }
   };
 
+  const urlSearch = searchParams.get('search') || '';
   const filteredRequests = requests
     .filter(r => {
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return (
-          String(r.id).includes(q) ||
-          (r.subject || '').toLowerCase().includes(q) ||
-          (r.category?.name || '').toLowerCase().includes(q)
-        );
-      }
-      return true;
+      if (!urlSearch) return true;
+      const q = urlSearch.toLowerCase();
+      return (
+        String(r.id).includes(q) ||
+        (r.subject || '').toLowerCase().includes(q) ||
+        (r.category?.name || '').toLowerCase().includes(q)
+      );
     })
     .sort((a, b) => {
       if (!sort.key) return 0;
@@ -143,7 +163,7 @@ export default function ClientDashboard() {
           <div className="stat-icon" style={{ background: '#10B98115', color: '#10B981' }}>📂</div>
           <div className="stat-content">
             <h3>{stats.open}</h3>
-            <p>Open</p>
+            <p>New</p>
           </div>
         </div>
         <div className="stat-card">
@@ -166,15 +186,6 @@ export default function ClientDashboard() {
         <div className="table-header-bar">
           <h3>My Requests ({filteredRequests.length})</h3>
           <div className="table-header-actions">
-            <div className="table-search-box">
-              <span className="search-icon">🔍</span>
-              <input
-                type="text"
-                placeholder="Search requests..."
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-              />
-            </div>
           </div>
         </div>
 
@@ -183,7 +194,7 @@ export default function ClientDashboard() {
             <thead>
               <tr>
                 <th className="sortable">ID {getSortIcon('id')}</th>
-                <th className="sortable">Subject {getSortIcon('subject')}</th>
+                <th className="sortable">Request Title {getSortIcon('subject')}</th>
                 <th className="sortable">Category {getSortIcon('category')}</th>
                 <th className="sortable">Priority {getSortIcon('priority')}</th>
                 <th className="sortable">Status {getSortIcon('status')}</th>
@@ -205,8 +216,12 @@ export default function ClientDashboard() {
                   <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
                   <td>
                     <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
-                      <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
-                      <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                      {r.status?.name === 'New' && (
+                        <>
+                          <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
+                          <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

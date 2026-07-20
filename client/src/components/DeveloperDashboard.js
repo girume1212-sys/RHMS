@@ -37,12 +37,11 @@ export default function DeveloperDashboard() {
     inProgress: requests.filter(r => r.status?.name === 'In Progress').length,
     waiting: requests.filter(r => r.status?.name === 'Waiting for Client').length,
     resolved: requests.filter(r => r.status?.name === 'Resolved').length,
-    closed: requests.filter(r => r.status?.name === 'Closed').length,
     assigned: requests.filter(r => r.status?.name === 'Assigned').length,
   };
 
   const getStatusColor = (status) => {
-    const colors = { Open: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444' };
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981' };
     return colors[status?.name] || '#6B7280';
   };
 
@@ -137,9 +136,6 @@ export default function DeveloperDashboard() {
       actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓' });
       actions.push({ label: 'Need Info', status: 'Waiting for Client', color: '#F97316', icon: '❓' });
     }
-    if (statusName === 'Reopened') {
-      actions.push({ label: 'Resume', status: 'In Progress', color: '#F59E0B', icon: '▶' });
-    }
     return actions;
   };
 
@@ -184,7 +180,7 @@ export default function DeveloperDashboard() {
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')}>
           <div className="stat-icon" style={{ background: '#10B98115', color: '#10B981' }}>✅</div>
           <div className="stat-content">
-            <h3>{stats.resolved + stats.closed}</h3>
+              <h3>{stats.resolved}</h3>
             <p>Resolved</p>
           </div>
         </div>
@@ -196,7 +192,7 @@ export default function DeveloperDashboard() {
           <div className="table-header-actions">
             <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
               <option value="">All Statuses</option>
-              {statuses.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              {statuses.filter(s => s.name !== 'Closed' && s.name !== 'Reopened').map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
             <select className="filter-select" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}>
               <option value="">All Priorities</option>
@@ -217,7 +213,7 @@ export default function DeveloperDashboard() {
             <thead>
               <tr>
                 <th className="sortable">ID {getSortIcon('id')}</th>
-                <th className="sortable">Subject {getSortIcon('subject')}</th>
+                <th className="sortable">Request Title {getSortIcon('subject')}</th>
                 <th className="sortable">Client {getSortIcon('client')}</th>
                 <th className="sortable">Category {getSortIcon('category')}</th>
                 <th className="sortable">Priority {getSortIcon('priority')}</th>
@@ -257,8 +253,7 @@ export default function DeveloperDashboard() {
                           {action.icon} {action.label}
                         </button>
                       ))}
-                      <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
-                      <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+
                     </div>
                   </td>
                 </tr>

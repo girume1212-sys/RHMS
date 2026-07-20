@@ -3,8 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { validateEmail } from '../utils/validation';
 import ValidationError from './ValidationError';
+import { useTranslation } from '../i18n/useTranslation';
 
 export default function Login() {
+  const { t } = useTranslation();
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -24,6 +27,7 @@ export default function Login() {
     const saved = localStorage.getItem('rhms_remember');
     if (saved) {
       const data = JSON.parse(saved);
+      setUsername(data.username || '');
       setEmail(data.email || '');
       setRememberMe(true);
     }
@@ -65,7 +69,7 @@ export default function Login() {
         body: JSON.stringify({ credential: response.credential }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Google sign-in failed');
+      if (!res.ok) throw new Error(data.error || t('common.googleSignInFailed'));
       localStorage.setItem('rhms_token', data.token);
       if (data.user.role === 'client') {
         navigate('/client');
@@ -96,18 +100,18 @@ export default function Login() {
     setLoading(true);
     try {
       if (rememberMe) {
-        localStorage.setItem('rhms_remember', JSON.stringify({ email }));
+        localStorage.setItem('rhms_remember', JSON.stringify({ username, email }));
       } else {
         localStorage.removeItem('rhms_remember');
       }
-      const user = await login(email, password);
+      const user = await login(username, email, password);
       if (user.role === 'client') {
         navigate('/client');
       } else {
         navigate('/');
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.message === 'Invalid username, email or password' ? t('common.invalidCredentials') : err.message);
     } finally {
       setLoading(false);
     }
@@ -117,7 +121,7 @@ export default function Login() {
     e.preventDefault();
     const err = validateField('forgotEmail', forgotEmail);
     if (err) return;
-    setForgotMsg('If an account exists with this email, a password reset link has been sent.');
+    setForgotMsg(t('common.resetLinkSent'));
     setTimeout(() => { setShowForgot(false); setForgotMsg(''); setForgotEmail(''); }, 3000);
   };
 
@@ -129,8 +133,8 @@ export default function Login() {
       </div>
 
       <div className="login-card">
-        <h2 className="login-title">Login</h2>
-        <p className="login-subtitle">Welcome back! Please enter your details</p>
+        <h2 className="login-title">{t('common.login')}</h2>
+        <p className="login-subtitle">{t('common.welcomeSubtitle')}</p>
 
         {error && <div className="login-error">{error}</div>}
 
@@ -142,10 +146,25 @@ export default function Login() {
                 <circle cx="12" cy="7" r="4"/>
               </svg>
               <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder={t('common.userName')}
+                required
+              />
+            </div>
+          </div>
+          <div className="login-field">
+            <div className="login-input-wrapper">
+              <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+              </svg>
+              <input
                 type="email"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); validateField('email', e.target.value); }}
-                placeholder="User Name"
+                placeholder={t('common.email')}
                 className={errors.email ? 'input-error' : ''}
                 required
               />
@@ -163,7 +182,7 @@ export default function Login() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
+                placeholder={t('common.password')}
                 required
               />
               <button
@@ -171,7 +190,7 @@ export default function Login() {
                 className="show-password-btn"
                 onClick={() => setShowPassword(!showPassword)}
               >
-                {showPassword ? 'HIDE' : 'SHOW'}
+                {showPassword ? t('common.hide') : t('common.show')}
               </button>
             </div>
           </div>
@@ -184,37 +203,37 @@ export default function Login() {
                 onChange={(e) => setRememberMe(e.target.checked)}
               />
               <span className="checkmark"></span>
-              <span>Remember me</span>
+              <span>{t('common.rememberMe')}</span>
             </label>
             <button type="button" className="forgot-link" onClick={() => setShowForgot(true)}>
-              Forgot Password?
+              {t('common.forgotPassword')}
             </button>
           </div>
 
           <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign in'}
+            {loading ? t('common.signingIn') : t('common.signIn')}
           </button>
         </form>
 
         <div className="login-divider">
-          <span>or</span>
+          <span>{t('common.or')}</span>
         </div>
 
         <div className="google-btn-wrapper">
           <div ref={googleBtnRef} className="google-btn-container"></div>
-          {googleLoading && <div className="google-loading">Signing in with Google...</div>}
+          {googleLoading && <div className="google-loading">{t('common.googleSignIn')}</div>}
         </div>
 
         <p className="signup-link">
-          Don't have an account? <button type="button" className="signup-btn" onClick={() => navigate('/signup')}>Sign Up</button>
+          {t('common.noAccount')} <button type="button" className="signup-btn" onClick={() => navigate('/signup')}>{t('common.signUp')}</button>
         </p>
       </div>
 
       {showForgot && (
         <div className="modal-overlay" onClick={() => setShowForgot(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>Reset Password</h3>
-            <p>Enter your email address and we'll send you a link to reset your password.</p>
+            <h3>{t('common.resetPassword')}</h3>
+            <p>{t('common.resetLinkSent')}</p>
             {forgotMsg && <div className="login-error" style={{ marginBottom: '16px' }}>{forgotMsg}</div>}
             <form onSubmit={handleForgotPassword}>
               <div className="login-field">
@@ -227,7 +246,7 @@ export default function Login() {
                     type="email"
                     value={forgotEmail}
                     onChange={(e) => { setForgotEmail(e.target.value); validateField('forgotEmail', e.target.value); }}
-                    placeholder="Enter your email"
+                    placeholder={t('common.enterEmail')}
                     className={errors.forgotEmail ? 'input-error' : ''}
                     required
                   />
@@ -235,8 +254,8 @@ export default function Login() {
                 <ValidationError message={errors.forgotEmail} />
               </div>
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" onClick={() => { setShowForgot(false); setForgotMsg(''); setForgotEmail(''); }}>Cancel</button>
-                <button type="submit" className="login-btn" style={{ width: 'auto', padding: '10px 24px' }}>Send Reset Link</button>
+                <button type="button" className="btn btn-outline" onClick={() => { setShowForgot(false); setForgotMsg(''); setForgotEmail(''); }}>{t('common.cancel')}</button>
+                <button type="submit" className="login-btn" style={{ width: 'auto', padding: '10px 24px' }}>{t('common.sendResetLink')}</button>
               </div>
             </form>
           </div>

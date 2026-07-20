@@ -33,6 +33,11 @@ export default function CreateRequest() {
   useEffect(() => {
     api.get('/api/categories').then(setCategories);
     api.get('/api/priorities').then(setPriorities);
+    api.get('/api/settings/public').then(settings => {
+      if (settings.defaultPriority) {
+        setForm(prev => ({ ...prev, priorityId: settings.defaultPriority }));
+      }
+    }).catch(() => {});
   }, []);
 
   const handleFileChange = (e) => {

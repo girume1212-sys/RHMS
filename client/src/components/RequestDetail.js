@@ -196,7 +196,7 @@ export default function RequestDetail() {
   };
 
   const getStatusColor = (status) => {
-    const colors = { Open: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444' };
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444', Rejected: '#DC2626' };
     return colors[status?.name] || '#6B7280';
   };
 
@@ -216,7 +216,7 @@ export default function RequestDetail() {
   };
 
   const getStatusFlow = () => {
-    const lifecycle = ['Open', 'Assigned', 'In Progress', 'Waiting for Client', 'Resolved', 'Closed'];
+    const lifecycle = ['New', 'Assigned', 'In Progress', 'Waiting for Client', 'Resolved', 'Closed'];
     const visitedStatuses = new Set();
     const statusTimestamps = {};
 
@@ -284,9 +284,7 @@ export default function RequestDetail() {
           <div className="detail-card">
             <div className="detail-card-header">
               <h3>Request Details</h3>
-              {!isClient && !editing && (
-                <button className="btn btn-sm btn-outline" onClick={() => setEditing(true)}>Edit</button>
-              )}
+
             </div>
             {editing ? (
               <div className="edit-form">
@@ -513,6 +511,7 @@ export default function RequestDetail() {
                   <select value={request.statusId} onChange={(e) => handleStatusChange(e.target.value)}>
                     {statuses
                       .filter(s => !(user.role === 'support' && s.name === 'Escalated'))
+                      .filter(s => s.name !== 'Reopened')
                       .map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
@@ -530,6 +529,27 @@ export default function RequestDetail() {
                         <option key={d.id} value={d.id}>{d.name}</option>
                       ))}
                     </optgroup>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Client Actions */}
+          {isClient && (
+            <div className="detail-card">
+              <h3>Actions</h3>
+              <div className="action-list">
+                <div className="action-group">
+                  <label>Change Status</label>
+                  <select
+                    value=""
+                    onChange={(e) => e.target.value && handleStatusChange(e.target.value)}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="">Select status</option>
+                    <option value={statuses.find(s => s.name === 'Closed')?.id}>Closed</option>
+                    <option value={statuses.find(s => s.name === 'Rejected')?.id}>Rejected</option>
                   </select>
                 </div>
               </div>
@@ -563,18 +583,6 @@ export default function RequestDetail() {
                 >
                   {showHistory ? 'Hide History' : 'Show History'}
                 </button>
-                {activityLog.length > 0 && (
-                  <button
-                    className="action-btn-text delete"
-                    onClick={() => {
-                      if (window.confirm('Are you sure you want to clear the history view?')) {
-                        setActivityLog([]);
-                      }
-                    }}
-                  >
-                    Clear History
-                  </button>
-                )}
               </div>
             </div>
 
@@ -620,11 +628,11 @@ export default function RequestDetail() {
                 <div className="timeline">
                   {loadingActivity ? (
                     <div className="loading-screen" style={{ minHeight: 'auto', padding: '20px' }}><div className="spinner"></div></div>
-                  ) : activityLog.length === 0 ? (
-                    <div className="empty-state">No activity yet</div>
+                  ) : activityLog.filter(a => a.user?.id !== user?.id).length === 0 ? (
+                    <div className="empty-state">No activity from others yet</div>
                   ) : (
                     <div className="timeline-list">
-                      {activityLog.map((activity) => (
+                      {activityLog.filter(a => a.user?.id !== user?.id).map((activity) => (
                         <div key={activity.id} className="timeline-item">
                           <div className="timeline-marker" style={{ background: getActivityColor(activity.type) }}></div>
                           <div className="timeline-connector"></div>

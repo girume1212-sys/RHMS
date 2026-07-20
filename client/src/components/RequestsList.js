@@ -56,7 +56,7 @@ export default function RequestsList() {
   }, [filter, user]);
 
   const getStatusColor = (status) => {
-    const colors = { Open: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444' };
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444', Rejected: '#DC2626' };
     return colors[status?.name] || '#6B7280';
   };
 
@@ -160,7 +160,7 @@ export default function RequestsList() {
         />
         <select value={filter.status} onChange={(e) => { setFilter({ ...filter, status: e.target.value }); setPage(1); }}>
           <option value="">All Statuses</option>
-          <option value="1">Open</option>
+          <option value="1">New</option>
           <option value="2">Assigned</option>
           <option value="3">In Progress</option>
           <option value="4">Waiting for Client</option>
@@ -196,10 +196,6 @@ export default function RequestsList() {
           <div className="table-header-bar">
             <h3>Requests ({filteredRequests.length})</h3>
             <div className="table-header-actions">
-              <div className="table-search-box">
-                <span className="search-icon">🔍</span>
-                <input type="text" placeholder="Search requests..." value={filter.search} onChange={(e) => { setFilter({ ...filter, search: e.target.value }); setPage(1); }} />
-              </div>
             </div>
           </div>
 
@@ -208,7 +204,7 @@ export default function RequestsList() {
               <thead>
                 <tr>
                   <th className="sortable">ID {getSortIcon('id')}</th>
-                  <th className="sortable">Subject {getSortIcon('subject')}</th>
+                  <th className="sortable">Request Title {getSortIcon('subject')}</th>
                   {!isClient && <th className="sortable">Client {getSortIcon('client')}</th>}
                   <th className="sortable">Category {getSortIcon('category')}</th>
                   <th className="sortable">Priority {getSortIcon('priority')}</th>
@@ -239,8 +235,14 @@ export default function RequestsList() {
                     <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
                     <td>
                       <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
-                        <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
-                        <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                        {(user?.role === 'admin' || user?.role === 'client') && r.statusId === '1' ? (
+                          <>
+                            <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
+                            <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                          </>
+                        ) : (
+                          <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>—</span>
+                        )}
                       </div>
                     </td>
                   </tr>

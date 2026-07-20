@@ -48,13 +48,14 @@ const priorities = [
 ];
 
 const statuses = [
-  { id: '1', name: 'Open', color: '#3B82F6' },
+  { id: '1', name: 'New', color: '#3B82F6' },
   { id: '2', name: 'Assigned', color: '#8B5CF6' },
   { id: '3', name: 'In Progress', color: '#F59E0B' },
   { id: '4', name: 'Waiting for Client', color: '#F97316' },
   { id: '5', name: 'Resolved', color: '#10B981' },
   { id: '6', name: 'Closed', color: '#6B7280' },
   { id: '7', name: 'Reopened', color: '#EF4444' },
+  { id: '8', name: 'Rejected', color: '#DC2626' },
 ];
 
 const requests = [

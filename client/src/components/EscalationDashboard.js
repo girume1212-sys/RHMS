@@ -43,7 +43,7 @@ export default function EscalationDashboard() {
 
   const stats = {
     total: requests.length,
-    open: requests.filter(r => r.status?.name === 'Open').length,
+    open: requests.filter(r => r.status?.name === 'New').length,
     assigned: requests.filter(r => r.status?.name === 'Assigned').length,
     inProgress: requests.filter(r => r.status?.name === 'In Progress').length,
     waiting: requests.filter(r => r.status?.name === 'Waiting for Client').length,
@@ -53,7 +53,7 @@ export default function EscalationDashboard() {
   };
 
   const getStatusColor = (status) => {
-    const colors = { Open: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444' };
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981' };
     return colors[status?.name] || '#6B7280';
   };
 
@@ -85,7 +85,7 @@ export default function EscalationDashboard() {
     try {
       await api.put(`/api/requests/${requestId}`, { assignedTo: developerId || null });
       const dev = users.find(u => u.id === developerId);
-      const newStatus = developerId ? statuses.find(s => s.name === 'Assigned') : statuses.find(s => s.name === 'Open');
+      const newStatus = developerId ? statuses.find(s => s.name === 'Assigned') : statuses.find(s => s.name === 'New');
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: developerId, assignee: dev || null, status: newStatus || r.status } : r));
       showStatusToast(`Request #${requestId} assigned to ${dev?.name || 'Unassigned'}`, 'assignment', requestId);
     } catch (err) {
@@ -176,12 +176,8 @@ export default function EscalationDashboard() {
     const statusName = r.status?.name;
     const actions = [];
 
-    if (statusName === 'Open' || statusName === 'Reopened') {
+    if (statusName === 'New') {
       actions.push({ label: 'Assign', status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'assign' });
-    }
-    if (statusName === 'Resolved') {
-      actions.push({ label: 'Verify & Close', status: 'Closed', color: '#6B7280', icon: '🔒', type: 'status' });
-      actions.push({ label: 'Reopen', status: 'Reopened', color: '#EF4444', icon: '🔄', type: 'status' });
     }
     if (statusName === 'Waiting for Client') {
       actions.push({ label: 'Follow Up', status: 'In Progress', color: '#F59E0B', icon: '📞', type: 'status' });
@@ -216,7 +212,7 @@ export default function EscalationDashboard() {
             <p>Total</p>
           </div>
         </div>
-        <div className="stat-card" style={{ cursor: 'pointer', borderLeft: stats.open > 0 ? '3px solid #3B82F6' : 'none' }} onClick={() => setStatusFilter(statusFilter === 'Open' ? '' : 'Open')}>
+        <div className="stat-card" style={{ cursor: 'pointer', borderLeft: stats.open > 0 ? '3px solid #3B82F6' : 'none' }} onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')}>
           <div className="stat-icon" style={{ background: '#3B82F615', color: '#3B82F6' }}>📥</div>
           <div className="stat-content">
             <h3>{stats.open}</h3>
@@ -252,7 +248,7 @@ export default function EscalationDashboard() {
           <div className="table-header-actions">
             <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
               <option value="">All Statuses</option>
-              {statuses.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              {statuses.filter(s => s.name !== 'Closed' && s.name !== 'Reopened').map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
             <select className="filter-select" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}>
               <option value="">All Priorities</option>
@@ -270,7 +266,7 @@ export default function EscalationDashboard() {
             <thead>
               <tr>
                 <th className="sortable">ID {getSortIcon('id')}</th>
-                <th className="sortable">Subject {getSortIcon('subject')}</th>
+                <th className="sortable">Request Title {getSortIcon('subject')}</th>
                 <th className="sortable">Client {getSortIcon('client')}</th>
                 <th className="sortable">Category {getSortIcon('category')}</th>
                 <th className="sortable">Priority {getSortIcon('priority')}</th>
@@ -393,8 +389,7 @@ export default function EscalationDashboard() {
                           </button>
                         )
                       ))}
-                      <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
-                      <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+
                     </div>
                   </td>
                 </tr>

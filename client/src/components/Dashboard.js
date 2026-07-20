@@ -64,7 +64,7 @@ export default function Dashboard() {
   };
 
   const getStatusColor = (status) => {
-    const colors = { Open: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444' };
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444', Rejected: '#DC2626' };
     return colors[status?.name] || '#6B7280';
   };
 
@@ -142,7 +142,7 @@ export default function Dashboard() {
 
       <div className="stats-grid">
         <StatCard icon="📋" value={stats.total} label="Total Requests" change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} color="#3B82F6" />
-        <StatCard icon="📂" value={stats.open} label="Open Requests" change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} color="#10B981" />
+        <StatCard icon="📂" value={stats.open} label="New Requests" change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} color="#10B981" />
         <StatCard icon="⏳" value={stats.inProgress} label="In Progress" change={getChangePercent(stats.inProgress, stats.inProgressLastWeek).text} changeType={getChangePercent(stats.inProgress, stats.inProgressLastWeek).type} color="#F59E0B" />
         <StatCard icon="✅" value={stats.resolved} label="Resolved" change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} color="#8B5CF6" />
         <StatCard icon="📁" value={stats.closed} label="Closed" change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} color="#EF4444" />
@@ -218,6 +218,58 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div className="charts-row">
+        <div className="chart-card" style={{ flex: 1 }}>
+          <h3>Requests by Category</h3>
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={(stats.byCategory || []).filter(c => c.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
+                  {(stats.byCategory || []).filter(c => c.count > 0).map((entry, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="chart-legend">
+              {(stats.byCategory || []).filter(c => c.count > 0).map((c, i) => (
+                <div key={c.id} className="legend-item">
+                  <span className="legend-dot" style={{ background: COLORS[i % COLORS.length] }}></span>
+                  <span className="legend-label">{c.name}</span>
+                  <span className="legend-value">{c.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="chart-card" style={{ flex: 1 }}>
+          <h3>Requests by Company</h3>
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={(stats.byCompany || []).filter(c => c.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
+                  {(stats.byCompany || []).filter(c => c.count > 0).map((entry, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="chart-legend">
+              {(stats.byCompany || []).filter(c => c.count > 0).map((c, i) => (
+                <div key={i} className="legend-item">
+                  <span className="legend-dot" style={{ background: COLORS[i % COLORS.length] }}></span>
+                  <span className="legend-label">{c.name}</span>
+                  <span className="legend-value">{c.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
           <h3>Latest Requests</h3>
@@ -238,7 +290,7 @@ export default function Dashboard() {
             <thead>
               <tr>
                 <th className="sortable">ID {getSortIcon('id')}</th>
-                <th className="sortable">Subject {getSortIcon('subject')}</th>
+                <th className="sortable">Request Title {getSortIcon('subject')}</th>
                 <th className="sortable">Client {getSortIcon('client')}</th>
                 <th className="sortable">Category {getSortIcon('category')}</th>
                 <th className="sortable">Priority {getSortIcon('priority')}</th>
@@ -278,8 +330,14 @@ export default function Dashboard() {
                   <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
                   <td>
                     <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
-                      <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
-                      <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                      {r.status?.name === 'New' ? (
+                        <>
+                          <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
+                          <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                        </>
+                      ) : (
+                        <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>—</span>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -349,12 +407,12 @@ export default function Dashboard() {
                         return entry;
                       })}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
+                        <XAxis dataKey="date" label={{ value: 'Date', position: 'insideBottomRight', offset: -5 }} stroke="#9ca3af" fontSize={11} tickLine={false} />
+                        <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} stroke="#9ca3af" fontSize={11} tickLine={false} />
                         <Tooltip />
                         <Legend />
                         {perfData.byCompany.map((s, i) => (
-                          <Line key={s.name} type="monotone" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={false} />
+                          <Line key={s.name} type="linear" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={{ r: 4, fill: '#fff', stroke: PERF_COLORS[i % PERF_COLORS.length], strokeWidth: 2 }} activeDot={{ r: 6 }} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -370,12 +428,12 @@ export default function Dashboard() {
                         return entry;
                       })}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
+                        <XAxis dataKey="date" label={{ value: 'Date', position: 'insideBottomRight', offset: -5 }} stroke="#9ca3af" fontSize={11} tickLine={false} />
+                        <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} stroke="#9ca3af" fontSize={11} tickLine={false} />
                         <Tooltip />
                         <Legend />
                         {perfData.byCompany.map((s, i) => (
-                          <Line key={s.name} type="monotone" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={false} />
+                          <Line key={s.name} type="linear" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={{ r: 4, fill: '#fff', stroke: PERF_COLORS[i % PERF_COLORS.length], strokeWidth: 2 }} activeDot={{ r: 6 }} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -403,12 +461,12 @@ export default function Dashboard() {
                         return entry;
                       })}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
+                        <XAxis dataKey="date" label={{ value: 'Date', position: 'insideBottomRight', offset: -5 }} stroke="#9ca3af" fontSize={11} tickLine={false} />
+                        <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} stroke="#9ca3af" fontSize={11} tickLine={false} />
                         <Tooltip />
                         <Legend />
                         {perfData.byDeveloper.map((s, i) => (
-                          <Line key={s.name} type="monotone" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={false} />
+                          <Line key={s.name} type="linear" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={{ r: 4, fill: '#fff', stroke: PERF_COLORS[i % PERF_COLORS.length], strokeWidth: 2 }} activeDot={{ r: 6 }} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -424,12 +482,12 @@ export default function Dashboard() {
                         return entry;
                       })}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
+                        <XAxis dataKey="date" label={{ value: 'Date', position: 'insideBottomRight', offset: -5 }} stroke="#9ca3af" fontSize={11} tickLine={false} />
+                        <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} stroke="#9ca3af" fontSize={11} tickLine={false} />
                         <Tooltip />
                         <Legend />
                         {perfData.byDeveloper.map((s, i) => (
-                          <Line key={s.name} type="monotone" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={false} />
+                          <Line key={s.name} type="linear" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={{ r: 4, fill: '#fff', stroke: PERF_COLORS[i % PERF_COLORS.length], strokeWidth: 2 }} activeDot={{ r: 6 }} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
