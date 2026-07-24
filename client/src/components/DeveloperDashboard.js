@@ -14,6 +14,7 @@ export default function DeveloperDashboard() {
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [showAssignedOnly, setShowAssignedOnly] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -32,12 +33,15 @@ export default function DeveloperDashboard() {
     }).catch(err => setError('Failed to load data: ' + err.message));
   };
 
+  const displayRequests = showAssignedOnly ? requests.filter(r => r.assignedTo === user.id || r.status?.name === 'New') : requests;
+
   const stats = {
-    total: requests.length,
-    inProgress: requests.filter(r => r.status?.name === 'In Progress').length,
-    waiting: requests.filter(r => r.status?.name === 'Waiting for Client').length,
-    resolved: requests.filter(r => r.status?.name === 'Resolved').length,
-    assigned: requests.filter(r => r.status?.name === 'Assigned').length,
+    total: displayRequests.length,
+    newCount: displayRequests.filter(r => r.status?.name === 'New').length,
+    inProgress: displayRequests.filter(r => r.status?.name === 'In Progress').length,
+    waiting: displayRequests.filter(r => r.status?.name === 'Waiting for Client').length,
+    resolved: displayRequests.filter(r => r.status?.name === 'Resolved').length,
+    assigned: displayRequests.filter(r => r.status?.name === 'Assigned').length,
   };
 
   const getStatusColor = (status) => {
@@ -89,7 +93,7 @@ export default function DeveloperDashboard() {
     return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  const filteredRequests = requests
+  const filteredRequests = displayRequests
     .filter(r => {
       if (statusFilter && r.status?.name !== statusFilter) return false;
       if (priorityFilter && r.priority?.name !== priorityFilter) return false;
@@ -99,7 +103,8 @@ export default function DeveloperDashboard() {
           String(r.id).includes(q) ||
           (r.subject || '').toLowerCase().includes(q) ||
           (r.category?.name || '').toLowerCase().includes(q) ||
-          (r.client?.name || '').toLowerCase().includes(q)
+          (r.client?.name || '').toLowerCase().includes(q) ||
+          (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q))
         );
       }
       return true;
@@ -111,6 +116,7 @@ export default function DeveloperDashboard() {
         case 'id': aVal = a.id; bVal = b.id; break;
         case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
         case 'client': aVal = (a.client?.name || '').toLowerCase(); bVal = (b.client?.name || '').toLowerCase(); break;
+        case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
         case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
         case 'priority': aVal = a.priority?.level || 0; bVal = b.priority?.level || 0; break;
         case 'status': aVal = (a.status?.name || '').toLowerCase(); bVal = (b.status?.name || '').toLowerCase(); break;
@@ -155,12 +161,12 @@ export default function DeveloperDashboard() {
         </div>
       )}
 
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')}>
-          <div className="stat-icon" style={{ background: '#F59E0B15', color: '#F59E0B' }}>⚡</div>
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')}>
+          <div className="stat-icon" style={{ background: '#3B82F615', color: '#3B82F6' }}>📥</div>
           <div className="stat-content">
-            <h3>{stats.inProgress}</h3>
-            <p>In Progress</p>
+            <h3>{stats.newCount}</h3>
+            <p>New</p>
           </div>
         </div>
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')}>
@@ -168,6 +174,13 @@ export default function DeveloperDashboard() {
           <div className="stat-content">
             <h3>{stats.assigned}</h3>
             <p>Newly Assigned</p>
+          </div>
+        </div>
+        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')}>
+          <div className="stat-icon" style={{ background: '#F59E0B15', color: '#F59E0B' }}>⚡</div>
+          <div className="stat-content">
+            <h3>{stats.inProgress}</h3>
+            <p>In Progress</p>
           </div>
         </div>
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')}>
@@ -188,8 +201,27 @@ export default function DeveloperDashboard() {
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
-          <h3>My Assigned Requests ({filteredRequests.length})</h3>
+          <h3>{showAssignedOnly ? `My Assigned (${filteredRequests.length})` : `Group Requests (${filteredRequests.length})`}</h3>
           <div className="table-header-actions">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
+              <span>Show My Tasks</span>
+              <div
+                onClick={() => { setShowAssignedOnly(!showAssignedOnly); setPage(1); }}
+                style={{
+                  width: '40px', height: '22px', borderRadius: '11px',
+                  background: showAssignedOnly ? '#8B5CF6' : '#D1D5DB',
+                  position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                  flexShrink: 0
+                }}
+              >
+                <div style={{
+                  width: '18px', height: '18px', borderRadius: '50%',
+                  background: 'white', position: 'absolute', top: '2px',
+                  left: showAssignedOnly ? '20px' : '2px',
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                }} />
+              </div>
+            </label>
             <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
               <option value="">All Statuses</option>
               {statuses.filter(s => s.name !== 'Closed' && s.name !== 'Reopened').map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
@@ -215,6 +247,7 @@ export default function DeveloperDashboard() {
                 <th className="sortable">ID {getSortIcon('id')}</th>
                 <th className="sortable">Request Title {getSortIcon('subject')}</th>
                 <th className="sortable">Client {getSortIcon('client')}</th>
+                <th className="sortable">Group {getSortIcon('groups')}</th>
                 <th className="sortable">Category {getSortIcon('category')}</th>
                 <th className="sortable">Priority {getSortIcon('priority')}</th>
                 <th className="sortable">Status {getSortIcon('status')}</th>
@@ -228,6 +261,15 @@ export default function DeveloperDashboard() {
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}</td>
                   <td>{r.client?.name || '-'}</td>
+                  <td>
+                    {r.groups && r.groups.length > 0
+                      ? r.groups.map((g, i) => (
+                          <span key={g.id} className="group-tag" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', marginRight: i < r.groups.length - 1 ? '4px' : 0 }}>
+                            {g.name}
+                          </span>
+                        ))
+                      : '-'}
+                  </td>
                   <td><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{r.category?.name || '-'}</span></td>
                   <td>
                     <span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>
@@ -259,8 +301,8 @@ export default function DeveloperDashboard() {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
-                  {requests.length === 0 ? 'No requests assigned to you yet.' : 'No requests match your filters.'}
+                <tr><td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
+                  {displayRequests.length === 0 ? (showAssignedOnly ? 'No requests assigned to you.' : 'No group requests yet.') : 'No requests match your filters.'}
                 </td></tr>
               )}
             </tbody>

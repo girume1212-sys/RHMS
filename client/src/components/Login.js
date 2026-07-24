@@ -7,8 +7,7 @@ import { useTranslation } from '../i18n/useTranslation';
 
 export default function Login() {
   const { t } = useTranslation();
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
+  const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -17,7 +16,7 @@ export default function Login() {
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotMsg, setForgotMsg] = useState('');
-  const [errors, setErrors] = useState({ email: '', forgotEmail: '' });
+  const [errors, setErrors] = useState({ forgotEmail: '' });
   const [googleLoading, setGoogleLoading] = useState(false);
   const googleBtnRef = useRef(null);
   const { login } = useAuth();
@@ -27,8 +26,7 @@ export default function Login() {
     const saved = localStorage.getItem('rhms_remember');
     if (saved) {
       const data = JSON.parse(saved);
-      setUsername(data.username || '');
-      setEmail(data.email || '');
+      setUsernameOrEmail(data.usernameOrEmail || '');
       setRememberMe(true);
     }
   }, []);
@@ -86,8 +84,7 @@ export default function Login() {
 
   const validateField = (name, value) => {
     let err = '';
-    if (name === 'email') err = validateEmail(value);
-    else if (name === 'forgotEmail') err = validateEmail(value);
+    if (name === 'forgotEmail' || name === 'usernameOrEmail') err = validateEmail(value);
     setErrors(prev => ({ ...prev, [name]: err }));
     return err;
   };
@@ -95,16 +92,14 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    const emailErr = validateField('email', email);
-    if (emailErr) return;
     setLoading(true);
     try {
       if (rememberMe) {
-        localStorage.setItem('rhms_remember', JSON.stringify({ username, email }));
+        localStorage.setItem('rhms_remember', JSON.stringify({ usernameOrEmail }));
       } else {
         localStorage.removeItem('rhms_remember');
       }
-      const user = await login(username, email, password);
+      const user = await login(usernameOrEmail, usernameOrEmail, password);
       if (user.role === 'client') {
         navigate('/client');
       } else {
@@ -147,29 +142,12 @@ export default function Login() {
               </svg>
               <input
                 type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder={t('common.userName')}
+                value={usernameOrEmail}
+                onChange={(e) => setUsernameOrEmail(e.target.value)}
+                placeholder="Username or Email"
                 required
               />
             </div>
-          </div>
-          <div className="login-field">
-            <div className="login-input-wrapper">
-              <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                <polyline points="22,6 12,13 2,6"/>
-              </svg>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); validateField('email', e.target.value); }}
-                placeholder={t('common.email')}
-                className={errors.email ? 'input-error' : ''}
-                required
-              />
-            </div>
-            <ValidationError message={errors.email} />
           </div>
 
           <div className="login-field">

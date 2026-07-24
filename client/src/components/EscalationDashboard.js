@@ -144,7 +144,8 @@ export default function EscalationDashboard() {
           (r.subject || '').toLowerCase().includes(q) ||
           (r.category?.name || '').toLowerCase().includes(q) ||
           (r.client?.name || '').toLowerCase().includes(q) ||
-          (r.assignee?.name || '').toLowerCase().includes(q)
+          (r.assignee?.name || '').toLowerCase().includes(q) ||
+          (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q))
         );
       }
       return true;
@@ -156,6 +157,7 @@ export default function EscalationDashboard() {
         case 'id': aVal = a.id; bVal = b.id; break;
         case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
         case 'client': aVal = (a.client?.name || '').toLowerCase(); bVal = (b.client?.name || '').toLowerCase(); break;
+        case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
         case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
         case 'priority': aVal = a.priority?.level || 0; bVal = b.priority?.level || 0; break;
         case 'status': aVal = (a.status?.name || '').toLowerCase(); bVal = (b.status?.name || '').toLowerCase(); break;
@@ -268,6 +270,7 @@ export default function EscalationDashboard() {
                 <th className="sortable">ID {getSortIcon('id')}</th>
                 <th className="sortable">Request Title {getSortIcon('subject')}</th>
                 <th className="sortable">Client {getSortIcon('client')}</th>
+                <th className="sortable">Group {getSortIcon('groups')}</th>
                 <th className="sortable">Category {getSortIcon('category')}</th>
                 <th className="sortable">Priority {getSortIcon('priority')}</th>
                 <th className="sortable">Status {getSortIcon('status')}</th>
@@ -282,6 +285,15 @@ export default function EscalationDashboard() {
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                   <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.subject}</td>
                   <td>{r.client?.name || '-'}</td>
+                  <td>
+                    {r.groups && r.groups.length > 0
+                      ? r.groups.map((g, i) => (
+                          <span key={g.id} className="group-tag" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', marginRight: i < r.groups.length - 1 ? '4px' : 0 }}>
+                            {g.name}
+                          </span>
+                        ))
+                      : '-'}
+                  </td>
                   <td><span className="category-tag">{r.category?.name || '-'}</span></td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <select
@@ -395,7 +407,7 @@ export default function EscalationDashboard() {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
+                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
                   {requests.length === 0 ? 'No requests in the system.' : 'No requests match your filters.'}
                 </td></tr>
               )}

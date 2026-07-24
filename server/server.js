@@ -40,6 +40,34 @@ const pool = require('./db');
     `);
     await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL`);
     console.log('user_groups table and groups ready');
+
+    // Create request_groups junction table for group-based visibility
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS request_groups (
+        request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
+        group_id VARCHAR(50) REFERENCES groups(id) ON DELETE CASCADE,
+        PRIMARY KEY (request_id, group_id)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_request_groups_request_id ON request_groups(request_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_request_groups_group_id ON request_groups(group_id)`);
+
+    // Backfill: populate request_groups for existing requests based on client's group memberships
+    await pool.query(`
+      INSERT INTO request_groups (request_id, group_id)
+      SELECT r.id, COALESCE(ug.group_id, u.group_id)
+      FROM requests r
+      JOIN users u ON r.client_id = u.id
+      LEFT JOIN user_groups ug ON r.client_id = ug.user_id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM request_groups rg WHERE rg.request_id = r.id
+      )
+      AND (ug.group_id IS NOT NULL OR u.group_id IS NOT NULL)
+      ON CONFLICT DO NOTHING
+    `);
+
+    console.log('request_groups table ready');
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS categories (
         id VARCHAR(50) PRIMARY KEY,
@@ -217,6 +245,7 @@ app.use(cors());
 app.use(express.json());
 app.use((req, res, next) => { console.log(new Date().toISOString(), req.method, req.url, 'Content-Type:', req.headers['content-type'] || 'none'); next(); });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.static(path.join(__dirname, '../client/build')));
 app.use('/api', maintenanceMiddleware);
 
 
@@ -405,6 +434,14 @@ app.post('/api/auth/signup', async (req, res) => {
       'INSERT INTO users (id, name, email, password, role, company_name) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, avatar, created_at, company_name',
       [id, name, email, hashedPassword, 'client', companyName || '']
     );
+
+    // Auto-assign to default group
+    const defGroup = await pool.query("SELECT value FROM system_settings WHERE key = 'defaultGroup'");
+    const defaultGroupId = defGroup.rows.length > 0 ? defGroup.rows[0].value : '';
+    if (defaultGroupId) {
+      await pool.query('INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, defaultGroupId]);
+    }
+
     res.status(201).json({ message: 'Account created successfully', user: mapUser(result.rows[0]) });
   } catch (err) {
     console.error(err);
@@ -415,9 +452,10 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, email, password } = req.body;
+    const credential = username || email;
     const result = await pool.query(
-      'SELECT * FROM users WHERE (name = $1 AND email = $2) OR email = $1',
-      [username, email]
+      'SELECT * FROM users WHERE name = $1 OR email = $1',
+      [credential]
     );
     const user = result.rows[0];
 
@@ -549,6 +587,12 @@ app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res)
       if (groupIds && groupIds.length > 0) {
         for (const gid of groupIds) {
           await pool.query('INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, gid]);
+        }
+      } else {
+        const defGroup = await pool.query("SELECT value FROM system_settings WHERE key = 'defaultGroup'");
+        const defaultGroupId = defGroup.rows.length > 0 ? defGroup.rows[0].value : '';
+        if (defaultGroupId) {
+          await pool.query('INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, defaultGroupId]);
         }
       }
     } catch (e) {}
@@ -810,7 +854,12 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
         c.name as category_name, c.description as category_description, c.color as category_color,
         p.name as priority_name, p.color as priority_color, p.level as priority_level,
         s.name as status_name, s.color as status_color,
-        a.name as assignee_name, a.email as assignee_email, a.role as assignee_role, a.avatar as assignee_avatar, a.created_at as assignee_created_at
+        a.name as assignee_name, a.email as assignee_email, a.role as assignee_role, a.avatar as assignee_avatar, a.created_at as assignee_created_at,
+        COALESCE(
+          (SELECT json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)) FROM request_groups rg JOIN groups g ON rg.group_id = g.id WHERE rg.request_id = r.id),
+          (SELECT json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)) FROM user_groups ug JOIN groups g ON ug.group_id = g.id WHERE ug.user_id = r.client_id),
+          CASE WHEN u.group_id IS NOT NULL THEN (SELECT json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)) FROM groups g WHERE g.id = u.group_id) ELSE NULL END
+        ) as groups
       FROM requests r
       LEFT JOIN users u ON r.client_id = u.id
       LEFT JOIN categories c ON r.category_id = c.id
@@ -827,8 +876,8 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       params.push(req.user.id);
     }
     if (req.user.role === 'developer' || req.user.role === 'support') {
-      query += ` AND r.assigned_to = $${paramIndex++}`;
-      params.push(req.user.id);
+      query += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++}))`;
+      params.push(req.user.id, req.user.id);
     }
 
     const { status, priority, category, search } = req.query;
@@ -869,7 +918,8 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       category: r.category_name ? { id: r.category_id, name: r.category_name, description: r.category_description, color: r.category_color } : null,
       priority: r.priority_name ? { id: r.priority_id, name: r.priority_name, color: r.priority_color, level: r.priority_level } : null,
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
-      assignee: r.assignee_name ? { id: r.assigned_to, name: r.assignee_name, email: r.assignee_email, role: r.assignee_role, avatar: r.assignee_avatar, createdAt: r.assignee_created_at } : null
+      assignee: r.assignee_name ? { id: r.assigned_to, name: r.assignee_name, email: r.assignee_email, role: r.assignee_role, avatar: r.assignee_avatar, createdAt: r.assignee_created_at } : null,
+      groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.groups) : []
     }));
     res.json(enriched);
   } catch (err) {
@@ -886,7 +936,12 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
         c.name as category_name, c.description as category_description, c.color as category_color,
         p.name as priority_name, p.color as priority_color, p.level as priority_level,
         s.name as status_name, s.color as status_color,
-        a.name as assignee_name, a.email as assignee_email, a.role as assignee_role, a.avatar as assignee_avatar, a.created_at as assignee_created_at
+        a.name as assignee_name, a.email as assignee_email, a.role as assignee_role, a.avatar as assignee_avatar, a.created_at as assignee_created_at,
+        COALESCE(
+          (SELECT json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)) FROM request_groups rg JOIN groups g ON rg.group_id = g.id WHERE rg.request_id = r.id),
+          (SELECT json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)) FROM user_groups ug JOIN groups g ON ug.group_id = g.id WHERE ug.user_id = r.client_id),
+          CASE WHEN u.group_id IS NOT NULL THEN (SELECT json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)) FROM groups g WHERE g.id = u.group_id) ELSE NULL END
+        ) as groups
       FROM requests r
       LEFT JOIN users u ON r.client_id = u.id
       LEFT JOIN categories c ON r.category_id = c.id
@@ -901,6 +956,15 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
 
     if (req.user.role === 'client' && r.client_id !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+    if (req.user.role !== 'admin' && req.user.role !== 'client' && r.assigned_to !== req.user.id) {
+      const groupAccess = await pool.query(
+        'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+        [req.params.id, req.user.id]
+      );
+      if (groupAccess.rows.length === 0) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
     }
 
     const commentsResult = await pool.query(`
@@ -928,6 +992,7 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       priority: r.priority_name ? { id: r.priority_id, name: r.priority_name, color: r.priority_color, level: r.priority_level } : null,
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
       assignee: r.assignee_name ? { id: r.assigned_to, name: r.assignee_name, email: r.assignee_email, role: r.assignee_role, avatar: r.assignee_avatar, createdAt: r.assignee_created_at } : null,
+      groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.groups) : [],
       comments: commentsResult.rows.map(c => ({
         id: c.id,
         requestId: c.request_id,
@@ -969,6 +1034,13 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
       [uuidv4(), 'created', id, req.user.id, 'New request created', now]
     );
 
+    // Store client's groups for group-based visibility
+    const clientGroups = await pool.query('SELECT group_id FROM user_groups WHERE user_id = $1', [clientId]);
+    if (clientGroups.rows.length > 0) {
+      const groupValues = clientGroups.rows.map(r => `('${id}', '${r.group_id}')`).join(',');
+      await pool.query(`INSERT INTO request_groups (request_id, group_id) VALUES ${groupValues} ON CONFLICT DO NOTHING`);
+    }
+
     // Real-time notification
     notifyAdmins('New request created', { type: 'request_created', requestId: id, subject, userId: req.user.id });
 
@@ -986,6 +1058,22 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
 
     const existing = await pool.query('SELECT * FROM requests WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+
+    // Check group-based access for non-admin users
+    if (req.user.role !== 'admin') {
+      if (req.user.role === 'client' && existing.rows[0].client_id !== req.user.id) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      if (req.user.role !== 'client' && existing.rows[0].assigned_to !== req.user.id) {
+        const groupAccess = await pool.query(
+          'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+          [req.params.id, req.user.id]
+        );
+        if (groupAccess.rows.length === 0) {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+      }
+    }
 
     // Check allowReopen setting
     if (statusId) {
@@ -1086,8 +1174,19 @@ app.delete('/api/requests/:id', authMiddleware, roleMiddleware('admin'), async (
 // Comments Routes
 app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
   try {
-    const existing = await pool.query('SELECT id, client_id FROM requests WHERE id = $1', [req.params.id]);
+    const existing = await pool.query('SELECT id, client_id, assigned_to FROM requests WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+
+    // Check group access for non-admin, non-client, non-assignee users
+    if (req.user.role !== 'admin' && req.user.role !== 'client' && existing.rows[0].client_id !== req.user.id && existing.rows[0].assigned_to !== req.user.id) {
+      const groupAccess = await pool.query(
+        'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+        [req.params.id, req.user.id]
+      );
+      if (groupAccess.rows.length === 0 && existing.rows[0].assigned_to !== req.user.id) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
 
     const { content } = req.body;
     const id = uuidv4();
@@ -1181,8 +1280,8 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       params.push(req.user.id);
     }
     if (req.user.role === 'developer' || req.user.role === 'support') {
-      whereClause += ` AND r.assigned_to = $${paramIndex++}`;
-      params.push(req.user.id);
+      whereClause += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++}))`;
+      params.push(req.user.id, req.user.id);
     }
 
     const totalResult = await pool.query(`SELECT COUNT(*) FROM requests r ${whereClause}`, params);
@@ -1377,6 +1476,9 @@ app.get('/api/activity', authMiddleware, async (req, res) => {
     if (req.user.role === 'client') {
       query += ` WHERE r.client_id = $1`;
       params.push(req.user.id);
+    } else if (req.user.role !== 'admin') {
+      query += ` WHERE (r.assigned_to = $1 OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $1))`;
+      params.push(req.user.id);
     }
     query += ' ORDER BY al.created_at DESC LIMIT 20';
     const result = await pool.query(query, params);
@@ -1417,6 +1519,12 @@ app.get('/api/requests/:id/activity', authMiddleware, async (req, res) => {
     if (req.user.role === 'client') {
       const ownership = await pool.query('SELECT id FROM requests WHERE id = $1 AND client_id = $2', [req.params.id, req.user.id]);
       if (ownership.rows.length === 0) return res.status(403).json({ error: 'Access denied' });
+    } else if (req.user.role !== 'admin') {
+      const access = await pool.query(
+        'SELECT r.assigned_to FROM requests r LEFT JOIN request_groups rg ON r.id = rg.request_id LEFT JOIN user_groups ug ON rg.group_id = ug.group_id AND ug.user_id = $2 WHERE r.id = $1 AND (r.assigned_to = $2 OR ug.user_id IS NOT NULL) LIMIT 1',
+        [req.params.id, req.user.id]
+      );
+      if (access.rows.length === 0) return res.status(403).json({ error: 'Access denied' });
     }
     const result = await pool.query(`
       SELECT al.*, u.name as user_name, u.email as user_email, u.role as user_role, u.avatar as user_avatar
@@ -1891,6 +1999,14 @@ app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (
 });
 
 
+
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+    res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+  } else {
+    res.status(404).json({ error: 'Not found' });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`RHMS Server running on http://localhost:${PORT}`);

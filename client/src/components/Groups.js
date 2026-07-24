@@ -43,7 +43,7 @@ export default function Groups() {
       api.get('/api/companies'),
       api.get('/api/users')
     ]).then(([groupsData, companiesData, usersData]) => {
-      setGroups(groupsData);
+      setGroups(groupsData.map((g, i) => ({ ...g, numId: i + 1 })));
       setCompanies(companiesData);
       setAllUsers(usersData);
       setLoading(false);
@@ -51,7 +51,7 @@ export default function Groups() {
   };
 
   const loadGroups = () => {
-    api.get('/api/groups').then(data => { setGroups(data); })
+    api.get('/api/groups').then(data => { setGroups(data.map((g, i) => ({ ...g, numId: i + 1 }))); })
       .catch(err => { setError('Failed to load groups: ' + err.message); });
   };
 
@@ -188,6 +188,7 @@ export default function Groups() {
     if (!sort.key) return 0;
     let aVal, bVal;
     switch (sort.key) {
+      case 'id': aVal = a.numId; bVal = b.numId; break;
       case 'name': aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase(); break;
       case 'company': aVal = (a.company_name || '').toLowerCase(); bVal = (b.company_name || '').toLowerCase(); break;
       case 'members': aVal = a.memberCount || 0; bVal = b.memberCount || 0; break;
@@ -243,6 +244,7 @@ export default function Groups() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th style={{ width: '80px', cursor: 'pointer' }} onClick={() => handleSort('id')}>ID <span className="sort-icon">{sort.key === 'id' ? (sort.dir === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
                   <th className="sortable">Group {getSortIcon('name')}</th>
                   <th className="sortable">Company {getSortIcon('company')}</th>
                   <th className="sortable">Members {getSortIcon('members')}</th>
@@ -250,8 +252,9 @@ export default function Groups() {
                 </tr>
               </thead>
               <tbody>
-                {paginated.map(g => (
-                  <tr key={g.id}>
+                  {paginated.map((g, index) => (
+                    <tr key={g.id} onClick={() => openMembers(g)} className="clickable-row">
+                    <td><span style={{ fontSize: '13px', fontWeight: '600' }}>{String(g.numId).padStart(2, '0')}</span></td>
                     <td>
                       <div className="user-cell">
                         <div className="user-avatar-sm" style={{ background: g.color || '#6B7280' }}>{g.name.charAt(0)}</div>
@@ -260,21 +263,21 @@ export default function Groups() {
                     </td>
                     <td>{g.company_name || <span style={{ color: '#9ca3af' }}>—</span>}</td>
                     <td>
-                      <span className="role-badge" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280' }}>
+                      <span className="role-badge" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', cursor: 'pointer' }} onClick={() => openMembers(g)}>
                         {g.memberCount || 0}
                       </span>
                     </td>
                     <td>
                       <div className="actions-cell-inline">
-                        <button className="action-btn-text edit" onClick={() => openEdit(g)}>Edit</button>
-                        <button className="action-btn-text" style={{ color: '#3B82F6' }} onClick={() => openMembers(g)}>Members</button>
-                        <button className="action-btn-text delete" onClick={() => handleDelete(g.id, g.name)}>Delete</button>
+                        <button className="action-btn-text edit" onClick={(e) => { e.stopPropagation(); openEdit(g); }}>Edit</button>
+                        <button className="action-btn-text" style={{ color: '#3B82F6' }} onClick={(e) => { e.stopPropagation(); openMembers(g); }}>Members</button>
+                        <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); handleDelete(g.id, g.name); }}>Delete</button>
                       </div>
                     </td>
                   </tr>
                 ))}
                 {paginated.length === 0 && (
-                  <tr><td colSpan="4" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No groups found</td></tr>
+                  <tr><td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No groups found</td></tr>
                 )}
               </tbody>
             </table>
@@ -378,7 +381,7 @@ export default function Groups() {
                     <div className="empty-state">No members in this group yet.</div>
                   ) : (
                     <div className="table-card" style={{ overflow: 'auto' }}>
-                      <table className="data-table">
+            <table className="data-table" style={{ color: '#FFFFFF' }}>
                         <thead>
                           <tr>
                             <th>User</th>

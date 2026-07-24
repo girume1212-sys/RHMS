@@ -45,7 +45,7 @@ export default function RequestsList() {
     api.get(`/api/requests?${params}`).then(data => {
       let filtered = data;
       if (user?.role === 'developer' || user?.role === 'support') {
-        filtered = data.filter(r => r.assignedTo === user.id);
+        filtered = data.filter(r => r.assignedTo === user.id || !r.assignedTo);
       }
       setRequests(filtered);
       setLoading(false);

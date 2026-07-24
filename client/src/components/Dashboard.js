@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
-import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, LineChart, Line, BarChart, Bar, Rectangle, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
 import { showStatusToast } from '../notify';
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
@@ -32,6 +32,7 @@ export default function Dashboard() {
   const [perPage, setPerPage] = useState(5);
   const [perfData, setPerfData] = useState(null);
   const [perfView, setPerfView] = useState('company');
+  const [selectedDetail, setSelectedDetail] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
   const { user } = useAuth();
@@ -42,7 +43,7 @@ export default function Dashboard() {
     api.get('/api/requests').then(data => {
       let filtered = data;
       if (user?.role === 'developer' || user?.role === 'support') {
-        filtered = data.filter(r => r.assignedTo === user.id);
+        filtered = data.filter(r => r.assignedTo === user.id || !r.assignedTo);
       }
       setRecentRequests(filtered);
     }).catch(err => setError('Failed to load requests: ' + err.message));
@@ -106,7 +107,8 @@ export default function Dashboard() {
         String(r.id).includes(q) ||
         (r.subject || '').toLowerCase().includes(q) ||
         (r.clientName || r.client_name || '').toLowerCase().includes(q) ||
-        (r.categoryName || r.category_name || '').toLowerCase().includes(q)
+        (r.categoryName || r.category_name || '').toLowerCase().includes(q) ||
+        (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q))
       );
     })
     .sort((a, b) => {
@@ -116,6 +118,7 @@ export default function Dashboard() {
         case 'id': aVal = a.id; bVal = b.id; break;
         case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
         case 'client': aVal = (a.clientName || a.client_name || '').toLowerCase(); bVal = (b.clientName || b.client_name || '').toLowerCase(); break;
+        case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
         case 'category': aVal = (a.categoryName || a.category_name || '').toLowerCase(); bVal = (b.categoryName || b.category_name || '').toLowerCase(); break;
         case 'priority': aVal = (a.priorityName || a.priority?.name || '').toLowerCase(); bVal = (b.priorityName || b.priority?.name || '').toLowerCase(); break;
         case 'status': aVal = (a.statusName || a.status?.name || '').toLowerCase(); bVal = (b.statusName || b.status?.name || '').toLowerCase(); break;
@@ -153,24 +156,18 @@ export default function Dashboard() {
           <h3>Requests by Status</h3>
           <div className="chart-container">
             <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={stats.byStatus.filter(s => s.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
-                  {stats.byStatus.filter(s => s.count > 0).map((entry, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
+              <BarChart data={stats.byStatus.filter(s => s.count > 0)}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} />
+                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
                 <Tooltip />
-              </PieChart>
+                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  {stats.byStatus.filter(s => s.count > 0).map((s, i) => (
+                    <Cell key={s.id || s.name} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
-            <div className="chart-legend">
-              {stats.byStatus.filter(s => s.count > 0).map((s, i) => (
-                <div key={s.id} className="legend-item">
-                  <span className="legend-dot" style={{ background: COLORS[i % COLORS.length] }}></span>
-                  <span className="legend-label">{s.name}</span>
-                  <span className="legend-value">{s.count} ({s.percentage}%)</span>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -292,6 +289,7 @@ export default function Dashboard() {
                 <th className="sortable">ID {getSortIcon('id')}</th>
                 <th className="sortable">Request Title {getSortIcon('subject')}</th>
                 <th className="sortable">Client {getSortIcon('client')}</th>
+                <th className="sortable">Group {getSortIcon('groups')}</th>
                 <th className="sortable">Category {getSortIcon('category')}</th>
                 <th className="sortable">Priority {getSortIcon('priority')}</th>
                 <th className="sortable">Status {getSortIcon('status')}</th>
@@ -306,6 +304,15 @@ export default function Dashboard() {
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}</td>
                   <td>{r.clientName || r.client_name || '-'}</td>
+                  <td>
+                    {r.groups && r.groups.length > 0
+                      ? r.groups.map((g, i) => (
+                          <span key={g.id} className="group-tag" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', marginRight: i < r.groups.length - 1 ? '4px' : 0 }}>
+                            {g.name}
+                          </span>
+                        ))
+                      : '-'}
+                  </td>
                   <td>{r.categoryName || r.category_name || '-'}</td>
                   <td>
                     <span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>
@@ -343,7 +350,7 @@ export default function Dashboard() {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No requests found</td></tr>
+                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No requests found</td></tr>
               )}
             </tbody>
           </table>
@@ -395,47 +402,35 @@ export default function Dashboard() {
                 <div className="perf-header">
                   <h3>Company Performance (Last 30 Days)</h3>
                 </div>
-                <div className="perf-charts-grid">
+                <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
                   <div className="perf-chart-section">
-                    <h4>Created Requests</h4>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={perfData.labels.map((label, i) => {
-                        const entry = { date: label };
-                        perfData.byCompany.forEach(s => {
-                          entry[s.name] = s.data[i]?.created || 0;
+                    <h4>Requests by Company</h4>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <BarChart data={(() => {
+                        return perfData.byCompany.map(s => {
+                          const created = s.data.reduce((sum, d) => sum + d.created, 0);
+                          const resolved = s.data.reduce((sum, d) => sum + d.resolved, 0);
+                          return { name: s.name, Created: created, Resolved: resolved };
                         });
-                        return entry;
-                      })}>
+                      })()}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" label={{ value: 'Date', position: 'insideBottomRight', offset: -5 }} stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} stroke="#9ca3af" fontSize={11} tickLine={false} />
+                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} />
+                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
                         <Tooltip />
                         <Legend />
-                        {perfData.byCompany.map((s, i) => (
-                          <Line key={s.name} type="linear" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={{ r: 4, fill: '#fff', stroke: PERF_COLORS[i % PERF_COLORS.length], strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="perf-chart-section">
-                    <h4>Resolved Requests</h4>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={perfData.labels.map((label, i) => {
-                        const entry = { date: label };
-                        perfData.byCompany.forEach(s => {
-                          entry[s.name] = s.data[i]?.resolved || 0;
-                        });
-                        return entry;
-                      })}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" label={{ value: 'Date', position: 'insideBottomRight', offset: -5 }} stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <Tooltip />
-                        <Legend />
-                        {perfData.byCompany.map((s, i) => (
-                          <Line key={s.name} type="linear" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={{ r: 4, fill: '#fff', stroke: PERF_COLORS[i % PERF_COLORS.length], strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                        ))}
-                      </LineChart>
+                        <Bar dataKey="Created" fill="#3B82F6" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data) => {
+                          const item = perfData.byCompany.find(s => s.name === data?.name);
+                          if (item) setSelectedDetail({ type: 'company', data: item });
+                        }}>
+                          <LabelList dataKey="Created" position="top" fill="#3B82F6" fontSize={11} fontWeight={600} />
+                        </Bar>
+                        <Bar dataKey="Resolved" fill="#10B981" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data) => {
+                          const item = perfData.byCompany.find(s => s.name === data?.name);
+                          if (item) setSelectedDetail({ type: 'company', data: item });
+                        }}>
+                          <LabelList dataKey="Resolved" position="top" fill="#10B981" fontSize={11} fontWeight={600} />
+                        </Bar>
+                      </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
@@ -449,53 +444,97 @@ export default function Dashboard() {
                 <div className="perf-header">
                   <h3>Developer Performance (Last 30 Days)</h3>
                 </div>
-                <div className="perf-charts-grid">
+                <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
                   <div className="perf-chart-section">
-                    <h4>Created Requests</h4>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={perfData.labels.map((label, i) => {
-                        const entry = { date: label };
-                        perfData.byDeveloper.forEach(s => {
-                          entry[s.name] = s.data[i]?.created || 0;
+                    <h4>Requests by Developer</h4>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <BarChart data={(() => {
+                        return perfData.byDeveloper.map(s => {
+                          const created = s.data.reduce((sum, d) => sum + d.created, 0);
+                          const resolved = s.data.reduce((sum, d) => sum + d.resolved, 0);
+                          return { name: s.name, Created: created, Resolved: resolved };
                         });
-                        return entry;
-                      })}>
+                      })()}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" label={{ value: 'Date', position: 'insideBottomRight', offset: -5 }} stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} stroke="#9ca3af" fontSize={11} tickLine={false} />
+                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} />
+                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
                         <Tooltip />
                         <Legend />
-                        {perfData.byDeveloper.map((s, i) => (
-                          <Line key={s.name} type="linear" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={{ r: 4, fill: '#fff', stroke: PERF_COLORS[i % PERF_COLORS.length], strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="perf-chart-section">
-                    <h4>Resolved Requests</h4>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={perfData.labels.map((label, i) => {
-                        const entry = { date: label };
-                        perfData.byDeveloper.forEach(s => {
-                          entry[s.name] = s.data[i]?.resolved || 0;
-                        });
-                        return entry;
-                      })}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" label={{ value: 'Date', position: 'insideBottomRight', offset: -5 }} stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} stroke="#9ca3af" fontSize={11} tickLine={false} />
-                        <Tooltip />
-                        <Legend />
-                        {perfData.byDeveloper.map((s, i) => (
-                          <Line key={s.name} type="linear" dataKey={s.name} stroke={PERF_COLORS[i % PERF_COLORS.length]} strokeWidth={2} dot={{ r: 4, fill: '#fff', stroke: PERF_COLORS[i % PERF_COLORS.length], strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                        ))}
-                      </LineChart>
+                        <Bar dataKey="Created" fill="#3B82F6" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data) => {
+                          const item = perfData.byDeveloper.find(s => s.name === data?.name);
+                          if (item) setSelectedDetail({ type: 'developer', data: item });
+                        }}>
+                          <LabelList dataKey="Created" position="top" fill="#3B82F6" fontSize={11} fontWeight={600} />
+                        </Bar>
+                        <Bar dataKey="Resolved" fill="#10B981" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data) => {
+                          const item = perfData.byDeveloper.find(s => s.name === data?.name);
+                          if (item) setSelectedDetail({ type: 'developer', data: item });
+                        }}>
+                          <LabelList dataKey="Resolved" position="top" fill="#10B981" fontSize={11} fontWeight={600} />
+                        </Bar>
+                      </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {selectedDetail && (
+        <div className="modal-overlay" onClick={() => setSelectedDetail(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
+            <div className="modal-header">
+              <div className="modal-header-content">
+                <div>
+                  <h2>{selectedDetail.data.name} — Daily Breakdown</h2>
+                  <p className="modal-subtitle">Last 30 days activity</p>
+                </div>
+              </div>
+              <button className="modal-close" onClick={() => setSelectedDetail(null)}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <div className="stats-grid" style={{ marginBottom: 20, gridTemplateColumns: '1fr 1fr 1fr' }}>
+                <div className="stat-card" style={{ padding: 16, textAlign: 'center' }}>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: '#3B82F6' }}>
+                    {selectedDetail.data.data.reduce((s, d) => s + d.created, 0)}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Total Created</div>
+                </div>
+                <div className="stat-card" style={{ padding: 16, textAlign: 'center' }}>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: '#10B981' }}>
+                    {selectedDetail.data.data.reduce((s, d) => s + d.resolved, 0)}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Total Resolved</div>
+                </div>
+                <div className="stat-card" style={{ padding: 16, textAlign: 'center' }}>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: '#8B5CF6' }}>
+                    {(() => {
+                      const created = selectedDetail.data.data.reduce((s, d) => s + d.created, 0);
+                      const resolved = selectedDetail.data.data.reduce((s, d) => s + d.resolved, 0);
+                      return created ? Math.round((resolved / created) * 100) + '%' : '0%';
+                    })()}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Resolution Rate</div>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={selectedDetail.data.data.map(d => ({ ...d }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} />
+                  <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="created" name="Created" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="resolved" name="Resolved" fill="#10B981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => setSelectedDetail(null)}>Close</button>
+            </div>
+          </div>
         </div>
       )}
 
