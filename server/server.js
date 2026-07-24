@@ -134,6 +134,10 @@ const pool = require('./db');
       INSERT INTO statuses (id, name, color) VALUES ('8', 'Rejected', '#DC2626')
       ON CONFLICT (id) DO NOTHING
     `);
+    await pool.query(`
+      INSERT INTO statuses (id, name, color) VALUES ('9', 'Escalated', '#EF4444')
+      ON CONFLICT (id) DO NOTHING
+    `);
     console.log('statuses ready');
 
     // --- New tables ---
@@ -855,6 +859,7 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
         p.name as priority_name, p.color as priority_color, p.level as priority_level,
         s.name as status_name, s.color as status_color,
         a.name as assignee_name, a.email as assignee_email, a.role as assignee_role, a.avatar as assignee_avatar, a.created_at as assignee_created_at,
+        ag.name as assigned_group_name, ag.color as assigned_group_color, ag.id as assigned_group_id,
         COALESCE(
           (SELECT json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)) FROM request_groups rg JOIN groups g ON rg.group_id = g.id WHERE rg.request_id = r.id),
           (SELECT json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)) FROM user_groups ug JOIN groups g ON ug.group_id = g.id WHERE ug.user_id = r.client_id),
@@ -866,6 +871,7 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       LEFT JOIN priorities p ON r.priority_id = p.id
       LEFT JOIN statuses s ON r.status_id = s.id
       LEFT JOIN users a ON r.assigned_to = a.id
+      LEFT JOIN groups ag ON r.assigned_group = ag.id
       WHERE 1=1
     `;
     const params = [];
@@ -882,8 +888,13 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
 
     const { status, priority, category, search } = req.query;
     if (status) {
+      let statusId = status;
+      if (isNaN(status)) {
+        const row = await pool.query('SELECT id FROM statuses WHERE LOWER(name) = LOWER($1)', [status]);
+        if (row.rows.length) statusId = row.rows[0].id;
+      }
       query += ` AND r.status_id = $${paramIndex++}`;
-      params.push(status);
+      params.push(statusId);
     }
     if (priority) {
       query += ` AND r.priority_id = $${paramIndex++}`;
@@ -918,7 +929,8 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       category: r.category_name ? { id: r.category_id, name: r.category_name, description: r.category_description, color: r.category_color } : null,
       priority: r.priority_name ? { id: r.priority_id, name: r.priority_name, color: r.priority_color, level: r.priority_level } : null,
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
-      assignee: r.assignee_name ? { id: r.assigned_to, name: r.assignee_name, email: r.assignee_email, role: r.assignee_role, avatar: r.assignee_avatar, createdAt: r.assignee_created_at } : null,
+assignee: r.assignee_name ? { id: r.assigned_to, name: r.assignee_name, email: r.assignee_email, role: r.assignee_role, avatar: r.assignee_avatar, createdAt: r.assignee_created_at } : null,
+      assignedGroup: r.assigned_group_name ? { id: r.assigned_group_id, name: r.assigned_group_name, color: r.assigned_group_color } : null,
       groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.groups) : []
     }));
     res.json(enriched);
@@ -937,6 +949,7 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
         p.name as priority_name, p.color as priority_color, p.level as priority_level,
         s.name as status_name, s.color as status_color,
         a.name as assignee_name, a.email as assignee_email, a.role as assignee_role, a.avatar as assignee_avatar, a.created_at as assignee_created_at,
+        ag.name as assigned_group_name, ag.color as assigned_group_color, ag.id as assigned_group_id,
         COALESCE(
           (SELECT json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)) FROM request_groups rg JOIN groups g ON rg.group_id = g.id WHERE rg.request_id = r.id),
           (SELECT json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)) FROM user_groups ug JOIN groups g ON ug.group_id = g.id WHERE ug.user_id = r.client_id),
@@ -948,6 +961,7 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       LEFT JOIN priorities p ON r.priority_id = p.id
       LEFT JOIN statuses s ON r.status_id = s.id
       LEFT JOIN users a ON r.assigned_to = a.id
+      LEFT JOIN groups ag ON r.assigned_group = ag.id
       WHERE r.id = $1
     `, [req.params.id]);
 
@@ -992,6 +1006,7 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       priority: r.priority_name ? { id: r.priority_id, name: r.priority_name, color: r.priority_color, level: r.priority_level } : null,
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
       assignee: r.assignee_name ? { id: r.assigned_to, name: r.assignee_name, email: r.assignee_email, role: r.assignee_role, avatar: r.assignee_avatar, createdAt: r.assignee_created_at } : null,
+      assignedGroup: r.assigned_group_name ? { id: r.assigned_group_id, name: r.assigned_group_name, color: r.assigned_group_color } : null,
       groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.groups) : [],
       comments: commentsResult.rows.map(c => ({
         id: c.id,
@@ -1053,7 +1068,7 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
 
 app.put('/api/requests/:id', authMiddleware, async (req, res) => {
   try {
-    const { subject, description, categoryId, priorityId, statusId, assignedTo, attachments } = req.body;
+    const { subject, description, categoryId, priorityId, statusId, assignedTo, assignedGroup, attachments } = req.body;
     const now = new Date().toISOString();
 
     const existing = await pool.query('SELECT * FROM requests WHERE id = $1', [req.params.id]);
@@ -1065,6 +1080,9 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
         return res.status(403).json({ error: 'Access denied' });
       }
       if (req.user.role !== 'client' && existing.rows[0].assigned_to !== req.user.id) {
+        if (existing.rows[0].assigned_to !== null) {
+          return res.status(403).json({ error: 'Access denied - request assigned to another user' });
+        }
         const groupAccess = await pool.query(
           'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
           [req.params.id, req.user.id]
@@ -1100,8 +1118,8 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
     const newAttachments = attachments !== undefined ? attachments : (typeof existing.rows[0].attachments === 'string' ? JSON.parse(existing.rows[0].attachments) : existing.rows[0].attachments);
 
     await pool.query(
-      'UPDATE requests SET subject = COALESCE($1, subject), description = COALESCE($2, description), category_id = COALESCE($3, category_id), priority_id = COALESCE($4, priority_id), status_id = $5, assigned_to = $6, attachments = $7, updated_at = $8 WHERE id = $9',
-      [subject, description, categoryId, priorityId, newStatusId, newAssignedTo, JSON.stringify(newAttachments), now, req.params.id]
+      'UPDATE requests SET subject = COALESCE($1, subject), description = COALESCE($2, description), category_id = COALESCE($3, category_id), priority_id = COALESCE($4, priority_id), status_id = $5, assigned_to = $6, attachments = $7, updated_at = $8, assigned_group = COALESCE($10, assigned_group) WHERE id = $9',
+      [subject, description, categoryId, priorityId, newStatusId, newAssignedTo, JSON.stringify(newAttachments), now, req.params.id, assignedGroup || null]
     );
 
     const notifResult = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('notifyClientStatusChange', 'notifyDeveloperAssignment', 'emailNotifications', 'inAppNotifications')");
@@ -1146,7 +1164,7 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       }
     }
 
-    res.json({ id: req.params.id, subject: subject || existing.rows[0].subject, description: description || existing.rows[0].description, clientId: existing.rows[0].client_id, categoryId: categoryId || existing.rows[0].category_id, priorityId: priorityId || existing.rows[0].priority_id, statusId: newStatusId, assignedTo: newAssignedTo, attachments: newAttachments, createdAt: existing.rows[0].created_at, updatedAt: now });
+    res.json({ id: req.params.id, subject: subject || existing.rows[0].subject, description: description || existing.rows[0].description, clientId: existing.rows[0].client_id, categoryId: categoryId || existing.rows[0].category_id, priorityId: priorityId || existing.rows[0].priority_id, statusId: newStatusId, assignedTo: newAssignedTo, assignedGroup: assignedGroup || existing.rows[0].assigned_group, attachments: newAttachments, createdAt: existing.rows[0].created_at, updatedAt: now });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -1297,6 +1315,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     const inProgress = statusMap['3'] || 0;
     const resolved = statusMap['5'] || 0;
     const closed = statusMap['6'] || 0;
+    const escalated = statusMap['9'] || 0;
 
     const statusesResult = await pool.query('SELECT * FROM statuses ORDER BY id');
     const statuses = statusesResult.rows;
@@ -1373,6 +1392,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       inProgress,
       resolved,
       closed,
+      escalated,
       byStatus,
       byPriority,
       byCategory,
@@ -1382,7 +1402,8 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       openLastWeek: Math.floor(open * 0.92),
       inProgressLastWeek: Math.floor(inProgress * 0.95),
       resolvedLastWeek: Math.floor(resolved * 0.85),
-      closedLastWeek: Math.floor(closed * 1.05)
+      closedLastWeek: Math.floor(closed * 1.05),
+      escalatedLastWeek: Math.floor(escalated * 0.9)
     });
   } catch (err) {
     console.error(err);
@@ -1633,7 +1654,7 @@ app.get('/api/roles', authMiddleware, roleMiddleware('admin'), (req, res) => {
 });
 
 // Groups Routes
-app.get('/api/groups', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
+app.get('/api/groups', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT g.*, c.name as company_name,

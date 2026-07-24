@@ -7,6 +7,7 @@ import { showStatusToast } from '../notify';
 export default function DeveloperDashboard() {
   const [requests, setRequests] = useState([]);
   const [statuses, setStatuses] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -15,7 +16,7 @@ export default function DeveloperDashboard() {
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [showAssignedOnly, setShowAssignedOnly] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -26,14 +27,16 @@ export default function DeveloperDashboard() {
   const loadData = () => {
     Promise.all([
       api.get('/api/requests'),
-      api.get('/api/statuses')
-    ]).then(([requestsData, statusesData]) => {
+      api.get('/api/statuses'),
+      api.get('/api/groups')
+    ]).then(([requestsData, statusesData, groupsData]) => {
       setRequests(requestsData);
       setStatuses(statusesData);
+      setGroups(groupsData);
     }).catch(err => setError('Failed to load data: ' + err.message));
   };
 
-  const displayRequests = showAssignedOnly ? requests.filter(r => r.assignedTo === user.id || r.status?.name === 'New') : requests;
+  const displayRequests = showAssignedOnly ? requests.filter(r => r.assignedTo === user.id) : requests;
 
   const stats = {
     total: displayRequests.length,
@@ -42,10 +45,11 @@ export default function DeveloperDashboard() {
     waiting: displayRequests.filter(r => r.status?.name === 'Waiting for Client').length,
     resolved: displayRequests.filter(r => r.status?.name === 'Resolved').length,
     assigned: displayRequests.filter(r => r.status?.name === 'Assigned').length,
+    escalated: displayRequests.filter(r => r.status?.name === 'Escalated').length,
   };
 
   const getStatusColor = (status) => {
-    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981' };
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Escalated: '#EF4444' };
     return colors[status?.name] || '#6B7280';
   };
 
@@ -58,7 +62,7 @@ export default function DeveloperDashboard() {
     e.stopPropagation();
     const status = statuses.find(s => s.name === statusName);
     if (!status) return;
-    setUpdatingStatus(requestId);
+    setUpdatingId(`status-${requestId}`);
     try {
       await api.put(`/api/requests/${requestId}`, { statusId: status.id });
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: status } : r));
@@ -66,7 +70,38 @@ export default function DeveloperDashboard() {
     } catch (err) {
       showStatusToast('Failed to update status: ' + err.message, 'error');
     } finally {
-      setUpdatingStatus(null);
+      setUpdatingId(null);
+    }
+  };
+
+  const handleAssignedGroupChange = async (e, requestId) => {
+    e.stopPropagation();
+    const groupId = e.target.value || null;
+    setUpdatingId(`group-${requestId}`);
+    try {
+      await api.put(`/api/requests/${requestId}`, { assignedGroup: groupId });
+      const grp = groups.find(g => g.id === groupId);
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedGroup: grp ? { id: grp.id, name: grp.name, color: grp.color } : null } : r));
+      showStatusToast(`Request #${requestId} group → ${grp?.name || 'None'}`, 'status', requestId);
+    } catch (err) {
+      showStatusToast('Failed to update group: ' + err.message, 'error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleClaim = async (e, requestId) => {
+    e.stopPropagation();
+    setUpdatingId(`claim-${requestId}`);
+    try {
+      await api.put(`/api/requests/${requestId}`, { assignedTo: user.id });
+      const assignedStatus = statuses.find(s => s.name === 'Assigned');
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: user.id, assignee: { id: user.id, name: user.name, email: user.email }, status: assignedStatus || r.status } : r));
+      showStatusToast('Request claimed successfully', 'assignment', requestId);
+    } catch (err) {
+      showStatusToast('Failed to claim: ' + err.message, 'error');
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -104,7 +139,8 @@ export default function DeveloperDashboard() {
           (r.subject || '').toLowerCase().includes(q) ||
           (r.category?.name || '').toLowerCase().includes(q) ||
           (r.client?.name || '').toLowerCase().includes(q) ||
-          (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q))
+          (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q)) ||
+          (r.assignedGroup?.name || '').toLowerCase().includes(q)
         );
       }
       return true;
@@ -117,6 +153,7 @@ export default function DeveloperDashboard() {
         case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
         case 'client': aVal = (a.client?.name || '').toLowerCase(); bVal = (b.client?.name || '').toLowerCase(); break;
         case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
+        case 'assignedGroup': aVal = (a.assignedGroup?.name || '').toLowerCase(); bVal = (b.assignedGroup?.name || '').toLowerCase(); break;
         case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
         case 'priority': aVal = a.priority?.level || 0; bVal = b.priority?.level || 0; break;
         case 'status': aVal = (a.status?.name || '').toLowerCase(); bVal = (b.status?.name || '').toLowerCase(); break;
@@ -135,6 +172,9 @@ export default function DeveloperDashboard() {
     const statusName = r.status?.name;
     const actions = [];
 
+    if (statusName === 'New') {
+      actions.push({ label: 'Claim', status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'claim' });
+    }
     if (statusName === 'Assigned') {
       actions.push({ label: 'Start Work', status: 'In Progress', color: '#F59E0B', icon: '▶' });
     }
@@ -150,7 +190,7 @@ export default function DeveloperDashboard() {
       <div className="page-header">
         <div>
           <h1>Developer Workspace</h1>
-          <p>Welcome back, {user?.name?.split(' ')[0]}! Manage and resolve your assigned requests.</p>
+          <p>Welcome back, {user?.name?.split(' ')[0]}! View and manage all group requests.</p>
         </div>
       </div>
 
@@ -161,7 +201,7 @@ export default function DeveloperDashboard() {
         </div>
       )}
 
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')}>
           <div className="stat-icon" style={{ background: '#3B82F615', color: '#3B82F6' }}>📥</div>
           <div className="stat-content">
@@ -190,6 +230,13 @@ export default function DeveloperDashboard() {
             <p>Awaiting Client</p>
           </div>
         </div>
+        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')}>
+          <div className="stat-icon" style={{ background: '#EF444415', color: '#EF4444' }}>🚨</div>
+          <div className="stat-content">
+              <h3>{stats.escalated}</h3>
+            <p>Escalated</p>
+          </div>
+        </div>
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')}>
           <div className="stat-icon" style={{ background: '#10B98115', color: '#10B981' }}>✅</div>
           <div className="stat-content">
@@ -201,7 +248,7 @@ export default function DeveloperDashboard() {
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
-          <h3>{showAssignedOnly ? `My Assigned (${filteredRequests.length})` : `Group Requests (${filteredRequests.length})`}</h3>
+          <h3>{showAssignedOnly ? 'My Requests' : 'All Requests'} ({filteredRequests.length})</h3>
           <div className="table-header-actions">
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
               <span>Show My Tasks</span>
@@ -285,24 +332,35 @@ export default function DeveloperDashboard() {
                   <td>
                     <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                       {quickActions(r).map((action, i) => (
-                        <button
-                          key={`q-${i}`}
-                          className={`action-btn-text ${action.color === '#10B981' ? 'edit' : action.color === '#F97316' ? 'edit' : 'edit'}`}
-                          disabled={updatingStatus === r.id}
-                          onClick={(e) => handleQuickStatusUpdate(e, r.id, action.status)}
-                          style={{ opacity: updatingStatus === r.id ? 0.6 : 1 }}
-                        >
-                          {action.icon} {action.label}
-                        </button>
+                        action.type === 'claim' ? (
+                          <button
+                            key={`q-${i}`}
+                            className="action-btn-text edit"
+                            disabled={updatingId === `claim-${r.id}`}
+                            onClick={(e) => handleClaim(e, r.id)}
+                            style={{ opacity: updatingId === `claim-${r.id}` ? 0.6 : 1 }}
+                          >
+                            {action.icon} {action.label}
+                          </button>
+                        ) : (
+                          <button
+                            key={`q-${i}`}
+                            className="action-btn-text edit"
+                            disabled={updatingId === `status-${r.id}`}
+                            onClick={(e) => handleQuickStatusUpdate(e, r.id, action.status)}
+                            style={{ opacity: updatingId === `status-${r.id}` ? 0.6 : 1 }}
+                          >
+                            {action.icon} {action.label}
+                          </button>
+                        )
                       ))}
-
                     </div>
                   </td>
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
-                  {displayRequests.length === 0 ? (showAssignedOnly ? 'No requests assigned to you.' : 'No group requests yet.') : 'No requests match your filters.'}
+                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
+                  {displayRequests.length === 0 ? (showAssignedOnly ? 'No requests assigned to you.' : 'No requests yet.') : 'No requests match your filters.'}
                 </td></tr>
               )}
             </tbody>

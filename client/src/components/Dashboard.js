@@ -7,9 +7,21 @@ import { showStatusToast } from '../notify';
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
-function StatCard({ icon, value, label, change, changeType, color }) {
+function StatCard({ icon, value, label, change, changeType, color, onClick }) {
+  const [hover, setHover] = useState(false);
   return (
-    <div className="stat-card">
+    <div className="stat-card"
+      style={{
+        cursor: onClick ? 'pointer' : 'default',
+        transform: hover ? 'translateY(-4px)' : '',
+        boxShadow: hover ? `0 8px 25px ${color}30` : '',
+        borderLeft: hover ? `4px solid ${color}` : '4px solid transparent',
+        transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s'
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={onClick}
+    >
       <div className="stat-icon" style={{ background: color + '15', color }}>{icon}</div>
       <div className="stat-content">
         <h3>{value}</h3>
@@ -108,7 +120,8 @@ export default function Dashboard() {
         (r.subject || '').toLowerCase().includes(q) ||
         (r.clientName || r.client_name || '').toLowerCase().includes(q) ||
         (r.categoryName || r.category_name || '').toLowerCase().includes(q) ||
-        (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q))
+        (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q)) ||
+        (r.assignedGroup?.name || '').toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
@@ -119,6 +132,7 @@ export default function Dashboard() {
         case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
         case 'client': aVal = (a.clientName || a.client_name || '').toLowerCase(); bVal = (b.clientName || b.client_name || '').toLowerCase(); break;
         case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
+        case 'assignedGroup': aVal = (a.assignedGroup?.name || '').toLowerCase(); bVal = (b.assignedGroup?.name || '').toLowerCase(); break;
         case 'category': aVal = (a.categoryName || a.category_name || '').toLowerCase(); bVal = (b.categoryName || b.category_name || '').toLowerCase(); break;
         case 'priority': aVal = (a.priorityName || a.priority?.name || '').toLowerCase(); bVal = (b.priorityName || b.priority?.name || '').toLowerCase(); break;
         case 'status': aVal = (a.statusName || a.status?.name || '').toLowerCase(); bVal = (b.statusName || b.status?.name || '').toLowerCase(); break;
@@ -144,11 +158,12 @@ export default function Dashboard() {
       </div>
 
       <div className="stats-grid">
-        <StatCard icon="📋" value={stats.total} label="Total Requests" change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} color="#3B82F6" />
-        <StatCard icon="📂" value={stats.open} label="New Requests" change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} color="#10B981" />
-        <StatCard icon="⏳" value={stats.inProgress} label="In Progress" change={getChangePercent(stats.inProgress, stats.inProgressLastWeek).text} changeType={getChangePercent(stats.inProgress, stats.inProgressLastWeek).type} color="#F59E0B" />
-        <StatCard icon="✅" value={stats.resolved} label="Resolved" change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} color="#8B5CF6" />
-        <StatCard icon="📁" value={stats.closed} label="Closed" change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} color="#EF4444" />
+        <StatCard icon="📋" value={stats.total} label="Total Requests" change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} color="#3B82F6" onClick={() => navigate('/requests')} />
+        <StatCard icon="📂" value={stats.open} label="New Requests" change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} color="#10B981" onClick={() => navigate('/requests?status=1')} />
+        <StatCard icon="⏳" value={stats.inProgress} label="In Progress" change={getChangePercent(stats.inProgress, stats.inProgressLastWeek).text} changeType={getChangePercent(stats.inProgress, stats.inProgressLastWeek).type} color="#F59E0B" onClick={() => navigate('/requests?status=3')} />
+        <StatCard icon="✅" value={stats.resolved} label="Resolved" change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} color="#8B5CF6" onClick={() => navigate('/requests?status=5')} />
+        <StatCard icon="🚨" value={stats.escalated} label="Escalated" change={getChangePercent(stats.escalated, stats.escalatedLastWeek).text} changeType={getChangePercent(stats.escalated, stats.escalatedLastWeek).type} color="#EF4444" onClick={() => navigate('/requests?status=9')} />
+        <StatCard icon="📁" value={stats.closed} label="Closed" change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} color="#EF4444" onClick={() => navigate('/requests?status=6')} />
       </div>
 
       <div className="charts-row">
@@ -290,6 +305,7 @@ export default function Dashboard() {
                 <th className="sortable">Request Title {getSortIcon('subject')}</th>
                 <th className="sortable">Client {getSortIcon('client')}</th>
                 <th className="sortable">Group {getSortIcon('groups')}</th>
+                <th className="sortable">Assigned Group {getSortIcon('assignedGroup')}</th>
                 <th className="sortable">Category {getSortIcon('category')}</th>
                 <th className="sortable">Priority {getSortIcon('priority')}</th>
                 <th className="sortable">Status {getSortIcon('status')}</th>
@@ -312,6 +328,13 @@ export default function Dashboard() {
                           </span>
                         ))
                       : '-'}
+                  </td>
+                  <td>
+                    {r.assignedGroup ? (
+                      <span className="group-tag" style={{ background: (r.assignedGroup.color || '#6B7280') + '20', color: r.assignedGroup.color || '#6B7280' }}>
+                        {r.assignedGroup.name}
+                      </span>
+                    ) : '-'}
                   </td>
                   <td>{r.categoryName || r.category_name || '-'}</td>
                   <td>
@@ -350,7 +373,7 @@ export default function Dashboard() {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No requests found</td></tr>
+                <tr><td colSpan="11" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No requests found</td></tr>
               )}
             </tbody>
           </table>

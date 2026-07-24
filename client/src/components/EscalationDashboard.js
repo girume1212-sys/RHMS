@@ -9,6 +9,7 @@ export default function EscalationDashboard() {
   const [statuses, setStatuses] = useState([]);
   const [users, setUsers] = useState([]);
   const [priorities, setPriorities] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -30,12 +31,14 @@ export default function EscalationDashboard() {
       api.get('/api/requests'),
       api.get('/api/statuses'),
       api.get('/api/users'),
-      api.get('/api/priorities')
-    ]).then(([requestsData, statusesData, usersData, prioritiesData]) => {
+      api.get('/api/priorities'),
+      api.get('/api/groups')
+    ]).then(([requestsData, statusesData, usersData, prioritiesData, groupsData]) => {
       setRequests(requestsData);
       setStatuses(statusesData);
       setUsers(usersData);
       setPriorities(prioritiesData);
+      setGroups(groupsData);
     }).catch(err => setError('Failed to load data: ' + err.message));
   };
 
@@ -110,6 +113,37 @@ export default function EscalationDashboard() {
     }
   };
 
+  const handleAssignedGroupChange = async (e, requestId) => {
+    e.stopPropagation();
+    const groupId = e.target.value || null;
+    setUpdatingField(`group-${requestId}`);
+    try {
+      await api.put(`/api/requests/${requestId}`, { assignedGroup: groupId });
+      const grp = groups.find(g => g.id === groupId);
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedGroup: grp ? { id: grp.id, name: grp.name, color: grp.color } : null } : r));
+      showStatusToast(`Request #${requestId} group → ${grp?.name || 'None'}`, 'status', requestId);
+    } catch (err) {
+      showStatusToast('Failed to update group: ' + err.message, 'error');
+    } finally {
+      setUpdatingField(null);
+    }
+  };
+
+  const handleClaim = async (e, requestId) => {
+    e.stopPropagation();
+    setUpdatingField(`claim-${requestId}`);
+    try {
+      await api.put(`/api/requests/${requestId}`, { assignedTo: user.id });
+      const assignedStatus = statuses.find(s => s.name === 'Assigned');
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: user.id, assignee: { id: user.id, name: user.name, email: user.email }, status: assignedStatus || r.status } : r));
+      showStatusToast('Request claimed successfully', 'assignment', requestId);
+    } catch (err) {
+      showStatusToast('Failed to claim: ' + err.message, 'error');
+    } finally {
+      setUpdatingField(null);
+    }
+  };
+
   const handleDelete = async (e, id) => {
     e.stopPropagation();
     if (!window.confirm('Are you sure you want to delete this request?')) return;
@@ -145,7 +179,8 @@ export default function EscalationDashboard() {
           (r.category?.name || '').toLowerCase().includes(q) ||
           (r.client?.name || '').toLowerCase().includes(q) ||
           (r.assignee?.name || '').toLowerCase().includes(q) ||
-          (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q))
+          (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q)) ||
+          (r.assignedGroup?.name || '').toLowerCase().includes(q)
         );
       }
       return true;
@@ -158,6 +193,7 @@ export default function EscalationDashboard() {
         case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
         case 'client': aVal = (a.client?.name || '').toLowerCase(); bVal = (b.client?.name || '').toLowerCase(); break;
         case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
+        case 'assignedGroup': aVal = (a.assignedGroup?.name || '').toLowerCase(); bVal = (b.assignedGroup?.name || '').toLowerCase(); break;
         case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
         case 'priority': aVal = a.priority?.level || 0; bVal = b.priority?.level || 0; break;
         case 'status': aVal = (a.status?.name || '').toLowerCase(); bVal = (b.status?.name || '').toLowerCase(); break;
@@ -179,7 +215,8 @@ export default function EscalationDashboard() {
     const actions = [];
 
     if (statusName === 'New') {
-      actions.push({ label: 'Assign', status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'assign' });
+      actions.push({ label: 'Claim', status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'claim' });
+      actions.push({ label: 'Assign', status: 'Assigned', color: '#8B5CF6', icon: '👥', type: 'assign' });
     }
     if (statusName === 'Waiting for Client') {
       actions.push({ label: 'Follow Up', status: 'In Progress', color: '#F59E0B', icon: '📞', type: 'status' });
@@ -271,6 +308,7 @@ export default function EscalationDashboard() {
                 <th className="sortable">Request Title {getSortIcon('subject')}</th>
                 <th className="sortable">Client {getSortIcon('client')}</th>
                 <th className="sortable">Group {getSortIcon('groups')}</th>
+                <th className="sortable">Assigned Group {getSortIcon('assignedGroup')}</th>
                 <th className="sortable">Category {getSortIcon('category')}</th>
                 <th className="sortable">Priority {getSortIcon('priority')}</th>
                 <th className="sortable">Status {getSortIcon('status')}</th>
@@ -293,6 +331,29 @@ export default function EscalationDashboard() {
                           </span>
                         ))
                       : '-'}
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <select
+                      value={r.assignedGroup?.id || ''}
+                      onChange={(e) => handleAssignedGroupChange(e, r.id)}
+                      disabled={updatingField === `group-${r.id}`}
+                      style={{
+                        padding: '3px 6px',
+                        borderRadius: '4px',
+                        border: '1px solid #d1d5db',
+                        background: r.assignedGroup ? (r.assignedGroup.color || '#6B7280') + '20' : '#F9FAFB',
+                        color: r.assignedGroup?.color || '#6B7280',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        maxWidth: '130px'
+                      }}
+                    >
+                      <option value="">None</option>
+                      {groups.map(g => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
                   </td>
                   <td><span className="category-tag">{r.category?.name || '-'}</span></td>
                   <td onClick={(e) => e.stopPropagation()}>
@@ -381,7 +442,17 @@ export default function EscalationDashboard() {
                   <td>
                     <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                       {getQuickActions(r).map((action, i) => (
-                        action.type === 'assign' ? (
+                        action.type === 'claim' ? (
+                          <button
+                            key={`q-${i}`}
+                            className="action-btn-text edit"
+                            disabled={updatingField === `claim-${r.id}`}
+                            onClick={(e) => handleClaim(e, r.id)}
+                            style={{ opacity: updatingField === `claim-${r.id}` ? 0.6 : 1 }}
+                          >
+                            {action.icon} {action.label}
+                          </button>
+                        ) : action.type === 'assign' ? (
                           <button
                             key={`q-${i}`}
                             className="action-btn-text edit"
@@ -407,7 +478,7 @@ export default function EscalationDashboard() {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
+                <tr><td colSpan="11" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
                   {requests.length === 0 ? 'No requests in the system.' : 'No requests match your filters.'}
                 </td></tr>
               )}

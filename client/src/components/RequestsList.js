@@ -12,8 +12,8 @@ export default function RequestsList() {
   const [error, setError] = useState('');
   const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState({
-    status: '',
-    priority: '',
+    status: searchParams.get('status') || '',
+    priority: searchParams.get('priority') || '',
     category: searchParams.get('category') || '',
     search: searchParams.get('search') || ''
   });
@@ -41,8 +41,9 @@ export default function RequestsList() {
     if (filter.priority) params.set('priority', filter.priority);
     if (filter.category) params.set('category', filter.category);
     if (filter.search) params.set('search', filter.search);
+    const qs = params.toString();
     setError('');
-    api.get(`/api/requests?${params}`).then(data => {
+    api.get(`/api/requests?${qs}`).then(data => {
       let filtered = data;
       if (user?.role === 'developer' || user?.role === 'support') {
         filtered = data.filter(r => r.assignedTo === user.id || !r.assignedTo);
@@ -103,7 +104,9 @@ export default function RequestsList() {
           String(r.id).includes(q) ||
           (r.subject || '').toLowerCase().includes(q) ||
           (r.client?.name || '').toLowerCase().includes(q) ||
-          (r.category?.name || '').toLowerCase().includes(q)
+          (r.category?.name || '').toLowerCase().includes(q) ||
+          (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q)) ||
+          (r.assignedGroup?.name || '').toLowerCase().includes(q)
         );
       }
       return true;
@@ -118,6 +121,8 @@ export default function RequestsList() {
         case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
         case 'priority': aVal = a.priority?.level || 0; bVal = b.priority?.level || 0; break;
         case 'status': aVal = (a.status?.name || '').toLowerCase(); bVal = (b.status?.name || '').toLowerCase(); break;
+        case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
+        case 'assignedGroup': aVal = (a.assignedGroup?.name || '').toLowerCase(); bVal = (b.assignedGroup?.name || '').toLowerCase(); break;
         case 'assignee': aVal = (a.assignee?.name || '').toLowerCase(); bVal = (b.assignee?.name || '').toLowerCase(); break;
         case 'createdAt': aVal = new Date(a.createdAt || 0); bVal = new Date(b.createdAt || 0); break;
         default: return 0;
@@ -167,6 +172,7 @@ export default function RequestsList() {
           <option value="5">Resolved</option>
           <option value="6">Closed</option>
           <option value="7">Reopened</option>
+          <option value="9">Escalated</option>
         </select>
         <select value={filter.priority} onChange={(e) => { setFilter({ ...filter, priority: e.target.value }); setPage(1); }}>
           <option value="">All Priorities</option>
@@ -206,6 +212,8 @@ export default function RequestsList() {
                   <th className="sortable">ID {getSortIcon('id')}</th>
                   <th className="sortable">Request Title {getSortIcon('subject')}</th>
                   {!isClient && <th className="sortable">Client {getSortIcon('client')}</th>}
+                  {!isClient && <th className="sortable">Group {getSortIcon('groups')}</th>}
+                  {!isClient && <th className="sortable">Assigned Group {getSortIcon('assignedGroup')}</th>}
                   <th className="sortable">Category {getSortIcon('category')}</th>
                   <th className="sortable">Priority {getSortIcon('priority')}</th>
                   <th className="sortable">Status {getSortIcon('status')}</th>
@@ -216,13 +224,33 @@ export default function RequestsList() {
               </thead>
               <tbody>
                 {paginated.length === 0 && (
-                  <tr><td colSpan={isClient ? 7 : 8} style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No requests found</td></tr>
+                  <tr><td colSpan={isClient ? 7 : 11} style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No requests found</td></tr>
                 )}
                 {paginated.map((r) => (
                   <tr key={r.id} onClick={() => navigate(`${basePath}/requests/${r.id}`)} className="clickable-row">
                     <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                     <td>{r.subject}</td>
                     {!isClient && <td>{r.client?.name || '-'}</td>}
+                    {!isClient && (
+                      <td>
+                        {r.groups && r.groups.length > 0
+                          ? r.groups.map((g, i) => (
+                              <span key={g.id} className="group-tag" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', marginRight: i < r.groups.length - 1 ? '4px' : 0 }}>
+                                {g.name}
+                              </span>
+                            ))
+                          : '-'}
+                      </td>
+                    )}
+                    {!isClient && (
+                      <td>
+                        {r.assignedGroup ? (
+                          <span className="group-tag" style={{ background: (r.assignedGroup.color || '#6B7280') + '20', color: r.assignedGroup.color || '#6B7280' }}>
+                            {r.assignedGroup.name}
+                          </span>
+                        ) : '-'}
+                      </td>
+                    )}
                     <td><span className="category-tag">{r.category?.name || '-'}</span></td>
                     <td><span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>{r.priority?.name || '-'}</span></td>
                     <td><span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>{r.status?.name || '-'}</span></td>
