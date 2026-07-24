@@ -689,11 +689,6 @@ body.dark-mode .dropdown-panel-message { color: #94a3b8 !important; }
   align-items: center;
   gap: 16px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-.stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
 }
 .stat-icon {
   width: 52px;
@@ -849,12 +844,12 @@ body.dark-mode .dropdown-panel-message { color: #94a3b8 !important; }
 }
 .data-table th {
   text-align: left;
-  padding: 12px 16px;
-  font-size: 12px;
+  padding: 10px 10px;
+  font-size: 11px;
   font-weight: 600;
   color: #6b7280;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.03em;
   border-bottom: 1px solid #e5e7eb;
 }
 .sortable-th {
@@ -905,14 +900,26 @@ body.dark-mode .dropdown-panel-message { color: #94a3b8 !important; }
   opacity: 1;
 }
 .data-table td {
-  padding: 12px 16px;
-  font-size: 14px;
+  padding: 10px 10px;
+  font-size: 13px;
   border-bottom: 1px solid #f3f4f6;
+}
+.data-table td:last-child {
+  min-width: 110px;
+}
+.data-table th:last-child {
+  min-width: 110px;
+}
+.data-table td:first-child {
+  width: 80px;
+}
+.data-table th:first-child {
+  width: 80px;
 }
 .clickable-row { cursor: pointer; transition: background 0.15s; }
 .clickable-row:hover { background: #e0f7fa; }
 .req-id { font-weight: 600; color: #0077b6; }
-.req-subject { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.req-subject { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .category-tag {
   background: linear-gradient(135deg, #e0f7fa, #b2ebf2);
   color: #0077b6;
@@ -1266,7 +1273,7 @@ body.dark-mode .multi-select-option.selected {
 
 /* ========== PAGES ========== */
 .page-container {
-  max-width: 1200px;
+  max-width: 1600px;
 }
 
 /* Page Header - Colorful (Requests Pages) */
@@ -1371,10 +1378,10 @@ body.dark-mode .multi-select-option.selected {
   color: white;
   border-bottom: none;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 14px 16px;
+  letter-spacing: 0.03em;
+  padding: 10px 10px;
 }
 .form-card {
   background: white;
@@ -4515,30 +4522,34 @@ body.dark-mode .perf-toggle-btn.active {
 .actions-cell-inline {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 .action-btn-text {
-  padding: 4px 10px;
-  border: none;
-  border-radius: 5px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 3px 8px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 .action-btn-text.edit {
-  background: #eff6ff;
-  color: #3B82F6;
+  background: #3B82F6;
+  color: #fff;
+  border-color: #3B82F6;
 }
 .action-btn-text.edit:hover {
-  background: #dbeafe;
+  background: #2563eb;
+  border-color: #2563eb;
 }
 .action-btn-text.delete {
-  background: #fef2f2;
-  color: #EF4444;
+  background: #EF4444;
+  color: #fff;
+  border-color: #EF4444;
 }
 .action-btn-text.delete:hover {
-  background: #fee2e2;
+  background: #dc2626;
+  border-color: #dc2626;
 }
 
 /* ========== TABLE FOOTER / PAGINATION ========== */

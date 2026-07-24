@@ -209,17 +209,17 @@ export default function RequestsList() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sortable">ID {getSortIcon('id')}</th>
+                  <th className="sortable" style={{ width: 70 }}>ID {getSortIcon('id')}</th>
                   <th className="sortable">Request Title {getSortIcon('subject')}</th>
-                  {!isClient && <th className="sortable">Client {getSortIcon('client')}</th>}
-                  {!isClient && <th className="sortable">Group {getSortIcon('groups')}</th>}
-                  {!isClient && <th className="sortable">Assigned Group {getSortIcon('assignedGroup')}</th>}
-                  <th className="sortable">Category {getSortIcon('category')}</th>
-                  <th className="sortable">Priority {getSortIcon('priority')}</th>
-                  <th className="sortable">Status {getSortIcon('status')}</th>
-                  {!isClient && <th className="sortable">Assigned To {getSortIcon('assignee')}</th>}
-                  <th className="sortable">Created {getSortIcon('createdAt')}</th>
-                  <th>Actions</th>
+                  {!isClient && <th className="sortable" style={{ width: 110 }}>Client {getSortIcon('client')}</th>}
+                  {!isClient && <th className="sortable" style={{ width: 90 }}>Group {getSortIcon('groups')}</th>}
+                  {!isClient && <th className="sortable" style={{ width: 100 }}>Assigned Group {getSortIcon('assignedGroup')}</th>}
+                  <th className="sortable" style={{ width: 90 }}>Category {getSortIcon('category')}</th>
+                  <th className="sortable" style={{ width: 75 }}>Priority {getSortIcon('priority')}</th>
+                  <th className="sortable" style={{ width: 85 }}>Status {getSortIcon('status')}</th>
+                  {!isClient && <th className="sortable" style={{ width: 110 }}>Assigned To {getSortIcon('assignee')}</th>}
+                  <th className="sortable" style={{ width: 105 }}>Created {getSortIcon('createdAt')}</th>
+                  <th style={{ width: 110 }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -263,7 +263,12 @@ export default function RequestsList() {
                     <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
                     <td>
                       <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
-                        {(user?.role === 'admin' || user?.role === 'client') && r.statusId === '1' ? (
+                        {(user?.role === 'admin' || user?.role === 'support') && (r.statusId === '1' || r.statusId === '2') ? (
+                          <>
+                            <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
+                            <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                          </>
+                        ) : user?.role === 'client' && r.statusId === '1' ? (
                           <>
                             <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
                             <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>

@@ -185,6 +185,30 @@ export default function DeveloperDashboard() {
     return actions;
   };
 
+  const DevStatCard = ({ icon, value, label, color, onClick }) => {
+    const [h, setH] = useState(false);
+    return (
+      <div className="stat-card"
+        style={{
+          cursor: 'pointer',
+          transform: h ? 'translateY(-4px)' : '',
+          boxShadow: h ? `0 8px 25px ${color}30` : '',
+          borderLeft: h ? `4px solid ${color}` : '4px solid transparent',
+          transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s'
+        }}
+        onMouseEnter={() => setH(true)}
+        onMouseLeave={() => setH(false)}
+        onClick={onClick}
+      >
+        <div className="stat-icon" style={{ background: color + '15', color }}>{icon}</div>
+        <div className="stat-content">
+          <h3>{value}</h3>
+          <p>{label}</p>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="dashboard">
       <div className="page-header">
@@ -202,48 +226,12 @@ export default function DeveloperDashboard() {
       )}
 
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')}>
-          <div className="stat-icon" style={{ background: '#3B82F615', color: '#3B82F6' }}>📥</div>
-          <div className="stat-content">
-            <h3>{stats.newCount}</h3>
-            <p>New</p>
-          </div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')}>
-          <div className="stat-icon" style={{ background: '#8B5CF615', color: '#8B5CF6' }}>📋</div>
-          <div className="stat-content">
-            <h3>{stats.assigned}</h3>
-            <p>Newly Assigned</p>
-          </div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')}>
-          <div className="stat-icon" style={{ background: '#F59E0B15', color: '#F59E0B' }}>⚡</div>
-          <div className="stat-content">
-            <h3>{stats.inProgress}</h3>
-            <p>In Progress</p>
-          </div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')}>
-          <div className="stat-icon" style={{ background: '#F9731615', color: '#F97316' }}>⏳</div>
-          <div className="stat-content">
-            <h3>{stats.waiting}</h3>
-            <p>Awaiting Client</p>
-          </div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')}>
-          <div className="stat-icon" style={{ background: '#EF444415', color: '#EF4444' }}>🚨</div>
-          <div className="stat-content">
-              <h3>{stats.escalated}</h3>
-            <p>Escalated</p>
-          </div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')}>
-          <div className="stat-icon" style={{ background: '#10B98115', color: '#10B981' }}>✅</div>
-          <div className="stat-content">
-              <h3>{stats.resolved}</h3>
-            <p>Resolved</p>
-          </div>
-        </div>
+        <DevStatCard icon="📥" value={stats.newCount} label="New" color="#3B82F6" onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')} />
+        <DevStatCard icon="📋" value={stats.assigned} label="Newly Assigned" color="#8B5CF6" onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')} />
+        <DevStatCard icon="⚡" value={stats.inProgress} label="In Progress" color="#F59E0B" onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')} />
+        <DevStatCard icon="⏳" value={stats.waiting} label="Awaiting Client" color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
+        <DevStatCard icon="🚨" value={stats.escalated} label="Escalated" color="#EF4444" onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')} />
+        <DevStatCard icon="✅" value={stats.resolved} label="Resolved" color="#10B981" onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')} />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
@@ -291,15 +279,15 @@ export default function DeveloperDashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable">ID {getSortIcon('id')}</th>
+                <th className="sortable" style={{ width: 70 }}>ID {getSortIcon('id')}</th>
                 <th className="sortable">Request Title {getSortIcon('subject')}</th>
-                <th className="sortable">Client {getSortIcon('client')}</th>
-                <th className="sortable">Group {getSortIcon('groups')}</th>
-                <th className="sortable">Category {getSortIcon('category')}</th>
-                <th className="sortable">Priority {getSortIcon('priority')}</th>
-                <th className="sortable">Status {getSortIcon('status')}</th>
-                <th className="sortable">Updated {getSortIcon('updatedAt')}</th>
-                <th>Actions</th>
+                <th className="sortable" style={{ width: 110 }}>Client {getSortIcon('client')}</th>
+                <th className="sortable" style={{ width: 90 }}>Group {getSortIcon('groups')}</th>
+                <th className="sortable" style={{ width: 90 }}>Category {getSortIcon('category')}</th>
+                <th className="sortable" style={{ width: 75 }}>Priority {getSortIcon('priority')}</th>
+                <th className="sortable" style={{ width: 85 }}>Status {getSortIcon('status')}</th>
+                <th className="sortable" style={{ width: 105 }}>Updated {getSortIcon('updatedAt')}</th>
+                <th style={{ width: 110 }}>Actions</th>
               </tr>
             </thead>
             <tbody>

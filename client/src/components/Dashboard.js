@@ -301,17 +301,17 @@ export default function Dashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable">ID {getSortIcon('id')}</th>
+                <th className="sortable" style={{ width: 70 }}>ID {getSortIcon('id')}</th>
                 <th className="sortable">Request Title {getSortIcon('subject')}</th>
-                <th className="sortable">Client {getSortIcon('client')}</th>
-                <th className="sortable">Group {getSortIcon('groups')}</th>
-                <th className="sortable">Assigned Group {getSortIcon('assignedGroup')}</th>
-                <th className="sortable">Category {getSortIcon('category')}</th>
-                <th className="sortable">Priority {getSortIcon('priority')}</th>
-                <th className="sortable">Status {getSortIcon('status')}</th>
-                <th className="sortable">Assigned To {getSortIcon('assignedTo')}</th>
-                <th className="sortable">Created {getSortIcon('createdAt')}</th>
-                <th>Actions</th>
+                <th className="sortable" style={{ width: 110 }}>Client {getSortIcon('client')}</th>
+                <th className="sortable" style={{ width: 90 }}>Group {getSortIcon('groups')}</th>
+                <th className="sortable" style={{ width: 100 }}>Assigned Group {getSortIcon('assignedGroup')}</th>
+                <th className="sortable" style={{ width: 90 }}>Category {getSortIcon('category')}</th>
+                <th className="sortable" style={{ width: 75 }}>Priority {getSortIcon('priority')}</th>
+                <th className="sortable" style={{ width: 85 }}>Status {getSortIcon('status')}</th>
+                <th className="sortable" style={{ width: 110 }}>Assigned To {getSortIcon('assignedTo')}</th>
+                <th className="sortable" style={{ width: 105 }}>Created {getSortIcon('createdAt')}</th>
+                <th style={{ width: 110 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
