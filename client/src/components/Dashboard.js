@@ -47,6 +47,7 @@ export default function Dashboard() {
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -59,7 +60,7 @@ export default function Dashboard() {
       }
       setRecentRequests(filtered);
     }).catch(err => setError('Failed to load requests: ' + err.message));
-    api.get('/api/dashboard/performance?days=30').then(setPerfData).catch(() => {});
+    api.get('/api/dashboard/performance?days=30').then(setPerfData).catch(err => console.error('Perf fetch error:', err));
   }, [user]);
 
   if (!stats && !error) return <div className="loading-screen"><div className="spinner"></div></div>;
@@ -86,15 +87,15 @@ export default function Dashboard() {
     return colors[priority?.name] || '#6B7280';
   };
 
-  const handleDelete = async (e, id) => {
-    e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this request?')) return;
+  const handleDelete = async (id) => {
     try {
       await api.delete(`/api/requests/${id}`);
       setRecentRequests(prev => prev.filter(r => r.id !== id));
       showStatusToast('Request deleted successfully', 'success');
+      setDeleteTarget(null);
     } catch (err) {
       showStatusToast('Failed to delete request', 'error');
+      setDeleteTarget(null);
     }
   };
 
@@ -171,18 +172,30 @@ export default function Dashboard() {
           <h3>Requests by Status</h3>
           <div className="chart-container">
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={stats.byStatus.filter(s => s.count > 0)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} />
-                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
-                <Tooltip />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {stats.byStatus.filter(s => s.count > 0).map((s, i) => (
-                    <Cell key={s.id || s.name} fill={COLORS[i % COLORS.length]} />
+              <PieChart>
+                <Pie data={stats.byStatus.filter(s => s.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
+                  {stats.byStatus.filter(s => s.count > 0).map((entry, i) => (
+                    <Cell key={entry.id || entry.name} fill={COLORS[i % COLORS.length]} />
                   ))}
-                </Bar>
-              </BarChart>
+                </Pie>
+                <Tooltip />
+                <text x="50%" y="47%" textAnchor="middle" dominantBaseline="middle" fontSize={28} fontWeight={700} fill="currentColor">
+                  {stats.byStatus.filter(s => s.count > 0).reduce((sum, s) => sum + s.count, 0)}
+                </text>
+                <text x="50%" y="63%" textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="#9ca3af">
+                  Total
+                </text>
+              </PieChart>
             </ResponsiveContainer>
+            <div className="chart-legend">
+              {stats.byStatus.filter(s => s.count > 0).map((s, i) => (
+                <div key={s.id} className="legend-item">
+                  <span className="legend-dot" style={{ background: COLORS[i % COLORS.length] }}></span>
+                  <span className="legend-label">{s.name}</span>
+                  <span className="legend-value">{s.count} ({s.percentage}%)</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -231,32 +244,7 @@ export default function Dashboard() {
       </div>
 
       <div className="charts-row">
-        <div className="chart-card" style={{ flex: 1 }}>
-          <h3>Requests by Category</h3>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={(stats.byCategory || []).filter(c => c.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
-                  {(stats.byCategory || []).filter(c => c.count > 0).map((entry, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="chart-legend">
-              {(stats.byCategory || []).filter(c => c.count > 0).map((c, i) => (
-                <div key={c.id} className="legend-item">
-                  <span className="legend-dot" style={{ background: COLORS[i % COLORS.length] }}></span>
-                  <span className="legend-label">{c.name}</span>
-                  <span className="legend-value">{c.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="chart-card" style={{ flex: 1 }}>
+        <div className="chart-card" style={{ flex: 3 }}>
           <h3>Requests by Company</h3>
           <div className="chart-container">
             <ResponsiveContainer width="100%" height={250}>
@@ -278,6 +266,24 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+        <div className="chart-card" style={{ gridColumn: '2 / -1' }}>
+          <h3>Requests by Category</h3>
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={(stats.byCategory || []).filter(c => c.count > 0)}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} />
+                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
+                <Tooltip />
+                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  {(stats.byCategory || []).filter(c => c.count > 0).map((entry, i) => (
+                    <Cell key={entry.id || entry.name} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
@@ -363,7 +369,7 @@ export default function Dashboard() {
                       {r.status?.name === 'New' ? (
                         <>
                           <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
-                          <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                          <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(r.id); }}>Delete</button>
                         </>
                       ) : (
                         <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>—</span>
@@ -561,6 +567,17 @@ export default function Dashboard() {
         </div>
       )}
 
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this request?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

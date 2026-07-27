@@ -17,6 +17,10 @@ export default function DeveloperDashboard() {
   const [priorityFilter, setPriorityFilter] = useState('');
   const [showAssignedOnly, setShowAssignedOnly] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
+  const [activityLog, setActivityLog] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -28,11 +32,13 @@ export default function DeveloperDashboard() {
     Promise.all([
       api.get('/api/requests'),
       api.get('/api/statuses'),
-      api.get('/api/groups')
-    ]).then(([requestsData, statusesData, groupsData]) => {
+      api.get('/api/groups'),
+      api.get('/api/activity')
+    ]).then(([requestsData, statusesData, groupsData, activityData]) => {
       setRequests(requestsData);
       setStatuses(statusesData);
       setGroups(groupsData);
+      setActivityLog(activityData);
     }).catch(err => setError('Failed to load data: ' + err.message));
   };
 
@@ -105,15 +111,15 @@ export default function DeveloperDashboard() {
     }
   };
 
-  const handleDelete = async (e, id) => {
-    e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this request?')) return;
+  const handleDelete = async (id) => {
     try {
       await api.delete(`/api/requests/${id}`);
       setRequests(prev => prev.filter(r => r.id !== id));
       showStatusToast('Request deleted successfully', 'success');
+      setDeleteTarget(null);
     } catch (err) {
       showStatusToast('Failed to delete request: ' + err.message, 'error');
+      setDeleteTarget(null);
     }
   };
 
@@ -182,6 +188,7 @@ export default function DeveloperDashboard() {
       actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓' });
       actions.push({ label: 'Need Info', status: 'Waiting for Client', color: '#F97316', icon: '❓' });
     }
+    actions.push({ label: 'Delete', color: '#EF4444', icon: '🗑', type: 'delete' });
     return actions;
   };
 
@@ -330,6 +337,14 @@ export default function DeveloperDashboard() {
                           >
                             {action.icon} {action.label}
                           </button>
+                        ) : action.type === 'delete' ? (
+                          <button
+                            key={`q-${i}`}
+                            className="action-btn-text delete"
+                            onClick={() => setDeleteTarget(r.id)}
+                          >
+                            {action.icon} {action.label}
+                          </button>
                         ) : (
                           <button
                             key={`q-${i}`}
@@ -375,6 +390,73 @@ export default function DeveloperDashboard() {
           </div>
         </div>
       </div>
+
+      <div className="detail-card" style={{ marginTop: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <h3 style={{ margin: 0, border: 'none', padding: 0 }}>📜 History</h3>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="action-btn-text edit" onClick={() => setShowHistory(!showHistory)}>
+              {showHistory ? 'Hide History' : 'Show History'}
+            </button>
+            <button className="action-btn-text delete" onClick={() => setShowClearConfirm(true)}>
+              Clear History
+            </button>
+          </div>
+        </div>
+        {showHistory && (
+          <div className="timeline">
+            {activityLog.length === 0 ? (
+              <div className="empty-state">No activity yet</div>
+            ) : (
+              <div className="timeline-list">
+                {activityLog.map((a) => (
+                  <div key={a.id} className="timeline-item">
+                    <div className="timeline-dot" style={{ background: a.user?.role === 'admin' ? '#EF4444' : a.user?.role === 'support' ? '#8B5CF6' : '#3B82F6' }}></div>
+                    <div className="timeline-content">
+                      <div className="timeline-header">
+                        <strong>{a.user?.name || 'System'}</strong>
+                        <span className="timeline-time">{a.createdAt ? new Date(a.createdAt).toLocaleString() : ''}</span>
+                      </div>
+                      <p className="timeline-message">{a.message}</p>
+                      {a.request && <small style={{ color: '#6B7280' }}>on: {a.request.subject}</small>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this request?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClearConfirm && (
+        <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to clear this history?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setShowClearConfirm(false)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => {
+                api.delete('/api/activity').then(() => {
+                  setActivityLog([]);
+                  showStatusToast('History cleared', 'success');
+                  setShowClearConfirm(false);
+                }).catch(() => { showStatusToast('Failed to clear history', 'error'); setShowClearConfirm(false); });
+              }} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Clear</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,17 +8,21 @@ export default function EscalationDashboard() {
   const [requests, setRequests] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [users, setUsers] = useState([]);
-  const [priorities, setPriorities] = useState([]);
   const [groups, setGroups] = useState([]);
   const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('');
-  const [sort, setSort] = useState({ key: 'updatedAt', dir: 'desc' });
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
-  const [updatingField, setUpdatingField] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sort, setSort] = useState({ key: '', dir: 'asc' });
+  const [statusFilter, setStatusFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [showAssignedOnly, setShowAssignedOnly] = useState(false);
+  const [updatingId, setUpdatingId] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(null);
+  const [activityLog, setActivityLog] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -31,32 +35,32 @@ export default function EscalationDashboard() {
       api.get('/api/requests'),
       api.get('/api/statuses'),
       api.get('/api/users'),
-      api.get('/api/priorities'),
-      api.get('/api/groups')
-    ]).then(([requestsData, statusesData, usersData, prioritiesData, groupsData]) => {
+      api.get('/api/groups'),
+      api.get('/api/activity')
+    ]).then(([requestsData, statusesData, usersData, groupsData, activityData]) => {
       setRequests(requestsData);
       setStatuses(statusesData);
       setUsers(usersData);
-      setPriorities(prioritiesData);
       setGroups(groupsData);
+      setActivityLog(activityData);
     }).catch(err => setError('Failed to load data: ' + err.message));
   };
 
   const developers = users.filter(u => u.role === 'developer');
+  const displayRequests = showAssignedOnly ? requests.filter(r => r.assignedTo === user.id) : requests;
 
   const stats = {
-    total: requests.length,
-    open: requests.filter(r => r.status?.name === 'New').length,
-    assigned: requests.filter(r => r.status?.name === 'Assigned').length,
-    inProgress: requests.filter(r => r.status?.name === 'In Progress').length,
-    waiting: requests.filter(r => r.status?.name === 'Waiting for Client').length,
-    resolved: requests.filter(r => r.status?.name === 'Resolved').length,
-    closed: requests.filter(r => r.status?.name === 'Closed').length,
-    reopened: requests.filter(r => r.status?.name === 'Reopened').length,
+    total: displayRequests.length,
+    newCount: displayRequests.filter(r => r.status?.name === 'New').length,
+    inProgress: displayRequests.filter(r => r.status?.name === 'In Progress').length,
+    waiting: displayRequests.filter(r => r.status?.name === 'Waiting for Client').length,
+    resolved: displayRequests.filter(r => r.status?.name === 'Resolved').length,
+    assigned: displayRequests.filter(r => r.status?.name === 'Assigned').length,
+    escalated: displayRequests.filter(r => r.status?.name === 'Escalated').length,
   };
 
   const getStatusColor = (status) => {
-    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981' };
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Escalated: '#EF4444' };
     return colors[status?.name] || '#6B7280';
   };
 
@@ -69,7 +73,7 @@ export default function EscalationDashboard() {
     e.stopPropagation();
     const status = statuses.find(s => s.name === statusName);
     if (!status) return;
-    setUpdatingField(`status-${requestId}`);
+    setUpdatingId(`status-${requestId}`);
     try {
       await api.put(`/api/requests/${requestId}`, { statusId: status.id });
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: status } : r));
@@ -77,14 +81,14 @@ export default function EscalationDashboard() {
     } catch (err) {
       showStatusToast('Failed to update status: ' + err.message, 'error');
     } finally {
-      setUpdatingField(null);
+      setUpdatingId(null);
     }
   };
 
   const handleAssign = async (e, requestId, developerId) => {
     e.stopPropagation();
     setShowAssignModal(null);
-    setUpdatingField(`assign-${requestId}`);
+    setUpdatingId(`assign-${requestId}`);
     try {
       await api.put(`/api/requests/${requestId}`, { assignedTo: developerId || null });
       const dev = users.find(u => u.id === developerId);
@@ -94,44 +98,13 @@ export default function EscalationDashboard() {
     } catch (err) {
       showStatusToast('Failed to assign: ' + err.message, 'error');
     } finally {
-      setUpdatingField(null);
-    }
-  };
-
-  const handlePriorityChange = async (e, requestId, priorityId) => {
-    e.stopPropagation();
-    setUpdatingField(`priority-${requestId}`);
-    try {
-      await api.put(`/api/requests/${requestId}`, { priorityId });
-      const pri = priorities.find(p => p.id === priorityId);
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, priorityId, priority: pri || r.priority } : r));
-      showStatusToast(`Request #${requestId} priority → ${pri?.name}`, 'status', requestId);
-    } catch (err) {
-      showStatusToast('Failed to update priority: ' + err.message, 'error');
-    } finally {
-      setUpdatingField(null);
-    }
-  };
-
-  const handleAssignedGroupChange = async (e, requestId) => {
-    e.stopPropagation();
-    const groupId = e.target.value || null;
-    setUpdatingField(`group-${requestId}`);
-    try {
-      await api.put(`/api/requests/${requestId}`, { assignedGroup: groupId });
-      const grp = groups.find(g => g.id === groupId);
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedGroup: grp ? { id: grp.id, name: grp.name, color: grp.color } : null } : r));
-      showStatusToast(`Request #${requestId} group → ${grp?.name || 'None'}`, 'status', requestId);
-    } catch (err) {
-      showStatusToast('Failed to update group: ' + err.message, 'error');
-    } finally {
-      setUpdatingField(null);
+      setUpdatingId(null);
     }
   };
 
   const handleClaim = async (e, requestId) => {
     e.stopPropagation();
-    setUpdatingField(`claim-${requestId}`);
+    setUpdatingId(`claim-${requestId}`);
     try {
       await api.put(`/api/requests/${requestId}`, { assignedTo: user.id });
       const assignedStatus = statuses.find(s => s.name === 'Assigned');
@@ -140,19 +113,19 @@ export default function EscalationDashboard() {
     } catch (err) {
       showStatusToast('Failed to claim: ' + err.message, 'error');
     } finally {
-      setUpdatingField(null);
+      setUpdatingId(null);
     }
   };
 
-  const handleDelete = async (e, id) => {
-    e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this request?')) return;
+  const handleDelete = async (id) => {
     try {
       await api.delete(`/api/requests/${id}`);
       setRequests(prev => prev.filter(r => r.id !== id));
       showStatusToast('Request deleted successfully', 'success');
+      setDeleteTarget(null);
     } catch (err) {
       showStatusToast('Failed to delete request: ' + err.message, 'error');
+      setDeleteTarget(null);
     }
   };
 
@@ -167,7 +140,7 @@ export default function EscalationDashboard() {
     return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  const filteredRequests = requests
+  const filteredRequests = displayRequests
     .filter(r => {
       if (statusFilter && r.status?.name !== statusFilter) return false;
       if (priorityFilter && r.priority?.name !== priorityFilter) return false;
@@ -178,7 +151,6 @@ export default function EscalationDashboard() {
           (r.subject || '').toLowerCase().includes(q) ||
           (r.category?.name || '').toLowerCase().includes(q) ||
           (r.client?.name || '').toLowerCase().includes(q) ||
-          (r.assignee?.name || '').toLowerCase().includes(q) ||
           (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q)) ||
           (r.assignedGroup?.name || '').toLowerCase().includes(q)
         );
@@ -197,9 +169,7 @@ export default function EscalationDashboard() {
         case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
         case 'priority': aVal = a.priority?.level || 0; bVal = b.priority?.level || 0; break;
         case 'status': aVal = (a.status?.name || '').toLowerCase(); bVal = (b.status?.name || '').toLowerCase(); break;
-        case 'assignee': aVal = (a.assignee?.name || '').toLowerCase(); bVal = (b.assignee?.name || '').toLowerCase(); break;
         case 'updatedAt': aVal = new Date(a.updatedAt || 0); bVal = new Date(b.updatedAt || 0); break;
-        case 'createdAt': aVal = new Date(a.createdAt || 0); bVal = new Date(b.createdAt || 0); break;
         default: return 0;
       }
       if (aVal < bVal) return sort.dir === 'asc' ? -1 : 1;
@@ -218,13 +188,47 @@ export default function EscalationDashboard() {
       actions.push({ label: 'Claim', status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'claim' });
       actions.push({ label: 'Assign', status: 'Assigned', color: '#8B5CF6', icon: '👥', type: 'assign' });
     }
+    if (statusName === 'Assigned') {
+      actions.push({ label: 'Start Work', status: 'In Progress', color: '#F59E0B', icon: '▶', type: 'status' });
+    }
+    if (statusName === 'In Progress') {
+      actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
+      actions.push({ label: 'Need Info', status: 'Waiting for Client', color: '#F97316', icon: '❓', type: 'status' });
+      actions.push({ label: 'Escalate', status: 'Escalated', color: '#EF4444', icon: '🚨', type: 'status' });
+    }
     if (statusName === 'Waiting for Client') {
       actions.push({ label: 'Follow Up', status: 'In Progress', color: '#F59E0B', icon: '📞', type: 'status' });
     }
-    if (statusName === 'In Progress') {
-      actions.push({ label: 'Request Update', status: 'Waiting for Client', color: '#F97316', icon: '❓', type: 'status' });
+    if (statusName === 'Escalated') {
+      actions.push({ label: 'Handle', status: 'In Progress', color: '#F59E0B', icon: '🔧', type: 'status' });
+      actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
     }
+    actions.push({ label: 'Delete', color: '#EF4444', icon: '🗑', type: 'delete' });
     return actions;
+  };
+
+  const DevStatCard = ({ icon, value, label, color, onClick }) => {
+    const [h, setH] = useState(false);
+    return (
+      <div className="stat-card"
+        style={{
+          cursor: 'pointer',
+          transform: h ? 'translateY(-4px)' : '',
+          boxShadow: h ? `0 8px 25px ${color}30` : '',
+          borderLeft: h ? `4px solid ${color}` : '4px solid transparent',
+          transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s'
+        }}
+        onMouseEnter={() => setH(true)}
+        onMouseLeave={() => setH(false)}
+        onClick={onClick}
+      >
+        <div className="stat-icon" style={{ background: color + '15', color }}>{icon}</div>
+        <div className="stat-content">
+          <h3>{value}</h3>
+          <p>{label}</p>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -232,7 +236,7 @@ export default function EscalationDashboard() {
       <div className="page-header">
         <div>
           <h1>Escalation Team Dashboard</h1>
-          <p>Welcome back, {user?.name?.split(' ')[0]}! Manage incoming requests and coordinate the team.</p>
+          <p>Welcome back, {user?.name?.split(' ')[0]}! Manage, escalate, and resolve critical requests.</p>
         </div>
       </div>
 
@@ -243,58 +247,51 @@ export default function EscalationDashboard() {
         </div>
       )}
 
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => { setStatusFilter(''); setPriorityFilter(''); }}>
-          <div className="stat-icon" style={{ background: '#3B82F615', color: '#3B82F6' }}>📋</div>
-          <div className="stat-content">
-            <h3>{stats.total}</h3>
-            <p>Total</p>
-          </div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer', borderLeft: stats.open > 0 ? '3px solid #3B82F6' : 'none' }} onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')}>
-          <div className="stat-icon" style={{ background: '#3B82F615', color: '#3B82F6' }}>📥</div>
-          <div className="stat-content">
-            <h3>{stats.open}</h3>
-            <p>New</p>
-          </div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer', borderLeft: stats.assigned > 0 ? '3px solid #8B5CF6' : 'none' }} onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')}>
-          <div className="stat-icon" style={{ background: '#8B5CF615', color: '#8B5CF6' }}>👤</div>
-          <div className="stat-content">
-            <h3>{stats.assigned + stats.inProgress}</h3>
-            <p>Assigned</p>
-          </div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer', borderLeft: stats.waiting > 0 ? '3px solid #F97316' : 'none' }} onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')}>
-          <div className="stat-icon" style={{ background: '#F9731615', color: '#F97316' }}>⏳</div>
-          <div className="stat-content">
-            <h3>{stats.waiting}</h3>
-            <p>Awaiting</p>
-          </div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer', borderLeft: stats.resolved > 0 ? '3px solid #10B981' : 'none' }} onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')}>
-          <div className="stat-icon" style={{ background: '#10B98115', color: '#10B981' }}>✅</div>
-          <div className="stat-content">
-            <h3>{stats.resolved}</h3>
-            <p>To Verify</p>
-          </div>
-        </div>
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+        <DevStatCard icon="📥" value={stats.newCount} label="New" color="#3B82F6" onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')} />
+        <DevStatCard icon="📋" value={stats.assigned} label="Newly Assigned" color="#8B5CF6" onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')} />
+        <DevStatCard icon="⚡" value={stats.inProgress} label="In Progress" color="#F59E0B" onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')} />
+        <DevStatCard icon="⏳" value={stats.waiting} label="Awaiting Client" color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
+        <DevStatCard icon="🚨" value={stats.escalated} label="Escalated" color="#EF4444" onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')} />
+        <DevStatCard icon="✅" value={stats.resolved} label="Resolved" color="#10B981" onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')} />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
-          <h3>All Requests ({filteredRequests.length})</h3>
+          <h3>{showAssignedOnly ? 'My Requests' : 'All Requests'} ({filteredRequests.length})</h3>
           <div className="table-header-actions">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
+              <span>Show My Tasks</span>
+              <div
+                onClick={() => { setShowAssignedOnly(!showAssignedOnly); setPage(1); }}
+                style={{
+                  width: '40px', height: '22px', borderRadius: '11px',
+                  background: showAssignedOnly ? '#8B5CF6' : '#D1D5DB',
+                  position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                  flexShrink: 0
+                }}
+              >
+                <div style={{
+                  width: '18px', height: '18px', borderRadius: '50%',
+                  background: 'white', position: 'absolute', top: '2px',
+                  left: showAssignedOnly ? '20px' : '2px',
+                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                }} />
+              </div>
+            </label>
             <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
               <option value="">All Statuses</option>
               {statuses.filter(s => s.name !== 'Closed' && s.name !== 'Reopened').map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
             <select className="filter-select" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}>
               <option value="">All Priorities</option>
-              {priorities.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
             </select>
             <div className="table-search-box">
-              <span className="search-icon">🔍</span>
+              <span className="search-icon"></span>
               <input type="text" placeholder="Search requests..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
             </div>
           </div>
@@ -304,24 +301,22 @@ export default function EscalationDashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable">ID {getSortIcon('id')}</th>
+                <th className="sortable" style={{ width: 70 }}>ID {getSortIcon('id')}</th>
                 <th className="sortable">Request Title {getSortIcon('subject')}</th>
-                <th className="sortable">Client {getSortIcon('client')}</th>
-                <th className="sortable">Group {getSortIcon('groups')}</th>
-                <th className="sortable">Assigned Group {getSortIcon('assignedGroup')}</th>
-                <th className="sortable">Category {getSortIcon('category')}</th>
-                <th className="sortable">Priority {getSortIcon('priority')}</th>
-                <th className="sortable">Status {getSortIcon('status')}</th>
-                <th className="sortable">Assigned To {getSortIcon('assignee')}</th>
-                <th className="sortable">Updated {getSortIcon('updatedAt')}</th>
-                <th>Actions</th>
+                <th className="sortable" style={{ width: 110 }}>Client {getSortIcon('client')}</th>
+                <th className="sortable" style={{ width: 90 }}>Group {getSortIcon('groups')}</th>
+                <th className="sortable" style={{ width: 90 }}>Category {getSortIcon('category')}</th>
+                <th className="sortable" style={{ width: 75 }}>Priority {getSortIcon('priority')}</th>
+                <th className="sortable" style={{ width: 85 }}>Status {getSortIcon('status')}</th>
+                <th className="sortable" style={{ width: 105 }}>Updated {getSortIcon('updatedAt')}</th>
+                <th style={{ width: 110 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginatedRequests.map(r => (
                 <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row">
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
-                  <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.subject}</td>
+                  <td>{r.subject}</td>
                   <td>{r.client?.name || '-'}</td>
                   <td>
                     {r.groups && r.groups.length > 0
@@ -332,111 +327,16 @@ export default function EscalationDashboard() {
                         ))
                       : '-'}
                   </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <select
-                      value={r.assignedGroup?.id || ''}
-                      onChange={(e) => handleAssignedGroupChange(e, r.id)}
-                      disabled={updatingField === `group-${r.id}`}
-                      style={{
-                        padding: '3px 6px',
-                        borderRadius: '4px',
-                        border: '1px solid #d1d5db',
-                        background: r.assignedGroup ? (r.assignedGroup.color || '#6B7280') + '20' : '#F9FAFB',
-                        color: r.assignedGroup?.color || '#6B7280',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        maxWidth: '130px'
-                      }}
-                    >
-                      <option value="">None</option>
-                      {groups.map(g => (
-                        <option key={g.id} value={g.id}>{g.name}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td><span className="category-tag">{r.category?.name || '-'}</span></td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <select
-                      value={r.priorityId || ''}
-                      onChange={(e) => handlePriorityChange(e, r.id, e.target.value)}
-                      disabled={updatingField === `priority-${r.id}`}
-                      style={{
-                        padding: '3px 6px',
-                        borderRadius: '4px',
-                        border: `1px solid ${getPriorityColor(r.priority)}40`,
-                        background: getPriorityColor(r.priority) + '15',
-                        color: getPriorityColor(r.priority),
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {priorities.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
+                  <td><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{r.category?.name || '-'}</span></td>
+                  <td>
+                    <span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>
+                      {r.priority?.name || '-'}
+                    </span>
                   </td>
                   <td>
                     <span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>
                       {r.status?.name || '-'}
                     </span>
-                  </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div style={{ position: 'relative' }}>
-                      <button
-                        onClick={() => setShowAssignModal(showAssignModal === r.id ? null : r.id)}
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          border: '1px solid #d1d5db',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                          background: r.assignee ? '#EEF2FF' : '#FEF3C7',
-                          color: r.assignee ? '#4F46E5' : '#D97706',
-                          maxWidth: '120px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {r.assignee?.name || 'Unassigned'}
-                      </button>
-                      {showAssignModal === r.id && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '100%',
-                          left: 0,
-                          zIndex: 100,
-                          background: 'white',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                          padding: '8px',
-                          minWidth: '180px'
-                        }}>
-                          <button
-                            onClick={(e) => handleAssign(e, r.id, null)}
-                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', border: 'none', background: 'none', cursor: 'pointer', fontSize: '12px', borderRadius: '4px' }}
-                            onMouseOver={(e) => e.target.style.background = '#f3f4f6'}
-                            onMouseOut={(e) => e.target.style.background = 'none'}
-                          >
-                            Unassign
-                          </button>
-                          {developers.map(dev => (
-                            <button
-                              key={dev.id}
-                              onClick={(e) => handleAssign(e, r.id, dev.id)}
-                              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', border: 'none', background: r.assignedTo === dev.id ? '#EEF2FF' : 'none', cursor: 'pointer', fontSize: '12px', borderRadius: '4px', color: r.assignedTo === dev.id ? '#4F46E5' : '#374151' }}
-                              onMouseOver={(e) => e.target.style.background = '#f3f4f6'}
-                              onMouseOut={(e) => e.target.style.background = r.assignedTo === dev.id ? '#EEF2FF' : 'none'}
-                            >
-                              {dev.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
                   </td>
                   <td>{r.updatedAt ? new Date(r.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}</td>
                   <td>
@@ -446,9 +346,9 @@ export default function EscalationDashboard() {
                           <button
                             key={`q-${i}`}
                             className="action-btn-text edit"
-                            disabled={updatingField === `claim-${r.id}`}
+                            disabled={updatingId === `claim-${r.id}`}
                             onClick={(e) => handleClaim(e, r.id)}
-                            style={{ opacity: updatingField === `claim-${r.id}` ? 0.6 : 1 }}
+                            style={{ opacity: updatingId === `claim-${r.id}` ? 0.6 : 1 }}
                           >
                             {action.icon} {action.label}
                           </button>
@@ -460,32 +360,38 @@ export default function EscalationDashboard() {
                           >
                             {action.icon} {action.label}
                           </button>
+                        ) : action.type === 'delete' ? (
+                          <button
+                            key={`q-${i}`}
+                            className="action-btn-text delete"
+                            onClick={() => setDeleteTarget(r.id)}
+                          >
+                            {action.icon} {action.label}
+                          </button>
                         ) : (
                           <button
                             key={`q-${i}`}
                             className="action-btn-text edit"
-                            disabled={updatingField === `status-${r.id}`}
+                            disabled={updatingId === `status-${r.id}`}
                             onClick={(e) => handleQuickStatusUpdate(e, r.id, action.status)}
-                            style={{ opacity: updatingField === `status-${r.id}` ? 0.6 : 1 }}
+                            style={{ opacity: updatingId === `status-${r.id}` ? 0.6 : 1 }}
                           >
                             {action.icon} {action.label}
                           </button>
                         )
                       ))}
-
                     </div>
                   </td>
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="11" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
-                  {requests.length === 0 ? 'No requests in the system.' : 'No requests match your filters.'}
+                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
+                  {displayRequests.length === 0 ? (showAssignedOnly ? 'No requests assigned to you.' : 'No requests yet.') : 'No requests match your filters.'}
                 </td></tr>
               )}
             </tbody>
           </table>
         </div>
-
         <div className="table-footer">
           <div className="table-footer-info">
             <span>Show</span>
@@ -507,6 +413,100 @@ export default function EscalationDashboard() {
           </div>
         </div>
       </div>
+
+      {showAssignModal && (
+        <div className="modal-overlay" onClick={() => setShowAssignModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '360px' }}>
+            <h3>Assign Developer</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '12px' }}>
+              <button
+                onClick={(e) => handleAssign(e, showAssignModal, null)}
+                style={{ textAlign: 'left', padding: '8px 12px', border: 'none', background: '#FEF3C7', color: '#D97706', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Unassign
+              </button>
+              {developers.map(dev => (
+                <button
+                  key={dev.id}
+                  onClick={(e) => handleAssign(e, showAssignModal, dev.id)}
+                  style={{ textAlign: 'left', padding: '8px 12px', border: 'none', background: 'none', cursor: 'pointer', borderRadius: '6px', color: '#374151' }}
+                  onMouseOver={(e) => e.target.style.background = '#f3f4f6'}
+                  onMouseOut={(e) => e.target.style.background = 'none'}
+                >
+                  {dev.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="detail-card" style={{ marginTop: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <h3 style={{ margin: 0, border: 'none', padding: 0 }}>📜 History</h3>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="action-btn-text edit" onClick={() => setShowHistory(!showHistory)}>
+              {showHistory ? 'Hide History' : 'Show History'}
+            </button>
+            <button className="action-btn-text delete" onClick={() => setShowClearConfirm(true)}>
+              Clear History
+            </button>
+          </div>
+        </div>
+        {showHistory && (
+          <div className="timeline">
+            {activityLog.length === 0 ? (
+              <div className="empty-state">No activity yet</div>
+            ) : (
+              <div className="timeline-list">
+                {activityLog.map((a) => (
+                  <div key={a.id} className="timeline-item">
+                    <div className="timeline-dot" style={{ background: a.user?.role === 'admin' ? '#EF4444' : a.user?.role === 'support' ? '#8B5CF6' : '#3B82F6' }}></div>
+                    <div className="timeline-content">
+                      <div className="timeline-header">
+                        <strong>{a.user?.name || 'System'}</strong>
+                        <span className="timeline-time">{a.createdAt ? new Date(a.createdAt).toLocaleString() : ''}</span>
+                      </div>
+                      <p className="timeline-message">{a.message}</p>
+                      {a.request && <small style={{ color: '#6B7280' }}>on: {a.request.subject}</small>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this request?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClearConfirm && (
+        <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to clear this history?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setShowClearConfirm(false)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => {
+                api.delete('/api/activity').then(() => {
+                  setActivityLog([]);
+                  showStatusToast('History cleared', 'success');
+                  setShowClearConfirm(false);
+                }).catch(() => { showStatusToast('Failed to clear history', 'error'); setShowClearConfirm(false); });
+              }} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Clear</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

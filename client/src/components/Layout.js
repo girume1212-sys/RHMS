@@ -101,14 +101,15 @@ export default function Layout() {
       { path: '/requests', label: t('sidebar.requests'), icon: '📄', roles: ['admin'] },
     ]},
     { section: t('sidebar.management'), items: [
-      { path: '/users', label: t('sidebar.users'), icon: '👥', roles: ['admin', 'support'] },
+      { path: '/users', label: t('sidebar.users'), icon: '👥', roles: ['admin'] },
       { path: '/categories', label: t('sidebar.categories'), icon: '📁', roles: ['admin'] },
       { path: '/company', label: 'Company', icon: '🏢', roles: ['admin'] },
       { path: '/groups', label: 'Groups', icon: '👤', roles: ['admin'] },
+      { path: '/feedback', label: 'Feedback', icon: '⭐', roles: ['admin'] },
     ]},
     { section: t('sidebar.reports'), items: [
-      { path: '/reports', label: t('sidebar.reportsAnalytics'), icon: '📊', roles: ['admin', 'support'] },
-      { path: '/activity', label: t('sidebar.activityLog'), icon: '📝', roles: ['admin', 'support'] },
+      { path: '/reports', label: t('sidebar.reportsAnalytics'), icon: '📊', roles: ['admin'] },
+      { path: '/activity', label: t('sidebar.activityLog'), icon: '📝', roles: ['admin'] },
     ]},
     { section: t('sidebar.settings'), items: [
       { path: '/settings', label: t('sidebar.systemSettings'), icon: '⚙️', roles: ['admin'] },

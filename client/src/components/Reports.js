@@ -13,6 +13,7 @@ export default function Reports() {
   const [perfPerPage, setPerfPerPage] = useState(10);
   const [tasksSort, setTasksSort] = useState({ key: '', dir: 'asc' });
   const [perfSort, setPerfSort] = useState({ key: '', dir: 'asc' });
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     api.get('/api/reports/summary').then(setReport);
@@ -91,9 +92,7 @@ export default function Reports() {
   const perfTotalPages = Math.ceil(sortedPerf.length / perfPerPage);
   const paginatedPerf = sortedPerf.slice((perfPage - 1) * perfPerPage, perfPage * perfPerPage);
 
-  const handleDelete = async (e, id) => {
-    e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this request?')) return;
+  const handleDelete = async (id) => {
     try {
       await api.delete(`/api/requests/${id}`);
       setReport(prev => ({
@@ -101,8 +100,10 @@ export default function Reports() {
         newTasks: prev.newTasks.filter(r => r.id !== id)
       }));
       showStatusToast(`Request #${id} deleted`, 'request_deleted', id);
+      setDeleteTarget(null);
     } catch (err) {
       showStatusToast('Failed to delete request', 'error');
+      setDeleteTarget(null);
     }
   };
 
@@ -204,7 +205,7 @@ export default function Reports() {
                       {r.status_name === 'New' ? (
                         <>
                           <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
-                          <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                          <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>Delete</button>
                         </>
                       ) : (
                         <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>—</span>
@@ -304,6 +305,17 @@ export default function Reports() {
         </div>
       </div>
 
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this request?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

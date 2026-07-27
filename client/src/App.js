@@ -16,6 +16,7 @@ import Categories from './components/Categories';
 import Priorities from './components/Priorities';
 import Roles from './components/Roles';
 import Groups from './components/Groups';
+import Feedback from './components/Feedback';
 import Reports from './components/Reports';
 import ActivityLog from './components/ActivityLog';
 import Settings from './components/Settings';
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route path="priorities" element={<Priorities />} />
         <Route path="roles" element={<Roles />} />
         <Route path="groups" element={<Groups />} />
+        <Route path="feedback" element={<Feedback />} />
         <Route path="reports" element={<Reports />} />
         <Route path="activity" element={<ActivityLog />} />
         <Route path="settings" element={<Settings />} />

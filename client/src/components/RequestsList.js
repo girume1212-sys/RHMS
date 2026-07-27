@@ -21,6 +21,7 @@ export default function RequestsList() {
   const [perPage, setPerPage] = useState(10);
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
   const [toasts, setToasts] = useState([]);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const navigate = useNavigate();
 
   const isClient = user?.role === 'client';
@@ -66,17 +67,17 @@ export default function RequestsList() {
     return colors[priority?.name] || '#6B7280';
   };
 
-  const handleDelete = async (e, id) => {
-    e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this request?')) return;
+  const handleDelete = async (id) => {
     try {
       await api.delete(`/api/requests/${id}`);
       setRequests(prev => prev.filter(r => r.id !== id));
       addToast('Request deleted successfully!');
       showStatusToast(`Request #${id} deleted`, 'request_deleted', id);
+      setDeleteTarget(null);
     } catch (err) {
       setError('Failed to delete request: ' + err.message);
       addToast('Failed to delete request: ' + err.message, 'error');
+      setDeleteTarget(null);
     }
   };
 
@@ -266,12 +267,12 @@ export default function RequestsList() {
                         {(user?.role === 'admin' || user?.role === 'support') && (r.statusId === '1' || r.statusId === '2') ? (
                           <>
                             <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
-                            <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                            <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>Delete</button>
                           </>
                         ) : user?.role === 'client' && r.statusId === '1' ? (
                           <>
                             <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
-                            <button className="action-btn-text delete" onClick={(e) => handleDelete(e, r.id)}>Delete</button>
+                            <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>Delete</button>
                           </>
                         ) : (
                           <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>—</span>
@@ -302,6 +303,18 @@ export default function RequestsList() {
               ))}
               <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>›</button>
               <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>»</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this request?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
         </div>

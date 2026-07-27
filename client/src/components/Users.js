@@ -20,6 +20,7 @@ export default function Users() {
   const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
   const groupDropdownRef = useRef(null);
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -154,15 +155,16 @@ export default function Users() {
   };
 
   const handleDelete = async (id, name) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
     try {
       await api.delete(`/api/users/${id}`);
       loadUsers();
       addToast(`User "${name}" deleted successfully!`);
       showStatusToast(`User "${name}" deleted`, 'request_deleted');
+      setDeleteTarget(null);
     } catch (err) {
       setError('Failed to delete user: ' + err.message);
       addToast('Failed to delete user: ' + err.message, 'error');
+      setDeleteTarget(null);
     }
   };
 
@@ -297,7 +299,7 @@ export default function Users() {
                     <td>
                       <div className="actions-cell-inline">
                         <button className="action-btn-text edit" onClick={() => openEdit(u)}>Edit</button>
-                        <button className="action-btn-text delete" onClick={() => handleDelete(u.id, u.name)}>Delete</button>
+                        <button className="action-btn-text delete" onClick={() => setDeleteTarget({ id: u.id, name: u.name })}>Delete</button>
                       </div>
                     </td>
                   </tr>
@@ -327,6 +329,18 @@ export default function Users() {
               ))}
               <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>›</button>
               <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>»</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this user?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => handleDelete(deleteTarget.id, deleteTarget.name)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
         </div>

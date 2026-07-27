@@ -89,6 +89,16 @@ const pool = require('./db');
     `);
     console.log('feedback table ready');
     await pool.query(`
+      INSERT INTO feedback (id, request_id, user_id, rating, comment, created_at) VALUES
+        ('FB-001', 'REQ-2024-00122', '5', 5, 'Great work! The payroll issue was resolved quickly.', '2024-05-18T10:00:00.000Z'),
+        ('FB-002', 'REQ-2024-00116', '5', 4, 'The duplicate attendance entries are fixed. Thank you!', '2024-05-13T14:00:00.000Z'),
+        ('FB-003', 'REQ-2024-00119', '8', 5, 'Profile saving works perfectly now.', '2024-05-17T09:00:00.000Z'),
+        ('FB-004', 'REQ-2024-00114', '7', 3, 'Fixed but took some time. Mobile login works now.', '2024-05-11T11:00:00.000Z'),
+        ('FB-005', 'REQ-2024-00123', '10', 5, 'Import feature works great now. Very helpful!', '2024-05-19T10:00:00.000Z')
+      ON CONFLICT DO NOTHING
+    `);
+    console.log('feedback data inserted');
+    await pool.query(`
       INSERT INTO categories (id, name, description, color) VALUES
         ('1', 'Hardware', 'Computer, printer, peripherals', '#3B82F6'),
         ('2', 'Software', 'Applications, OS, licensing', '#10B981'),
@@ -638,7 +648,8 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
     const result = await pool.query(query, params);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     try {
-      await pool.query('DELETE FROM user_groups WHERE user_id = $1', [req.params.id]);
+    await pool.query('UPDATE feedback SET user_id = NULL WHERE user_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM user_groups WHERE user_id = $1', [req.params.id]);
       if (groupIds && groupIds.length > 0) {
         for (const gid of groupIds) {
           await pool.query('INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, gid]);
@@ -676,6 +687,7 @@ app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req
     await pool.query('UPDATE requests SET assigned_to = NULL WHERE assigned_to = $1', [req.params.id]);
     await pool.query('UPDATE comments SET user_id = NULL WHERE user_id = $1', [req.params.id]);
     await pool.query('UPDATE activity_log SET user_id = NULL WHERE user_id = $1', [req.params.id]);
+    await pool.query('UPDATE feedback SET user_id = NULL WHERE user_id = $1', [req.params.id]);
     await pool.query('DELETE FROM user_groups WHERE user_id = $1', [req.params.id]);
     await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
     res.json({ message: 'User deleted' });
@@ -1266,6 +1278,34 @@ app.post('/api/requests/:id/feedback', authMiddleware, async (req, res) => {
   }
 });
 
+app.get('/api/feedback', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT f.*, u.name AS user_name, r.subject AS request_subject
+       FROM feedback f
+       LEFT JOIN users u ON f.user_id = u.id
+       LEFT JOIN requests r ON f.request_id = r.id
+       ORDER BY f.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/feedback/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const existing = await pool.query('SELECT id FROM feedback WHERE id = $1', [req.params.id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Feedback not found' });
+    await pool.query('DELETE FROM feedback WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Feedback deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Upload Route
 app.post('/api/upload', authMiddleware, async (req, res, next) => {
   try {
@@ -1529,6 +1569,16 @@ app.delete('/api/requests/:id/activity', authMiddleware, async (req, res) => {
     }
     await pool.query('DELETE FROM activity_log WHERE request_id = $1', [req.params.id]);
     res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to clear activity log' });
+  }
+});
+
+app.delete('/api/activity', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    await pool.query('DELETE FROM activity_log');
+    res.json({ success: true, message: 'All activity cleared' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to clear activity log' });

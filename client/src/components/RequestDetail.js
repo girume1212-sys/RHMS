@@ -29,6 +29,7 @@ export default function RequestDetail() {
   const [activityLog, setActivityLog] = useState([]);
   const [loadingActivity, setLoadingActivity] = useState(true);
   const [showHistory, setShowHistory] = useState(true);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const isClient = user?.role === 'client';
   const basePath = isClient ? '/client' : '';
@@ -583,6 +584,12 @@ export default function RequestDetail() {
                 >
                   {showHistory ? 'Hide History' : 'Show History'}
                 </button>
+                <button
+                  className="action-btn-text delete"
+                  onClick={() => setShowClearConfirm(true)}
+                >
+                  Clear History
+                </button>
               </div>
             </div>
 
@@ -659,6 +666,24 @@ export default function RequestDetail() {
           </div>
         </div>
       </div>
+
+      {showClearConfirm && (
+        <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to clear this history?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setShowClearConfirm(false)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => {
+                api.delete('/api/requests/' + id + '/activity').then(() => {
+                  setActivityLog([]);
+                  showStatusToast('History cleared', 'success');
+                  setShowClearConfirm(false);
+                }).catch(() => { showStatusToast('Failed to clear history', 'error'); setShowClearConfirm(false); });
+              }} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Clear</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {lightbox && (
         <div className="lightbox-overlay" onClick={() => setLightbox(null)}>
