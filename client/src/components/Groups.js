@@ -22,7 +22,7 @@ export default function Groups() {
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -122,7 +122,7 @@ export default function Groups() {
     setMemberGroup(group);
     setMembersLoading(true);
     setShowAddMember(false);
-    setSelectedUserId('');
+    setSelectedUserIds([]);
     try {
       const data = await api.get(`/api/groups/${group.id}/members`);
       setMembers(data);
@@ -133,13 +133,15 @@ export default function Groups() {
   };
 
   const handleAddMember = async () => {
-    if (!selectedUserId) return;
+    if (!selectedUserIds.length) return;
     try {
-      await api.post(`/api/groups/${memberGroup.id}/members`, { user_id: selectedUserId });
-      setSelectedUserId('');
+      for (const uid of selectedUserIds) {
+        await api.post(`/api/groups/${memberGroup.id}/members`, { user_id: uid });
+      }
+      setSelectedUserIds([]);
       const data = await api.get(`/api/groups/${memberGroup.id}/members`);
       setMembers(data);
-      addToast('Member added successfully!');
+      addToast(`${selectedUserIds.length} member(s) added successfully!`);
       loadGroups();
     } catch (err) {
       addToast('Failed to add member: ' + err.message, 'error');
@@ -354,33 +356,71 @@ export default function Groups() {
               </div>
               <button className="modal-close" onClick={() => { setMemberGroup(null); setShowAddMember(false); }}>&times;</button>
             </div>
-            <div className="modal-body">
-              {membersLoading ? (
-                <div className="loading-screen"><div className="spinner"></div></div>
-              ) : (
-                <>
-                  {!showAddMember ? (
-                    <button className="btn btn-primary" style={{ marginBottom: '16px' }} onClick={() => setShowAddMember(true)}>+ Add Member</button>
-                  ) : (
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
-                      <select
-                        value={selectedUserId}
-                        onChange={(e) => setSelectedUserId(e.target.value)}
-                        style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                      >
-                        <option value="">Select a user...</option>
-                        {getNonMembers().map(u => (
-                          <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
-                        ))}
-                      </select>
-                      <button className="btn btn-primary" onClick={handleAddMember} disabled={!selectedUserId}>Add</button>
-                      <button className="btn btn-outline" onClick={() => { setShowAddMember(false); setSelectedUserId(''); }}>Cancel</button>
-                    </div>
-                  )}
-                  {members.length === 0 ? (
-                    <div className="empty-state">No members in this group yet.</div>
-                  ) : (
-                    <div className="table-card" style={{ overflow: 'auto' }}>
+              <div className="modal-body">
+                {membersLoading ? (
+                  <div className="loading-screen"><div className="spinner"></div></div>
+                ) : (
+                  <>
+                    <button className="btn btn-primary" style={{ marginBottom: '16px' }} onClick={() => setShowAddMember(prev => !prev)}>
+                      {showAddMember ? '− Cancel' : '+ Add Member'}
+                    </button>
+                    {showAddMember && (
+                      <div className="add-member-panel">
+                        {selectedUserIds.length > 0 && (
+                          <div className="selected-members-list">
+                            {selectedUserIds.map(id => {
+                              const u = allUsers.find(u => u.id === Number(id));
+                              return u ? (
+                                <span key={id} className="selected-member-tag">
+                                  {u.name}
+                                  <button className="remove-tag-btn" onClick={() => setSelectedUserIds(prev => prev.filter(x => x !== id))}>&times;</button>
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
+                        <div className="member-checkbox-list">
+                          {getNonMembers().map(u => {
+                            const sid = String(u.id);
+                            const checked = selectedUserIds.includes(sid);
+                            return (
+                              <label key={u.id} className={`member-checkbox-row ${checked ? 'checked' : ''}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    setSelectedUserIds(prev =>
+                                      checked ? prev.filter(x => x !== sid) : [...prev, sid]
+                                    );
+                                  }}
+                                />
+                                <span className="member-checkbox-avatar" style={{ background: getRoleColor(u.role) }}>
+                                  {u.name.charAt(0)}
+                                </span>
+                                <span className="member-checkbox-name">{u.name}</span>
+                                <span className="member-checkbox-email">{u.email}</span>
+                                <span className="member-checkbox-role" style={{ color: getRoleColor(u.role) }}>
+                                  {u.role === 'support' ? 'Escalation Team' : u.role.charAt(0).toUpperCase() + u.role.slice(1)}
+                                </span>
+                              </label>
+                            );
+                          })}
+                          {getNonMembers().length === 0 && (
+                            <div className="empty-state" style={{ marginTop: '8px' }}>All users are already members.</div>
+                          )}
+                        </div>
+                        <div className="add-member-actions">
+                          <button className="btn btn-primary" onClick={handleAddMember} disabled={!selectedUserIds.length}>
+                            + Add Selected ({selectedUserIds.length})
+                          </button>
+                          <button className="btn btn-outline" onClick={() => { setShowAddMember(false); setSelectedUserIds([]); }}>Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                    {members.length === 0 ? (
+                      <div className="empty-state">No members in this group yet.</div>
+                    ) : (
+                      <div className="table-card" style={{ overflow: 'auto' }}>
             <table className="data-table" style={{ color: '#FFFFFF' }}>
                         <thead>
                           <tr>
