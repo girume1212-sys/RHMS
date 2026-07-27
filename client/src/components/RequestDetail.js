@@ -30,6 +30,12 @@ export default function RequestDetail() {
   const [loadingActivity, setLoadingActivity] = useState(true);
   const [showHistory, setShowHistory] = useState(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [existingFeedback, setExistingFeedback] = useState(null);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
   const isClient = user?.role === 'client';
   const basePath = isClient ? '/client' : '';
@@ -52,7 +58,35 @@ export default function RequestDetail() {
     }
     api.get('/api/categories').then(setCategories);
     api.get('/api/priorities').then(setPriorities);
+    loadFeedback();
   }, [id]);
+
+  const loadFeedback = () => {
+    api.get(`/api/requests/${id}/feedback`).then(data => {
+      if (data) {
+        setExistingFeedback(data);
+        setFeedbackRating(data.rating);
+        setFeedbackComment(data.comment || '');
+        setFeedbackSubmitted(true);
+      }
+    }).catch(() => {});
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (feedbackRating === 0) return;
+    setFeedbackSubmitting(true);
+    try {
+      await api.post(`/api/requests/${id}/feedback`, { rating: feedbackRating, comment: feedbackComment });
+      setFeedbackSubmitted(true);
+      addToast('Feedback submitted successfully! Thank you!');
+      showStatusToast('Feedback submitted', 'success');
+      loadFeedback();
+    } catch (err) {
+      addToast('Failed to submit feedback: ' + err.message, 'error');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
 
   const loadRequest = () => {
     api.get(`/api/requests/${id}`).then(data => {
@@ -417,6 +451,112 @@ export default function RequestDetail() {
           )}
 
           {/* Timeline / History removed from main - moved to sidebar */}
+
+          {/* Feedback Section (Client, Resolved/Closed only) */}
+          {isClient && (request.status?.name === 'Resolved' || request.status?.name === 'Closed') && (
+            <div className="feedback-card">
+              {existingFeedback && feedbackSubmitted ? (
+                <div className="feedback-submitted">
+                  <div className="feedback-checkmark">✓</div>
+                  <h4 className="feedback-thanks">Thank You for Your Feedback!</h4>
+                  <p className="feedback-subtitle">Your rating helps us improve our service.</p>
+                  <div className="feedback-stars-display">
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <svg key={i} className={`feedback-star ${i <= existingFeedback.rating ? 'filled' : ''}`} width="32" height="32" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                    ))}
+                  </div>
+                  <div className="feedback-rating-label">
+                    {existingFeedback.rating === 1 ? 'Poor' :
+                     existingFeedback.rating === 2 ? 'Fair' :
+                     existingFeedback.rating === 3 ? 'Good' :
+                     existingFeedback.rating === 4 ? 'Very Good' : 'Excellent'}
+                    <span className="feedback-rating-num">({existingFeedback.rating}/5)</span>
+                  </div>
+                  {existingFeedback.comment && (
+                    <div className="feedback-comment-display">
+                      <div className="feedback-comment-quote">"</div>
+                      <p>{existingFeedback.comment}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="feedback-form">
+                  <div className="feedback-form-header">
+                    <span className="feedback-form-icon">⭐</span>
+                    <h3>Rate This Request</h3>
+                  </div>
+                  <p className="feedback-form-prompt">
+                    How would you rate the resolution of this request?
+                  </p>
+                  <div className="feedback-stars-container">
+                    <div className="feedback-stars-row">
+                      {[1, 2, 3, 4, 5].map(i => {
+                        const active = i <= (hoverRating || feedbackRating);
+                        return (
+                        <button
+                          key={i}
+                          type="button"
+                          className={`feedback-star-btn ${active ? 'active' : ''}`}
+                          onClick={() => setFeedbackRating(i)}
+                          onMouseEnter={() => setHoverRating(i)}
+                          onMouseLeave={() => setHoverRating(0)}
+                          aria-label={`Rate ${i} star${i > 1 ? 's' : ''}`}
+                        >
+                          <svg width="40" height="40" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                        </button>
+                        );
+                      })}
+                    </div>
+                    <div className="feedback-rating-hint">
+                      {(hoverRating || feedbackRating) === 0 ? (
+                        <span className="hint-default">Tap a star to rate</span>
+                      ) : (
+                        <span className={`hint-active rating-${hoverRating || feedbackRating}`}>
+                          {(hoverRating || feedbackRating) === 1 && '😞 Poor'}
+                          {(hoverRating || feedbackRating) === 2 && '😐 Fair'}
+                          {(hoverRating || feedbackRating) === 3 && '🙂 Good'}
+                          {(hoverRating || feedbackRating) === 4 && '😊 Very Good'}
+                          {(hoverRating || feedbackRating) === 5 && '🤩 Excellent'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="feedback-textarea-group">
+                    <label className="feedback-textarea-label">
+                      Share more details <span>(optional)</span>
+                    </label>
+                    <textarea
+                      value={feedbackComment}
+                      onChange={(e) => {
+                        if (e.target.value.length <= 500) setFeedbackComment(e.target.value);
+                      }}
+                      placeholder="What did you like or what could we improve?..."
+                      rows={3}
+                      className="feedback-textarea"
+                    />
+                    <div className="feedback-char-count">
+                      {feedbackComment.length}/500
+                    </div>
+                  </div>
+                  <button
+                    className="feedback-submit-btn"
+                    onClick={handleFeedbackSubmit}
+                    disabled={feedbackSubmitting || feedbackRating === 0}
+                  >
+                    {feedbackSubmitting ? (
+                      <><span className="feedback-spinner"></span> Submitting...</>
+                    ) : (
+                      'Submit Feedback'
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Comments / Reply */}
           <div className="detail-card">
