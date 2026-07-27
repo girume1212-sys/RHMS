@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
-
-const API_BASE = 'http://localhost:5000';
+import { API_BASE } from '../api';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -124,10 +123,14 @@ export default function ClientLayout() {
           if (!dismissedIds.current.has(notification.id)) {
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
           }
-
           setUnreadCount(prev => prev + 1);
 
+          if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
+            window.dispatchEvent(new CustomEvent('refresh-requests'));
+          }
+
           playNotificationSound();
+
         } catch (e) {
           console.error('SSE parse error:', e);
         }

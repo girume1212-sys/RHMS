@@ -252,11 +252,7 @@ export default function Users() {
           <div className="table-header-bar">
             <h3>Users ({filteredUsers.length})</h3>
             <div className="table-header-actions">
-              <div className="table-search-box">
-                <span className="search-icon">🔍</span>
-                <input type="text" placeholder="Search users..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
-              </div>
-            </div>
+                </div>
           </div>
 
           <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>

@@ -26,11 +26,14 @@ export default function DeveloperDashboard() {
 
   useEffect(() => {
     loadData();
+    const handleRefresh = () => loadData();
+    window.addEventListener('refresh-requests', handleRefresh);
+    return () => window.removeEventListener('refresh-requests', handleRefresh);
   }, []);
 
   const loadData = () => {
     Promise.all([
-      api.get('/api/requests'),
+      api.get(`/api/requests?myRequests=${showAssignedOnly}`),
       api.get('/api/statuses'),
       api.get('/api/groups'),
       api.get('/api/activity')
@@ -42,7 +45,11 @@ export default function DeveloperDashboard() {
     }).catch(err => setError('Failed to load data: ' + err.message));
   };
 
-  const displayRequests = showAssignedOnly ? requests.filter(r => r.assignedTo === user.id) : requests;
+  useEffect(() => {
+    loadData();
+  }, [showAssignedOnly]);
+
+  const displayRequests = requests;
 
   const stats = {
     total: displayRequests.length,
@@ -100,10 +107,11 @@ export default function DeveloperDashboard() {
     e.stopPropagation();
     setUpdatingId(`claim-${requestId}`);
     try {
-      await api.put(`/api/requests/${requestId}`, { assignedTo: user.id });
+      const data = await api.put(`/api/requests/${requestId}/claim`);
       const assignedStatus = statuses.find(s => s.name === 'Assigned');
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: user.id, assignee: { id: user.id, name: user.name, email: user.email }, status: assignedStatus || r.status } : r));
+      setRequests(prev => prev.filter(r => r.id !== requestId));
       showStatusToast('Request claimed successfully', 'assignment', requestId);
+      loadData();
     } catch (err) {
       showStatusToast('Failed to claim: ' + err.message, 'error');
     } finally {
@@ -174,7 +182,10 @@ export default function DeveloperDashboard() {
   const totalPages = Math.ceil(filteredRequests.length / perPage);
   const paginatedRequests = filteredRequests.slice((page - 1) * perPage, page * perPage);
 
+  const isReadOnly = (r) => r.assignedTo && r.assignedTo !== user.id;
+
   const quickActions = (r) => {
+    if (isReadOnly(r)) return [];
     const statusName = r.status?.name;
     const actions = [];
 
@@ -299,9 +310,9 @@ export default function DeveloperDashboard() {
             </thead>
             <tbody>
               {paginatedRequests.map(r => (
-                <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row">
+                <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row" style={isReadOnly(r) ? { opacity: 0.75 } : {}}>
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
-                  <td>{r.subject}</td>
+                  <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>(read-only)</span>}</td>
                   <td>{r.client?.name || '-'}</td>
                   <td>
                     {r.groups && r.groups.length > 0

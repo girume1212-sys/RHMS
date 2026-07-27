@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { validateEmail } from '../utils/validation';
 import ValidationError from './ValidationError';
 import { useTranslation } from '../i18n/useTranslation';
+import { API_BASE } from '../api';
 
 export default function Login() {
   const { t } = useTranslation();
@@ -41,6 +42,7 @@ export default function Login() {
         window.google.accounts.id.initialize({
           client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
           callback: handleGoogleResponse,
+          locale: 'en',
         });
         if (googleBtnRef.current) {
           window.google.accounts.id.renderButton(googleBtnRef.current, {
@@ -61,7 +63,7 @@ export default function Login() {
     setGoogleLoading(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:5000/api/auth/google', {
+      const res = await fetch(`${API_BASE}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: response.credential }),
@@ -143,7 +145,8 @@ export default function Login() {
               <input
                 type="text"
                 value={usernameOrEmail}
-                onChange={(e) => setUsernameOrEmail(e.target.value)}
+                onChange={(e) => setUsernameOrEmail(e.target.value.replace(/\s/g, ''))}
+                onKeyDown={(e) => e.key === ' ' && e.preventDefault()}
                 placeholder="Username or Email"
                 required
               />

@@ -23,6 +23,8 @@ export default function Groups() {
   const [membersLoading, setMembersLoading] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -89,15 +91,16 @@ export default function Groups() {
   };
 
   const handleDelete = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete "${name}"? Users in this group will be unassigned.`)) return;
     try {
       await api.delete(`/api/groups/${id}`);
       loadGroups();
       addToast(`Group "${name}" deleted successfully!`);
       showStatusToast(`Group "${name}" deleted`, 'request_deleted');
+      setDeleteTarget(null);
     } catch (err) {
       setError('Failed to delete group: ' + err.message);
       addToast('Failed to delete group: ' + err.message, 'error');
+      setDeleteTarget(null);
     }
   };
 
@@ -139,6 +142,7 @@ export default function Groups() {
         await api.post(`/api/groups/${memberGroup.id}/members`, { user_id: uid });
       }
       setSelectedUserIds([]);
+      setShowAddMember(false);
       const data = await api.get(`/api/groups/${memberGroup.id}/members`);
       setMembers(data);
       addToast(`${selectedUserIds.length} member(s) added successfully!`);
@@ -149,14 +153,15 @@ export default function Groups() {
   };
 
   const handleRemoveMember = async (userId, userName) => {
-    if (!window.confirm(`Remove "${userName}" from this group?`)) return;
     try {
       await api.delete(`/api/groups/${memberGroup.id}/members/${userId}`);
       setMembers(prev => prev.filter(m => m.id !== userId));
       addToast(`"${userName}" removed from group`);
       loadGroups();
+      setRemoveTarget(null);
     } catch (err) {
       addToast('Failed to remove member: ' + err.message, 'error');
+      setRemoveTarget(null);
     }
   };
 
@@ -273,7 +278,7 @@ export default function Groups() {
                       <div className="actions-cell-inline">
                         <button className="action-btn-text edit" onClick={(e) => { e.stopPropagation(); openEdit(g); }}>Edit</button>
                         <button className="action-btn-text" style={{ color: '#3B82F6' }} onClick={(e) => { e.stopPropagation(); openMembers(g); }}>Members</button>
-                        <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); handleDelete(g.id, g.name); }}>Delete</button>
+                        <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}>Delete</button>
                       </div>
                     </td>
                   </tr>
@@ -417,9 +422,10 @@ export default function Groups() {
                         </div>
                       </div>
                     )}
-                    {members.length === 0 ? (
+                    {!showAddMember && members.length === 0 && (
                       <div className="empty-state">No members in this group yet.</div>
-                    ) : (
+                    )}
+                    {!showAddMember && members.length > 0 && (
                       <div className="table-card" style={{ overflow: 'auto' }}>
             <table className="data-table" style={{ color: '#FFFFFF' }}>
                         <thead>
@@ -446,7 +452,7 @@ export default function Groups() {
                                 </span>
                               </td>
                               <td>
-                                <button className="action-btn-text delete" onClick={() => handleRemoveMember(m.id, m.name)}>Remove</button>
+                                <button className="action-btn-text delete" onClick={() => setRemoveTarget(m)}>Remove</button>
                               </td>
                             </tr>
                           ))}
@@ -459,6 +465,44 @@ export default function Groups() {
             </div>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => { setMemberGroup(null); setShowAddMember(false); }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {removeTarget && (
+        <div className="modal-overlay" onClick={() => setRemoveTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <p style={{ color: '#fff', fontSize: '17px', lineHeight: 1.6, margin: '28px 24px 24px' }}>
+              Are you sure you want to remove this user?
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 28px' }}>
+              <button className="btn btn-outline" onClick={() => setRemoveTarget(null)}
+                style={{ padding: '10px 24px' }}>Cancel</button>
+              <button onClick={() => handleRemoveMember(removeTarget.id, removeTarget.name)}
+                style={{ padding: '10px 24px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <p style={{ color: '#fff', fontSize: '17px', lineHeight: 1.6, margin: '28px 24px 24px' }}>
+              Are you sure you want to delete this group?
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 28px' }}>
+              <button className="btn btn-outline" onClick={() => setDeleteTarget(null)}
+                style={{ padding: '10px 24px' }}>Cancel</button>
+              <button onClick={() => handleDelete(deleteTarget.id, deleteTarget.name)}
+                style={{ padding: '10px 24px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>
+                Delete
+              </button>
             </div>
           </div>
         </div>

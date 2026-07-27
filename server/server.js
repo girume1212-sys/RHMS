@@ -89,16 +89,6 @@ const pool = require('./db');
     `);
     console.log('feedback table ready');
     await pool.query(`
-      INSERT INTO feedback (id, request_id, user_id, rating, comment, created_at) VALUES
-        ('FB-001', 'REQ-2024-00122', '5', 5, 'Great work! The payroll issue was resolved quickly.', '2024-05-18T10:00:00.000Z'),
-        ('FB-002', 'REQ-2024-00116', '5', 4, 'The duplicate attendance entries are fixed. Thank you!', '2024-05-13T14:00:00.000Z'),
-        ('FB-003', 'REQ-2024-00119', '8', 5, 'Profile saving works perfectly now.', '2024-05-17T09:00:00.000Z'),
-        ('FB-004', 'REQ-2024-00114', '7', 3, 'Fixed but took some time. Mobile login works now.', '2024-05-11T11:00:00.000Z'),
-        ('FB-005', 'REQ-2024-00123', '10', 5, 'Import feature works great now. Very helpful!', '2024-05-19T10:00:00.000Z')
-      ON CONFLICT DO NOTHING
-    `);
-    console.log('feedback data inserted');
-    await pool.query(`
       INSERT INTO categories (id, name, description, color) VALUES
         ('1', 'Hardware', 'Computer, printer, peripherals', '#3B82F6'),
         ('2', 'Software', 'Applications, OS, licensing', '#10B981'),
@@ -111,6 +101,21 @@ const pool = require('./db');
       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, color = EXCLUDED.color
     `);
     console.log('categories ready');
+    await pool.query(`
+      CREATE SEQUENCE IF NOT EXISTS requests_id_seq
+      START WITH 129
+      INCREMENT BY 1
+      NO MINVALUE
+      NO MAXVALUE
+      CACHE 1
+    `);
+    // Sync sequence to current max ID
+    await pool.query("SELECT setval('requests_id_seq', COALESCE((SELECT MAX(CAST(SPLIT_PART(id, '-', 3) AS INTEGER)) FROM requests WHERE id LIKE 'REQ-2024-%'), 128))");
+    await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS category_id VARCHAR(50) REFERENCES categories(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS priority_id VARCHAR(50)`);
+    await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS status_id VARCHAR(50)`);
+    await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT '[]'`);
+    console.log('requests columns ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255) DEFAULT ''`);
     console.log('company_name column ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN DEFAULT false`);
@@ -894,8 +899,14 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       params.push(req.user.id);
     }
     if (req.user.role === 'developer' || req.user.role === 'support') {
-      query += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++}))`;
-      params.push(req.user.id, req.user.id);
+      const myRequests = req.query.myRequests === 'true';
+      if (myRequests) {
+        query += ` AND r.assigned_to = $${paramIndex++}`;
+        params.push(req.user.id);
+      } else {
+        query += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++}))`;
+        params.push(req.user.id, req.user.id);
+      }
     }
 
     const { status, priority, category, search } = req.query;
@@ -1039,9 +1050,12 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
 app.post('/api/requests', authMiddleware, async (req, res) => {
   try {
     const { subject, description, categoryId, priorityId, attachments } = req.body;
-    const countResult = await pool.query('SELECT COUNT(*) FROM requests');
-    const count = parseInt(countResult.rows[0].count) + 129;
-    const id = `REQ-2024-${String(count).padStart(5, '0')}`;
+    if (!subject || !subject.trim() || !description || !description.trim() || !categoryId) {
+      return res.status(400).json({ error: 'Please fill all required fields' });
+    }
+    const countResult = await pool.query("SELECT nextval('requests_id_seq') AS next_num");
+    const nextNum = parseInt(countResult.rows[0].next_num);
+    const id = `REQ-2024-${String(nextNum).padStart(5, '0')}`;
     const clientId = req.user.role === 'client' ? req.user.id : req.body.clientId;
     const now = new Date().toISOString();
 
@@ -1073,8 +1087,8 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
 
     res.status(201).json({ id, subject, description, clientId, categoryId, priorityId: priorityId || '2', statusId: '1', assignedTo: null, attachments: attachments || [], createdAt: now, updatedAt: now });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Please fill all required fields' });
+    console.error('Create request error:', err.message);
+    res.status(500).json({ error: 'Failed to create request: ' + err.message });
   }
 });
 
@@ -1091,17 +1105,34 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       if (req.user.role === 'client' && existing.rows[0].client_id !== req.user.id) {
         return res.status(403).json({ error: 'Access denied' });
       }
-      if (req.user.role !== 'client' && existing.rows[0].assigned_to !== req.user.id) {
-        if (existing.rows[0].assigned_to !== null) {
-          return res.status(403).json({ error: 'Access denied - request assigned to another user' });
+      if (req.user.role !== 'client') {
+        const isAssignedToUser = existing.rows[0].assigned_to === req.user.id;
+        const isUnassigned = existing.rows[0].assigned_to === null;
+        // Developers can only modify requests assigned to them personally
+        if (req.user.role === 'developer' && !isAssignedToUser) {
+          return res.status(403).json({ error: 'Access denied - you can only modify requests assigned to you' });
         }
-        const groupAccess = await pool.query(
-          'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
-          [req.params.id, req.user.id]
-        );
-        if (groupAccess.rows.length === 0) {
-          return res.status(403).json({ error: 'Access denied' });
-        }
+        // Support/escalation can only modify escalated requests assigned to them
+        if (req.user.role === 'support') {
+          const isEscalated = existing.rows[0].status_id === '9';
+          if (!isEscalated || !isAssignedToUser) {
+            return res.status(403).json({ error: 'Access denied - you can only modify escalated requests assigned to you' });
+          }
+        } else {
+          if (!isAssignedToUser && !isUnassigned) {
+            return res.status(403).json({ error: 'Access denied - request assigned to another user' });
+          }
+          // For unassigned requests, verify group access
+          if (isUnassigned) {
+          const groupAccess = await pool.query(
+            'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+            [req.params.id, req.user.id]
+          );
+          if (groupAccess.rows.length === 0) {
+            return res.status(403).json({ error: 'Access denied' });
+}
+    }
+    }
       }
     }
 
@@ -1177,6 +1208,75 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
     }
 
     res.json({ id: req.params.id, subject: subject || existing.rows[0].subject, description: description || existing.rows[0].description, clientId: existing.rows[0].client_id, categoryId: categoryId || existing.rows[0].category_id, priorityId: priorityId || existing.rows[0].priority_id, statusId: newStatusId, assignedTo: newAssignedTo, assignedGroup: assignedGroup || existing.rows[0].assigned_group, attachments: newAttachments, createdAt: existing.rows[0].created_at, updatedAt: now });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
+  try {
+    const requestId = req.params.id;
+    const existing = await pool.query('SELECT * FROM requests WHERE id = $1', [requestId]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+
+    if (existing.rows[0].assigned_to) {
+      return res.status(400).json({ error: 'Request is already assigned to another user' });
+    }
+
+    if (req.user.role === 'client') {
+      return res.status(403).json({ error: 'Clients cannot claim requests' });
+    }
+
+    if (req.user.role === 'support') {
+      return res.status(403).json({ error: 'Escalation team cannot claim requests' });
+    }
+
+    const groupAccess = await pool.query(
+      'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+      [requestId, req.user.id]
+    );
+    if (groupAccess.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied - you are not a member of a group assigned to this request' });
+    }
+
+    const now = new Date().toISOString();
+    const assignedStatus = '2';
+
+    await pool.query(
+      'UPDATE requests SET assigned_to = $1, status_id = $2, updated_at = $3 WHERE id = $4',
+      [req.user.id, assignedStatus, now, requestId]
+    );
+
+    const assigneeResult = await pool.query('SELECT name FROM users WHERE id = $1', [req.user.id]);
+    const assigneeName = assigneeResult.rows[0]?.name || 'Unknown';
+
+    await pool.query(
+      'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+      [uuidv4(), 'assigned', requestId, req.user.id, `Claimed by ${assigneeName}`, now]
+    );
+
+    const notifResult = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('notifyClientStatusChange', 'notifyDeveloperAssignment', 'emailNotifications', 'inAppNotifications')");
+    const notifSettings = {};
+    for (const row of notifResult.rows) {
+      notifSettings[row.key] = row.value === 'true';
+    }
+
+    notifyAdmins(`Request #${requestId} claimed by ${assigneeName}`, { type: 'claimed', requestId, assignee: req.user.id, userId: req.user.id });
+
+    const clientId = existing.rows[0].client_id;
+    if (clientId && clientId !== req.user.id && notifSettings.notifyClientStatusChange !== false) {
+      notifyUser(clientId, `Your request #${requestId} has been claimed and is being worked on`, { type: 'claimed', requestId, userId: req.user.id });
+    }
+
+    const statusResult = await pool.query('SELECT name FROM statuses WHERE id = $1', [assignedStatus]);
+    res.json({
+      id: requestId,
+      assignedTo: req.user.id,
+      assignee: { id: req.user.id, name: assigneeName },
+      statusId: assignedStatus,
+      status: statusResult.rows[0] || { id: assignedStatus, name: 'Assigned' }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -1338,8 +1438,14 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       params.push(req.user.id);
     }
     if (req.user.role === 'developer' || req.user.role === 'support') {
-      whereClause += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++}))`;
-      params.push(req.user.id, req.user.id);
+      const myRequests = req.query.myRequests === 'true';
+      if (myRequests) {
+        whereClause += ` AND r.assigned_to = $${paramIndex++}`;
+        params.push(req.user.id);
+      } else {
+        whereClause += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++}))`;
+        params.push(req.user.id, req.user.id);
+      }
     }
 
     const totalResult = await pool.query(`SELECT COUNT(*) FROM requests r ${whereClause}`, params);

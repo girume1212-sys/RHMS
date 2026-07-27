@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { api } from './api';
+import { api, API_BASE } from './api';
 
 const AuthContext = createContext(null);
 
@@ -66,7 +66,7 @@ export function AuthProvider({ children }) {
 
   const fetchUser = useCallback(async (tokenStr) => {
     try {
-      const res = await fetch('http://localhost:5000/api/auth/me', {
+      const res = await fetch(`${API_BASE}/api/auth/me`, {
         headers: { Authorization: `Bearer ${tokenStr}` }
       });
       if (!res.ok) throw new Error();
@@ -92,7 +92,7 @@ export function AuthProvider({ children }) {
   const login = async (username, email, password) => {
     let res;
     try {
-      res = await fetch('http://localhost:5000/api/auth/login', {
+      res = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, email, password })

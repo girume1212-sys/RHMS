@@ -22,6 +22,9 @@ export default function RequestsList() {
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
   const [toasts, setToasts] = useState([]);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showMyRequests, setShowMyRequests] = useState(false);
+  const [updatingId, setUpdatingId] = useState(null);
+  const [statuses, setStatuses] = useState([]);
   const navigate = useNavigate();
 
   const isClient = user?.role === 'client';
@@ -42,20 +45,29 @@ export default function RequestsList() {
     if (filter.priority) params.set('priority', filter.priority);
     if (filter.category) params.set('category', filter.category);
     if (filter.search) params.set('search', filter.search);
+    if (user?.role === 'developer' || user?.role === 'support') {
+      params.set('myRequests', showMyRequests ? 'true' : 'false');
+    }
     const qs = params.toString();
     setError('');
-    api.get(`/api/requests?${qs}`).then(data => {
-      let filtered = data;
-      if (user?.role === 'developer' || user?.role === 'support') {
-        filtered = data.filter(r => r.assignedTo === user.id || !r.assignedTo);
-      }
-      setRequests(filtered);
+    Promise.all([
+      api.get(`/api/requests?${qs}`),
+      api.get('/api/statuses')
+    ]).then(([requestsData, statusesData]) => {
+      setRequests(requestsData);
+      setStatuses(statusesData);
       setLoading(false);
     }).catch(err => {
       setError('Failed to load requests: ' + err.message);
       setLoading(false);
     });
-  }, [filter, user]);
+  }, [filter, user, showMyRequests]);
+
+  const isReadOnly = (r) => {
+    if (user?.role === 'admin') return false;
+    if (user?.role === 'client') return false;
+    return r.assignedTo && r.assignedTo !== user.id;
+  };
 
   const getStatusColor = (status) => {
     const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444', Rejected: '#DC2626' };
@@ -84,6 +96,53 @@ export default function RequestsList() {
   const handleEdit = (e, id) => {
     e.stopPropagation();
     navigate(`${basePath}/requests/${id}?edit=true`);
+  };
+
+  const handleClaim = async (e, requestId) => {
+    e.stopPropagation();
+    setUpdatingId(`claim-${requestId}`);
+    try {
+      await api.put(`/api/requests/${requestId}/claim`);
+      const assignedStatus = statuses.find(s => s.name === 'Assigned');
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: user.id, assignee: { id: user.id, name: user.name }, status: assignedStatus || r.status, statusId: '2' } : r));
+      showStatusToast('Request claimed successfully', 'assignment', requestId);
+    } catch (err) {
+      showStatusToast('Failed to claim: ' + err.message, 'error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleQuickStatusUpdate = async (e, requestId, statusName) => {
+    e.stopPropagation();
+    const status = statuses.find(s => s.name === statusName);
+    if (!status) return;
+    setUpdatingId(`status-${requestId}`);
+    try {
+      await api.put(`/api/requests/${requestId}`, { statusId: status.id });
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: status, statusId: status.id } : r));
+      showStatusToast(`Request #${requestId} marked as ${statusName}`, 'status', requestId);
+    } catch (err) {
+      showStatusToast('Failed to update status: ' + err.message, 'error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const getDeveloperActions = (r) => {
+    const statusName = r.status?.name;
+    const actions = [];
+    if (statusName === 'New') {
+      actions.push({ label: 'Claim', color: '#8B5CF6', type: 'claim' });
+    }
+    if (statusName === 'Assigned') {
+      actions.push({ label: 'Start Work', status: 'In Progress', color: '#F59E0B' });
+    }
+    if (statusName === 'In Progress') {
+      actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981' });
+      actions.push({ label: 'Need Info', status: 'Waiting for Client', color: '#F97316' });
+    }
+    return actions;
   };
 
   const handleSort = (key) => {
@@ -201,8 +260,29 @@ export default function RequestsList() {
       ) : (
         <div className="chart-card">
           <div className="table-header-bar">
-            <h3>Requests ({filteredRequests.length})</h3>
+            <h3>{showMyRequests ? 'My Requests' : 'All Requests'} ({filteredRequests.length})</h3>
             <div className="table-header-actions">
+              {(user?.role === 'developer' || user?.role === 'support') && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
+                  <span>My Requests</span>
+                  <div
+                    onClick={() => { setShowMyRequests(!showMyRequests); setPage(1); }}
+                    style={{
+                      width: '40px', height: '22px', borderRadius: '11px',
+                      background: showMyRequests ? '#8B5CF6' : '#D1D5DB',
+                      position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                      flexShrink: 0
+                    }}
+                  >
+                    <div style={{
+                      width: '18px', height: '18px', borderRadius: '50%',
+                      background: 'white', position: 'absolute', top: '2px',
+                      left: showMyRequests ? '20px' : '2px',
+                      transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                    }} />
+                  </div>
+                </label>
+              )}
             </div>
           </div>
 
@@ -264,7 +344,21 @@ export default function RequestsList() {
                     <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
                     <td>
                       <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
-                        {(user?.role === 'admin' || user?.role === 'support') && (r.statusId === '1' || r.statusId === '2') ? (
+                        {isReadOnly(r) ? (
+                          <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>Read only</span>
+                        ) : user?.role === 'developer' ? (
+                          getDeveloperActions(r).map((action, i) =>
+                            action.type === 'claim' ? (
+                              <button key={`da-${i}`} className="action-btn-text edit" disabled={updatingId === `claim-${r.id}`} onClick={(e) => handleClaim(e, r.id)} style={{ opacity: updatingId === `claim-${r.id}` ? 0.6 : 1 }}>
+                                {action.label}
+                              </button>
+                            ) : (
+                              <button key={`da-${i}`} className="action-btn-text edit" disabled={updatingId === `status-${r.id}`} onClick={(e) => handleQuickStatusUpdate(e, r.id, action.status)} style={{ opacity: updatingId === `status-${r.id}` ? 0.6 : 1 }}>
+                                {action.label}
+                              </button>
+                            )
+                          )
+                        ) : (user?.role === 'admin' || user?.role === 'support') && (r.statusId === '1' || r.statusId === '2') ? (
                           <>
                             <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
                             <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>Delete</button>

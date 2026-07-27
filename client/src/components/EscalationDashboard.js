@@ -28,11 +28,14 @@ export default function EscalationDashboard() {
 
   useEffect(() => {
     loadData();
+    const handleRefresh = () => loadData();
+    window.addEventListener('refresh-requests', handleRefresh);
+    return () => window.removeEventListener('refresh-requests', handleRefresh);
   }, []);
 
   const loadData = () => {
     Promise.all([
-      api.get('/api/requests'),
+      api.get(`/api/requests?myRequests=${showAssignedOnly}`),
       api.get('/api/statuses'),
       api.get('/api/users'),
       api.get('/api/groups'),
@@ -46,8 +49,14 @@ export default function EscalationDashboard() {
     }).catch(err => setError('Failed to load data: ' + err.message));
   };
 
+  useEffect(() => {
+    loadData();
+  }, [showAssignedOnly]);
+
   const developers = users.filter(u => u.role === 'developer');
-  const displayRequests = showAssignedOnly ? requests.filter(r => r.assignedTo === user.id) : requests;
+  const displayRequests = showAssignedOnly
+    ? requests.filter(r => r.status?.name === 'Escalated' && r.assignedTo === user.id)
+    : requests;
 
   const stats = {
     total: displayRequests.length,
@@ -106,10 +115,10 @@ export default function EscalationDashboard() {
     e.stopPropagation();
     setUpdatingId(`claim-${requestId}`);
     try {
-      await api.put(`/api/requests/${requestId}`, { assignedTo: user.id });
-      const assignedStatus = statuses.find(s => s.name === 'Assigned');
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: user.id, assignee: { id: user.id, name: user.name, email: user.email }, status: assignedStatus || r.status } : r));
+      const data = await api.put(`/api/requests/${requestId}/claim`);
+      setRequests(prev => prev.filter(r => r.id !== requestId));
       showStatusToast('Request claimed successfully', 'assignment', requestId);
+      loadData();
     } catch (err) {
       showStatusToast('Failed to claim: ' + err.message, 'error');
     } finally {
@@ -180,7 +189,15 @@ export default function EscalationDashboard() {
   const totalPages = Math.ceil(filteredRequests.length / perPage);
   const paginatedRequests = filteredRequests.slice((page - 1) * perPage, page * perPage);
 
+  const isReadOnly = (r) => {
+    if (user?.role === 'support') {
+      return !(r.status?.name === 'Escalated' && r.assignedTo === user.id);
+    }
+    return r.assignedTo && r.assignedTo !== user.id;
+  };
+
   const getQuickActions = (r) => {
+    if (isReadOnly(r)) return [];
     const statusName = r.status?.name;
     const actions = [];
 
@@ -314,9 +331,9 @@ export default function EscalationDashboard() {
             </thead>
             <tbody>
               {paginatedRequests.map(r => (
-                <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row">
+                <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row" style={isReadOnly(r) ? { opacity: 0.75 } : {}}>
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
-                  <td>{r.subject}</td>
+                  <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>(read-only)</span>}</td>
                   <td>{r.client?.name || '-'}</td>
                   <td>
                     {r.groups && r.groups.length > 0

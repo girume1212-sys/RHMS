@@ -2,9 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
-import { api } from '../api';
-
-const API_BASE = 'http://localhost:5000';
+import { api, API_BASE } from '../api';
 
 export default function Layout() {
   const { user, logout, darkMode, toggleDarkMode, systemName } = useAuth();
@@ -195,6 +193,10 @@ export default function Layout() {
           }
 
           setUnreadCount(prev => prev + 1);
+
+          if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
+            window.dispatchEvent(new CustomEvent('refresh-requests'));
+          }
 
           playNotificationSound();
         } catch (e) {

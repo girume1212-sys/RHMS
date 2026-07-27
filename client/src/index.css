@@ -5154,7 +5154,7 @@ body.dark-mode .selected-members-list {
   border-color: rgba(59, 130, 246, 0.25);
 }
 .member-checkbox-list {
-  max-height: 180px;
+  max-height: 320px;
   overflow-y: auto;
   border: 1px solid #e5e7eb;
   border-radius: 8px;

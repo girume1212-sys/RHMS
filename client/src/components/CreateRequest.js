@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
@@ -55,7 +55,7 @@ export default function CreateRequest() {
       const formData = new FormData();
       formData.append('file', file);
       try {
-        const res = await fetch('http://localhost:5000/api/upload', {
+        const res = await fetch(`${API_BASE}/api/upload`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${localStorage.getItem('rhms_token')}` },
           body: formData
@@ -72,6 +72,11 @@ export default function CreateRequest() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.subject.trim() || !form.description.trim() || !form.categoryId) {
+      setError('Please fill all required fields');
+      addToast('Please fill all required fields', 'error');
+      return;
+    }
     setLoading(true);
     setError('');
     try {

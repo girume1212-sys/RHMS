@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000';
+export const API_BASE = process.env.REACT_APP_API_URL || '';
 
 async function apiFetch(url, options = {}) {
   const token = localStorage.getItem('rhms_token');
@@ -8,7 +8,15 @@ async function apiFetch(url, options = {}) {
   try {
     res = await fetch(`${API_BASE}${url}`, { ...options, headers });
   } catch (err) {
-    throw new Error('Cannot connect to server at ' + API_BASE + '. Is the backend running?');
+    throw new Error('Cannot connect to server. Is the backend running?');
+  }
+  if (res.status === 401) {
+    localStorage.removeItem('rhms_token');
+    localStorage.removeItem('rhms_sessionTimeout');
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login?expired=1';
+    }
+    throw new Error('Session expired. Please login again.');
   }
   const contentType = res.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {

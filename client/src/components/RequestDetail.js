@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
@@ -153,7 +153,7 @@ export default function RequestDetail() {
       const formData = new FormData();
       formData.append('file', file);
       try {
-        const res = await fetch('http://localhost:5000/api/upload', {
+        const res = await fetch(`${API_BASE}/api/upload`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${localStorage.getItem('rhms_token')}` },
           body: formData
@@ -351,9 +351,9 @@ export default function RequestDetail() {
                     {editAttachments.map((path, i) => (
                       <div key={`existing-${i}`} className="attachment-item">
                         {isImageFile(path) ? (
-                          <img src={`http://localhost:5000${path}`} alt={getFileName(path)} className="attachment-image" onClick={() => setLightbox(`http://localhost:5000${path}`)} />
+                          <img src={`${API_BASE}${path}`} alt={getFileName(path)} className="attachment-image" onClick={() => setLightbox(`${API_BASE}${path}`)} />
                         ) : (
-                          <a href={`http://localhost:5000${path}`} target="_blank" rel="noopener noreferrer" className="attachment-file">
+                          <a href={`${API_BASE}${path}`} target="_blank" rel="noopener noreferrer" className="attachment-file">
                             <span className="attachment-file-icon">📄</span>
                             <span>{getFileName(path)}</span>
                           </a>
@@ -399,9 +399,9 @@ export default function RequestDetail() {
                       {attachments.map((path, i) => (
                         <div key={i} className="attachment-item">
                           {isImageFile(path) ? (
-                            <img src={`http://localhost:5000${path}`} alt={getFileName(path)} className="attachment-image" onClick={() => setLightbox(`http://localhost:5000${path}`)} />
+                            <img src={`${API_BASE}${path}`} alt={getFileName(path)} className="attachment-image" onClick={() => setLightbox(`${API_BASE}${path}`)} />
                           ) : (
-                            <a href={`http://localhost:5000${path}`} target="_blank" rel="noopener noreferrer" className="attachment-file">
+                            <a href={`${API_BASE}${path}`} target="_blank" rel="noopener noreferrer" className="attachment-file">
                               <span className="attachment-file-icon">📄</span>
                               <span>{getFileName(path)}</span>
                             </a>

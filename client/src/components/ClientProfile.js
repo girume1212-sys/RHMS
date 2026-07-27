@@ -3,8 +3,7 @@ import { useAuth } from '../AuthContext';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
-
-const API_URL = 'http://localhost:5000';
+import { API_BASE } from '../api';
 
 export default function ClientProfile() {
   const { t } = useTranslation();
@@ -36,7 +35,7 @@ export default function ClientProfile() {
   const getAvatarUrl = (avatar) => {
     if (!avatar) return null;
     if (avatar.startsWith('http')) return avatar;
-    return `${API_URL}${avatar}`;
+    return `${API_BASE}${avatar}`;
   };
 
   const handleChange = (e) => {
@@ -93,7 +92,7 @@ export default function ClientProfile() {
         formData.append('avatar', avatarFile);
       }
 
-      const res = await fetch(`${API_URL}/api/profile`, {
+      const res = await fetch(`${API_BASE}/api/profile`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
