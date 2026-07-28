@@ -36,6 +36,7 @@ export default function RequestDetail() {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [groups, setGroups] = useState([]);
 
   const isClient = user?.role === 'client';
   const basePath = isClient ? '/client' : '';
@@ -58,6 +59,9 @@ export default function RequestDetail() {
     }
     api.get('/api/categories').then(setCategories);
     api.get('/api/priorities').then(setPriorities);
+    if (!isClient) {
+      api.get('/api/groups').then(setGroups);
+    }
     loadFeedback();
   }, [id]);
 
@@ -131,6 +135,18 @@ export default function RequestDetail() {
       showStatusToast(`Request #${id} assignee updated`, 'assignment', id);
     } catch (err) {
       addToast('Failed to update assignee: ' + err.message, 'error');
+    }
+  };
+
+  const handleGroupAssign = async (groupId) => {
+    try {
+      await api.put(`/api/requests/${id}`, { assignedGroup: groupId || null });
+      loadRequest();
+      loadActivity();
+      addToast(groupId ? 'Group assigned successfully!' : 'Group unassigned');
+      showStatusToast(`Request #${id} group updated`, 'assignment', id);
+    } catch (err) {
+      addToast('Failed to assign group: ' + err.message, 'error');
     }
   };
 
@@ -419,7 +435,18 @@ export default function RequestDetail() {
                         </div>
                       ))}
                     </div>
-                  </div>
+</div>
+                )}
+                {user?.role === 'admin' && (
+                <div className="action-group">
+                  <label>Assign Group</label>
+                  <select value={request.assignedGroup || ''} onChange={(e) => handleGroupAssign(e.target.value)}>
+                    <option value="">No Group</option>
+                    {groups.map(g => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                </div>
                 )}
               </div>
             )}

@@ -1182,6 +1182,12 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       [subject, description, categoryId, priorityId, newStatusId, newAssignedTo, JSON.stringify(newAttachments), now, req.params.id, assignedGroup || null]
     );
 
+    // Sync request_groups when assignedGroup changes
+    if (assignedGroup) {
+      await pool.query('DELETE FROM request_groups WHERE request_id = $1', [req.params.id]);
+      await pool.query('INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, assignedGroup]);
+    }
+
     const notifResult = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('notifyClientStatusChange', 'notifyDeveloperAssignment', 'emailNotifications', 'inAppNotifications')");
     const notifSettings = {};
     for (const row of notifResult.rows) {
@@ -1476,6 +1482,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
 
     const open = statusMap['1'] || 0;
     const inProgress = statusMap['3'] || 0;
+    const waiting = statusMap['4'] || 0;
     const resolved = statusMap['5'] || 0;
     const closed = statusMap['6'] || 0;
     const escalated = statusMap['9'] || 0;
@@ -1553,6 +1560,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       total,
       open,
       inProgress,
+      waiting,
       resolved,
       closed,
       escalated,
@@ -1564,6 +1572,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       totalLastWeek: Math.floor(total * 0.88),
       openLastWeek: Math.floor(open * 0.92),
       inProgressLastWeek: Math.floor(inProgress * 0.95),
+      waitingLastWeek: Math.floor(waiting * 0.9),
       resolvedLastWeek: Math.floor(resolved * 0.85),
       closedLastWeek: Math.floor(closed * 1.05),
       escalatedLastWeek: Math.floor(escalated * 0.9)

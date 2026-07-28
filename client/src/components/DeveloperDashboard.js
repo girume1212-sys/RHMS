@@ -178,7 +178,7 @@ export default function DeveloperDashboard() {
     }
     if (statusName === 'In Progress') {
       actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓' });
-      actions.push({ label: 'Need Info', status: 'Waiting for Client', color: '#F97316', icon: '❓' });
+      actions.push({ label: 'Waiting for Client', status: 'Waiting for Client', color: '#F97316', icon: '❓' });
     }
     return actions;
   };

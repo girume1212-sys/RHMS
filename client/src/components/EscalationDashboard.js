@@ -205,7 +205,7 @@ export default function EscalationDashboard() {
     }
     if (statusName === 'In Progress') {
       actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
-      actions.push({ label: 'Need Info', status: 'Waiting for Client', color: '#F97316', icon: '❓', type: 'status' });
+      actions.push({ label: 'Waiting for Client', status: 'Waiting for Client', color: '#F97316', icon: '❓', type: 'status' });
       actions.push({ label: 'Escalate', status: 'Escalated', color: '#EF4444', icon: '🚨', type: 'status' });
     }
     if (statusName === 'Waiting for Client') {

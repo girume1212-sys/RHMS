@@ -140,7 +140,7 @@ export default function RequestsList() {
     }
     if (statusName === 'In Progress') {
       actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981' });
-      actions.push({ label: 'Need Info', status: 'Waiting for Client', color: '#F97316' });
+      actions.push({ label: 'Waiting for Client', status: 'Waiting for Client', color: '#F97316', icon: '❓' });
     }
     return actions;
   };
@@ -340,11 +340,11 @@ export default function RequestsList() {
                           getDeveloperActions(r).map((action, i) =>
                             action.type === 'claim' ? (
                               <button key={`da-${i}`} className="action-btn-text edit" disabled={updatingId === `claim-${r.id}`} onClick={(e) => handleClaim(e, r.id)} style={{ opacity: updatingId === `claim-${r.id}` ? 0.6 : 1 }}>
-                                {action.label}
+                                {action.icon} {action.label}
                               </button>
                             ) : (
                               <button key={`da-${i}`} className="action-btn-text edit" disabled={updatingId === `status-${r.id}`} onClick={(e) => handleQuickStatusUpdate(e, r.id, action.status)} style={{ opacity: updatingId === `status-${r.id}` ? 0.6 : 1 }}>
-                                {action.label}
+                                {action.icon} {action.label}
                               </button>
                             )
                           )
