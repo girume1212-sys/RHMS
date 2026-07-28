@@ -395,6 +395,26 @@ body {
   font-size: 12px;
   padding: 4px;
 }
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+::-webkit-scrollbar-button {
+  height: 0;
+  width: 0;
+}
+
 .sidebar-nav {
   flex: 1;
   padding: 12px;
@@ -844,13 +864,14 @@ body.dark-mode .dropdown-panel-message { color: #94a3b8 !important; }
 }
 .data-table th {
   text-align: left;
-  padding: 10px 10px;
+  padding: 10px 16px;
   font-size: 11px;
   font-weight: 600;
   color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
 }
 .sortable-th {
   cursor: pointer;
@@ -900,24 +921,27 @@ body.dark-mode .dropdown-panel-message { color: #94a3b8 !important; }
   opacity: 1;
 }
 .data-table td {
-  padding: 10px 10px;
+  padding: 10px 16px;
   font-size: 13px;
   border-bottom: 1px solid #f3f4f6;
 }
-.data-table td:last-child {
-  min-width: 110px;
-}
-.data-table th:last-child {
-  min-width: 110px;
-}
+.data-table th:first-child,
 .data-table td:first-child {
   width: 80px;
 }
-.data-table th:first-child {
-  width: 80px;
+.data-table th:last-child,
+.data-table td:last-child {
+  width: 110px;
+}
+.data-table td:nth-child(2) {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .clickable-row { cursor: pointer; transition: background 0.15s; }
 .clickable-row:hover { background: #e0f7fa; }
+
 .req-id { font-weight: 600; color: #0077b6; }
 .req-subject { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .category-tag {
@@ -1368,7 +1392,7 @@ body.dark-mode .multi-select-option.selected {
   border-radius: 12px;
   padding: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  overflow: hidden;
+  overflow-x: auto;
   border: 1px solid rgba(0, 180, 216, 0.1);
 }
 .table-card .data-table thead tr {
@@ -4091,13 +4115,13 @@ body.dark-mode .detail-card:has(.star-rating) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 70px;
+  min-width: 100px;
   position: relative;
 }
 
 .lifecycle-dot {
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -4109,7 +4133,7 @@ body.dark-mode .detail-card:has(.star-rating) {
 }
 
 .lifecycle-check {
-  font-size: 12px;
+  font-size: 16px;
   color: #fff;
   font-weight: 700;
 }
@@ -4131,18 +4155,18 @@ body.dark-mode .detail-card:has(.star-rating) {
 }
 
 .lifecycle-label {
-  font-size: 10px;
-  margin-top: 6px;
+  font-size: 13px;
+  margin-top: 8px;
   text-align: center;
   white-space: nowrap;
   line-height: 1.2;
 }
 
 .lifecycle-time {
-  font-size: 9px;
+  font-size: 11px;
   color: #9ca3af;
   text-align: center;
-  margin-top: 2px;
+  margin-top: 4px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -4154,10 +4178,10 @@ body.dark-mode .detail-card:has(.star-rating) {
 }
 
 .lifecycle-connector {
-  width: 24px;
-  height: 3px;
+  width: 36px;
+  height: 4px;
   border-radius: 2px;
-  margin-top: 12px;
+  margin-top: 18px;
   flex-shrink: 0;
 }
 
@@ -5218,7 +5242,7 @@ body.dark-mode .member-checkbox-name {
 }
 .member-checkbox-email {
   font-size: 12px;
-  color: #6b7280;
+  color: #111827;
   flex: 1;
 }
 body.dark-mode .member-checkbox-email {

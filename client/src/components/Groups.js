@@ -427,7 +427,7 @@ export default function Groups() {
                     )}
                     {!showAddMember && members.length > 0 && (
                       <div className="table-card" style={{ overflow: 'auto' }}>
-            <table className="data-table" style={{ color: '#FFFFFF' }}>
+            <table className="data-table">
                         <thead>
                           <tr>
                             <th>User</th>

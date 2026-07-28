@@ -277,15 +277,15 @@ export default function DeveloperDashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable" style={{ width: 70 }}>ID {getSortIcon('id')}</th>
-                <th className="sortable">Request Title {getSortIcon('subject')}</th>
-                <th className="sortable" style={{ width: 110 }}>Client {getSortIcon('client')}</th>
-                <th className="sortable" style={{ width: 90 }}>Group {getSortIcon('groups')}</th>
-                <th className="sortable" style={{ width: 90 }}>Category {getSortIcon('category')}</th>
-                <th className="sortable" style={{ width: 75 }}>Priority {getSortIcon('priority')}</th>
-                <th className="sortable" style={{ width: 85 }}>Status {getSortIcon('status')}</th>
-                <th className="sortable" style={{ width: 105 }}>Updated {getSortIcon('updatedAt')}</th>
-                <th style={{ width: 110 }}>Actions</th>
+                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>ID</span> {getSortIcon('id')}</th>
+                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>Request Title</span> {getSortIcon('subject')}</th>
+                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>Client</span> {getSortIcon('client')}</th>
+                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned Group</span> {getSortIcon('groups')}</th>
+                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>Category</span> {getSortIcon('category')}</th>
+                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>Priority</span> {getSortIcon('priority')}</th>
+                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>Status</span> {getSortIcon('status')}</th>
+                <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>Updated</span> {getSortIcon('updatedAt')}</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -353,7 +353,7 @@ export default function DeveloperDashboard() {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
+                <tr><td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
                   {displayRequests.length === 0 ? (showAssignedOnly ? 'No requests assigned to you.' : 'No requests yet.') : 'No requests match your filters.'}
                 </td></tr>
               )}

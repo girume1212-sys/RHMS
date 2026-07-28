@@ -194,12 +194,12 @@ export default function ClientDashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable">ID {getSortIcon('id')}</th>
-                <th className="sortable">Request Title {getSortIcon('subject')}</th>
-                <th className="sortable">Category {getSortIcon('category')}</th>
-                <th className="sortable">Priority {getSortIcon('priority')}</th>
-                <th className="sortable">Status {getSortIcon('status')}</th>
-                <th className="sortable">Created {getSortIcon('createdAt')}</th>
+                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>ID</span> {getSortIcon('id')}</th>
+                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>Request Title</span> {getSortIcon('subject')}</th>
+                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>Category</span> {getSortIcon('category')}</th>
+                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>Priority</span> {getSortIcon('priority')}</th>
+                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>Status</span> {getSortIcon('status')}</th>
+                <th className="sortable"><span onClick={() => handleSort('createdAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>Created</span> {getSortIcon('createdAt')}</th>
                 <th>Actions</th>
               </tr>
             </thead>

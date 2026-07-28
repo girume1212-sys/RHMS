@@ -307,17 +307,16 @@ export default function Dashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable" style={{ width: 70 }}>ID {getSortIcon('id')}</th>
-                <th className="sortable">Request Title {getSortIcon('subject')}</th>
-                <th className="sortable" style={{ width: 110 }}>Client {getSortIcon('client')}</th>
-                <th className="sortable" style={{ width: 90 }}>Group {getSortIcon('groups')}</th>
-                <th className="sortable" style={{ width: 100 }}>Assigned Group {getSortIcon('assignedGroup')}</th>
-                <th className="sortable" style={{ width: 90 }}>Category {getSortIcon('category')}</th>
-                <th className="sortable" style={{ width: 75 }}>Priority {getSortIcon('priority')}</th>
-                <th className="sortable" style={{ width: 85 }}>Status {getSortIcon('status')}</th>
-                <th className="sortable" style={{ width: 110 }}>Assigned To {getSortIcon('assignedTo')}</th>
-                <th className="sortable" style={{ width: 105 }}>Created {getSortIcon('createdAt')}</th>
-                <th style={{ width: 110 }}>Actions</th>
+                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>ID</span> {getSortIcon('id')}</th>
+                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>Request Title</span> {getSortIcon('subject')}</th>
+                <th className="sortable"><span onClick={() => handleSort('assignedTo')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned To</span> {getSortIcon('assignedTo')}</th>
+                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>Client</span> {getSortIcon('client')}</th>
+                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned Group</span> {getSortIcon('groups')}</th>
+                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>Category</span> {getSortIcon('category')}</th>
+                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>Priority</span> {getSortIcon('priority')}</th>
+                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>Status</span> {getSortIcon('status')}</th>
+                <th className="sortable"><span onClick={() => handleSort('createdAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>Created</span> {getSortIcon('createdAt')}</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -325,6 +324,16 @@ export default function Dashboard() {
                 <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row">
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}</td>
+                  <td>
+                    {r.assignee ? (
+                      <div className="assigned-user-cell">
+                        <div className="assigned-avatar" style={{ background: '#3B82F6' }}>
+                          {r.assignee.name.charAt(0)}
+                        </div>
+                        <span>{r.assignee.name}</span>
+                      </div>
+                    ) : <span style={{ color: '#9ca3af' }}>-</span>}
+                  </td>
                   <td>{r.clientName || r.client_name || '-'}</td>
                   <td>
                     {r.groups && r.groups.length > 0
@@ -334,13 +343,6 @@ export default function Dashboard() {
                           </span>
                         ))
                       : '-'}
-                  </td>
-                  <td>
-                    {r.assignedGroup ? (
-                      <span className="group-tag" style={{ background: (r.assignedGroup.color || '#6B7280') + '20', color: r.assignedGroup.color || '#6B7280' }}>
-                        {r.assignedGroup.name}
-                      </span>
-                    ) : '-'}
                   </td>
                   <td>{r.categoryName || r.category_name || '-'}</td>
                   <td>
@@ -352,16 +354,6 @@ export default function Dashboard() {
                     <span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>
                       {r.statusName || r.status?.name || '-'}
                     </span>
-                  </td>
-                  <td>
-                    {(r.assignedToName || r.assigned_to_name) ? (
-                      <div className="assigned-user-cell">
-                        <div className="assigned-avatar" style={{ background: '#3B82F6' }}>
-                          {(r.assignedToName || r.assigned_to_name || '').charAt(0)}
-                        </div>
-                        <span>{r.assignedToName || r.assigned_to_name}</span>
-                      </div>
-                    ) : <span style={{ color: '#9ca3af' }}>-</span>}
                   </td>
                   <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
                   <td>
@@ -379,7 +371,7 @@ export default function Dashboard() {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="11" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No requests found</td></tr>
+                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No requests found</td></tr>
               )}
             </tbody>
           </table>

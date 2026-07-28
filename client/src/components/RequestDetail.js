@@ -292,7 +292,17 @@ export default function RequestDetail() {
   const isImageFile = (path) => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(path);
   const getFileName = (path) => path.split('/').pop();
 
-  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
+  if (loading) return (
+    <div className="page-container">
+      <div className="page-header">
+        <div>
+          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← Back to Requests</button>
+          <h1>REQ-{String(id).padStart(4, '0')}</h1>
+        </div>
+      </div>
+      <div className="loading-screen"><div className="spinner"></div></div>
+    </div>
+  );
   if (!request) return <div className="empty-state">Request not found</div>;
 
   const developers = users.filter(u => u.role === 'developer' || u.role === 'support');
@@ -308,7 +318,7 @@ export default function RequestDetail() {
       <div className="page-header">
         <div>
           <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← Back to Requests</button>
-          <h1>Request #{request.id}</h1>
+          <h1>REQ-{String(request.id || '').padStart(4, '0')}</h1>
           <p>{request.subject}</p>
         </div>
       </div>
@@ -702,7 +712,7 @@ export default function RequestDetail() {
 
           {/* Assignee */}
           <div className="detail-card">
-            <h3>Assigned to</h3>
+            <h3>ASSIGNED TO</h3>
             {request.assignee ? (
               <div className="assignee-info">
                 <div className="assignee-avatar-lg" style={{ background: '#3B82F6' }}>{request.assignee.name.charAt(0)}</div>

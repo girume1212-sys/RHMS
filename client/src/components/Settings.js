@@ -18,12 +18,6 @@ const TIMEZONES = [
 const LANGUAGES = [
   { code: 'en', name: 'English' },
   { code: 'am', name: 'አማርኛ (Amharic)' },
-  { code: 'or', name: 'Afaan Oromo' },
-  { code: 'so', name: 'Soomaali' },
-  { code: 'ar', name: 'العربية (Arabic)' },
-  { code: 'fr', name: 'Français (French)' },
-  { code: 'es', name: 'Español (Spanish)' },
-  { code: 'pt', name: 'Português (Portuguese)' },
 ];
 
 const DAYS_OF_WEEK = [
@@ -57,7 +51,7 @@ export default function Settings() {
     defaultPriority: '',
     autoRequestId: true,
     maxFileSize: 10,
-    allowedFileTypes: ['jpg', 'png', 'gif', 'pdf', 'docx', 'xlsx'],
+    allowedFileTypes: '',
     allowReopen: true,
     emailNotifications: true,
     inAppNotifications: true,
@@ -82,7 +76,7 @@ export default function Settings() {
     escalationEnabled: true,
     workStart: '09:00',
     workEnd: '17:00',
-    weekendDays: ['saturday', 'sunday'],
+    weekendDays: '',
     holidaysEnabled: true,
     autoBackup: false,
     backupFrequency: 'weekly',
@@ -123,18 +117,11 @@ export default function Settings() {
           'maxFileSize', 'passwordLength', 'passwordExpiry', 'sessionTimeout',
           'maxLoginAttempts', 'responseHours', 'resolutionHours'
         ];
-        const arrKeys = ['allowedFileTypes', 'weekendDays'];
         for (const key of boolKeys) {
           if (typeof merged[key] === 'string') merged[key] = merged[key] === 'true';
         }
         for (const key of numKeys) {
           if (typeof merged[key] === 'string') merged[key] = Number(merged[key]);
-        }
-        for (const key of arrKeys) {
-          if (typeof merged[key] === 'string') {
-            try { merged[key] = JSON.parse(merged[key]); } catch { merged[key] = []; }
-          }
-          if (!Array.isArray(merged[key])) merged[key] = [];
         }
         return merged;
       });
@@ -173,7 +160,7 @@ export default function Settings() {
         defaultPriority: String(form.defaultPriority || ''),
         autoRequestId: String(form.autoRequestId),
         maxFileSize: String(form.maxFileSize),
-        allowedFileTypes: JSON.stringify(form.allowedFileTypes || []),
+        allowedFileTypes: form.allowedFileTypes || '',
         allowReopen: String(form.allowReopen),
         emailNotifications: String(form.emailNotifications),
         inAppNotifications: String(form.inAppNotifications),
@@ -198,7 +185,7 @@ export default function Settings() {
         escalationEnabled: String(form.escalationEnabled),
         workStart: form.workStart,
         workEnd: form.workEnd,
-        weekendDays: JSON.stringify(form.weekendDays || []),
+        weekendDays: form.weekendDays || '',
         holidaysEnabled: String(form.holidaysEnabled),
         autoBackup: String(form.autoBackup),
         backupFrequency: form.backupFrequency,
@@ -344,23 +331,17 @@ export default function Settings() {
           </div>
           <div className="settings-field">
             <label>{t('settings.allowedFileTypes')}</label>
-            <div className="checkbox-list">
+            <select value={form.allowedFileTypes || ''} onChange={e => handleChange('allowedFileTypes', e.target.value)}>
+              <option value="">Select file type...</option>
               {FILE_TYPE_OPTIONS.map(ft => (
-                <label key={ft} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={(form.allowedFileTypes || []).includes(ft)}
-                    onChange={() => handleArrayToggle('allowedFileTypes', ft)}
-                  />
-                  .{ft}
-                </label>
+                <option key={ft} value={ft}>.{ft}</option>
               ))}
-            </div>
+            </select>
           </div>
           <div className="toggle-row-settings">
             <div>
-              <span className="toggle-label">Allow Reopen</span>
-              <span className="toggle-sublabel">Allow clients to reopen resolved requests</span>
+              <span className="toggle-label">Allow Rejected</span>
+              <span className="toggle-sublabel">Allow clients to reopen rejected requests</span>
             </div>
             <label className="toggle">
               <input type="checkbox" checked={form.allowReopen} onChange={e => handleChange('allowReopen', e.target.checked)} />
@@ -486,20 +467,14 @@ export default function Settings() {
             <label>{t('settings.workEnd')}</label>
             <input type="time" value={form.workEnd} onChange={e => handleChange('workEnd', e.target.value)} />
           </div>
-          <div className="settings-field">
+<div className="settings-field">
             <label>{t('settings.weekendDays')}</label>
-            <div className="checkbox-list">
+            <select value={form.weekendDays || ''} onChange={e => handleChange('weekendDays', e.target.value)}>
+              <option value="">Select weekend day...</option>
               {DAYS_OF_WEEK.map(day => (
-                <label key={day} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={(form.weekendDays || []).includes(day)}
-                    onChange={() => handleArrayToggle('weekendDays', day)}
-                  />
-                  {t('days.' + day)}
-                </label>
+                <option key={day} value={day}>{t('days.' + day)}</option>
               ))}
-            </div>
+            </select>
           </div>
           <div className="toggle-row-settings">
             <div>

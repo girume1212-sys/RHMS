@@ -269,7 +269,7 @@ export default function EscalationDashboard() {
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
-          <span style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>All Requests ({filteredRequests.length})</span>
+          <span style={{ fontSize: '16px', fontWeight: 700 }}>All Requests ({filteredRequests.length})</span>
           <div className="table-header-actions">
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
               <span>Show My Tasks</span>
@@ -312,15 +312,16 @@ export default function EscalationDashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable" style={{ width: 70 }}>ID {getSortIcon('id')}</th>
-                <th className="sortable">Request Title {getSortIcon('subject')}</th>
-                <th className="sortable" style={{ width: 110 }}>Client {getSortIcon('client')}</th>
-                <th className="sortable" style={{ width: 90 }}>Group {getSortIcon('groups')}</th>
-                <th className="sortable" style={{ width: 90 }}>Category {getSortIcon('category')}</th>
-                <th className="sortable" style={{ width: 75 }}>Priority {getSortIcon('priority')}</th>
-                <th className="sortable" style={{ width: 85 }}>Status {getSortIcon('status')}</th>
-                <th className="sortable" style={{ width: 105 }}>Updated {getSortIcon('updatedAt')}</th>
-                <th style={{ width: 110 }}>Actions</th>
+                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>ID</span> {getSortIcon('id')}</th>
+                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>Request Title</span> {getSortIcon('subject')}</th>
+                <th>Assigned To</th>
+                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>Client</span> {getSortIcon('client')}</th>
+                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned Group</span> {getSortIcon('groups')}</th>
+                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>Category</span> {getSortIcon('category')}</th>
+                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>Priority</span> {getSortIcon('priority')}</th>
+                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>Status</span> {getSortIcon('status')}</th>
+                <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>Updated</span> {getSortIcon('updatedAt')}</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -328,6 +329,16 @@ export default function EscalationDashboard() {
                 <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row" style={isReadOnly(r) ? { opacity: 0.75 } : {}}>
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>(read-only)</span>}</td>
+                  <td>
+                    {r.assignee ? (
+                      <div className="assigned-user-cell">
+                        <div className="assigned-avatar" style={{ background: '#3B82F6' }}>
+                          {r.assignee.name.charAt(0)}
+                        </div>
+                        <span>{r.assignee.name}</span>
+                      </div>
+                    ) : <span style={{ color: '#9ca3af' }}>-</span>}
+                  </td>
                   <td>{r.client?.name || '-'}</td>
                   <td>
                     {r.groups && r.groups.length > 0
