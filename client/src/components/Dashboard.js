@@ -7,6 +7,16 @@ import { showStatusToast } from '../notify';
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
+const STATUS_CONFIG = [
+  { key: 'New', label: 'New', color: '#3B82F6' },
+  { key: 'Assigned', label: 'Assigned', color: '#8B5CF6' },
+  { key: 'In Progress', label: 'In Progress', color: '#F59E0B' },
+  { key: 'Waiting for Client', label: 'Waiting', color: '#F97316' },
+  { key: 'Resolved', label: 'Resolved', color: '#10B981' },
+  { key: 'Closed', label: 'Closed', color: '#6B7280' },
+  { key: 'Escalated', label: 'Escalated', color: '#EF4444' },
+];
+
 function StatCard({ icon, value, label, change, changeType, color, onClick }) {
   const [hover, setHover] = useState(false);
   return (
@@ -41,7 +51,7 @@ export default function Dashboard() {
   const [recentRequests, setRecentRequests] = useState([]);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(5);
+  const [perPage, setPerPage] = useState(10);
   const [perfData, setPerfData] = useState(null);
   const [perfView, setPerfView] = useState('company');
   const [selectedDetail, setSelectedDetail] = useState(null);
@@ -390,9 +400,21 @@ export default function Dashboard() {
           <div className="table-pagination">
             <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
             <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-              <button key={p} className={`page-btn ${page === p ? 'active' : ''}`} onClick={() => setPage(p)}>{p}</button>
-            ))}
+            {(() => {
+              const pages = [];
+              const maxVisible = 5;
+              let start = Math.max(1, page - Math.floor(maxVisible / 2));
+              let end = Math.min(totalPages, start + maxVisible - 1);
+              if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
+              if (start > 1) { pages.push(1); if (start > 2) pages.push('...'); }
+              for (let i = start; i <= end; i++) pages.push(i);
+              if (end < totalPages) { if (end < totalPages - 1) pages.push('...'); pages.push(totalPages); }
+              return pages.map((p, i) =>
+                p === '...'
+                  ? <span key={`ellipsis-${i}`} className="page-ellipsis">…</span>
+                  : <button key={p} className={`page-btn ${page === p ? 'active' : ''}`} onClick={() => setPage(p)}>{p}</button>
+              );
+            })()}
             <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>›</button>
             <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>»</button>
           </div>
@@ -423,35 +445,42 @@ export default function Dashboard() {
               <div className="chart-card wide">
                 <div className="perf-header">
                   <h3>Company Performance (Last 30 Days)</h3>
+                  <p className="perf-subtitle">Request status breakdown by company</p>
                 </div>
                 <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
                   <div className="perf-chart-section">
-                    <h4>Requests by Company</h4>
-                    <ResponsiveContainer width="100%" height={350}>
-                      <BarChart data={(() => {
-                        return perfData.byCompany.map(s => {
-                          const created = s.data.reduce((sum, d) => sum + d.created, 0);
-                          const resolved = s.data.reduce((sum, d) => sum + d.resolved, 0);
-                          return { name: s.name, Created: created, Resolved: resolved };
-                        });
-                      })()}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey="Created" fill="#3B82F6" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data) => {
-                          const item = perfData.byCompany.find(s => s.name === data?.name);
-                          if (item) setSelectedDetail({ type: 'company', data: item });
-                        }}>
-                          <LabelList dataKey="Created" position="top" fill="#3B82F6" fontSize={11} fontWeight={600} />
-                        </Bar>
-                        <Bar dataKey="Resolved" fill="#10B981" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data) => {
-                          const item = perfData.byCompany.find(s => s.name === data?.name);
-                          if (item) setSelectedDetail({ type: 'company', data: item });
-                        }}>
-                          <LabelList dataKey="Resolved" position="top" fill="#10B981" fontSize={11} fontWeight={600} />
-                        </Bar>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={perfData.companyStats || []} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} angle={-20} textAnchor="end" height={60} />
+                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
+                        <Tooltip
+                          contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                          cursor={{ fill: '#f9fafb' }}
+                        />
+                        <Legend
+                          wrapperStyle={{ paddingTop: 16 }}
+                          iconType="circle"
+                          iconSize={10}
+                        />
+                        {STATUS_CONFIG.filter(s => {
+                          const data = perfData.companyStats || [];
+                          return data.some(d => d[s.key] > 0);
+                        }).map(s => (
+                          <Bar
+                            key={s.key}
+                            dataKey={s.key}
+                            name={s.label}
+                            fill={s.color}
+                            radius={[3, 3, 0, 0]}
+                            maxBarSize={24}
+                            cursor="pointer"
+                            onClick={(data) => {
+                              const item = perfData.byCompany.find(c => c.name === data?.name);
+                              if (item) setSelectedDetail({ type: 'company', data: item });
+                            }}
+                          />
+                        ))}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -465,35 +494,42 @@ export default function Dashboard() {
               <div className="chart-card wide">
                 <div className="perf-header">
                   <h3>Developer Performance (Last 30 Days)</h3>
+                  <p className="perf-subtitle">Request status breakdown by developer</p>
                 </div>
                 <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
                   <div className="perf-chart-section">
-                    <h4>Requests by Developer</h4>
-                    <ResponsiveContainer width="100%" height={350}>
-                      <BarChart data={(() => {
-                        return perfData.byDeveloper.map(s => {
-                          const created = s.data.reduce((sum, d) => sum + d.created, 0);
-                          const resolved = s.data.reduce((sum, d) => sum + d.resolved, 0);
-                          return { name: s.name, Created: created, Resolved: resolved };
-                        });
-                      })()}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey="Created" fill="#3B82F6" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data) => {
-                          const item = perfData.byDeveloper.find(s => s.name === data?.name);
-                          if (item) setSelectedDetail({ type: 'developer', data: item });
-                        }}>
-                          <LabelList dataKey="Created" position="top" fill="#3B82F6" fontSize={11} fontWeight={600} />
-                        </Bar>
-                        <Bar dataKey="Resolved" fill="#10B981" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data) => {
-                          const item = perfData.byDeveloper.find(s => s.name === data?.name);
-                          if (item) setSelectedDetail({ type: 'developer', data: item });
-                        }}>
-                          <LabelList dataKey="Resolved" position="top" fill="#10B981" fontSize={11} fontWeight={600} />
-                        </Bar>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={perfData.developerStats || []} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} angle={-20} textAnchor="end" height={60} />
+                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
+                        <Tooltip
+                          contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                          cursor={{ fill: '#f9fafb' }}
+                        />
+                        <Legend
+                          wrapperStyle={{ paddingTop: 16 }}
+                          iconType="circle"
+                          iconSize={10}
+                        />
+                        {STATUS_CONFIG.filter(s => {
+                          const data = perfData.developerStats || [];
+                          return data.some(d => d[s.key] > 0);
+                        }).map(s => (
+                          <Bar
+                            key={s.key}
+                            dataKey={s.key}
+                            name={s.label}
+                            fill={s.color}
+                            radius={[3, 3, 0, 0]}
+                            maxBarSize={24}
+                            cursor="pointer"
+                            onClick={(data) => {
+                              const item = perfData.byDeveloper.find(d => d.name === data?.name);
+                              if (item) setSelectedDetail({ type: 'developer', data: item });
+                            }}
+                          />
+                        ))}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>

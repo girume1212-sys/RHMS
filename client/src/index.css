@@ -766,6 +766,7 @@ body.dark-mode .dropdown-panel-message { color: #94a3b8 !important; }
   margin-bottom: 16px;
 }
 .perf-header h3 { font-size: 16px; font-weight: 600; margin-bottom: 0; }
+.perf-subtitle { font-size: 13px; color: #9ca3af; margin: 0; }
 .perf-toggle { display: flex; gap: 4px; background: #f3f4f6; border-radius: 8px; padding: 3px; }
 .perf-btn {
   padding: 6px 14px;

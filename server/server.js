@@ -1622,6 +1622,29 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
       data: dates.map((d, i) => ({ date: labels[i], created: dayData[d]?.created || 0, resolved: dayData[d]?.resolved || 0 }))
     }));
 
+    const companyStatusResult = await pool.query(`
+      SELECT u.company_name, s.name AS status_name, COUNT(*)::int AS count
+      FROM requests r
+      LEFT JOIN users u ON r.client_id = u.id
+      LEFT JOIN statuses s ON r.status_id = s.id
+      WHERE r.created_at::date >= ($1::date - INTERVAL '1 day' * $2)
+        AND u.company_name IS NOT NULL AND u.company_name != ''
+      GROUP BY u.company_name, s.name
+      ORDER BY u.company_name, s.name
+    `, [dates[dates.length - 1], days]);
+
+    const companyStatusMap = {};
+    companyStatusResult.rows.forEach(row => {
+      if (!companyStatusMap[row.company_name]) {
+        companyStatusMap[row.company_name] = {};
+      }
+      companyStatusMap[row.company_name][row.status_name] = row.count;
+    });
+    const companyStats = Object.entries(companyStatusMap).map(([name, statuses]) => ({
+      name,
+      ...statuses
+    }));
+
     const byDeveloperResult = await pool.query(`
       SELECT u.id, u.name AS developer_name,
         r.created_at::date AS day,
@@ -1648,7 +1671,30 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
       data: dates.map((d, i) => ({ date: labels[i], created: dayData[d]?.created || 0, resolved: dayData[d]?.resolved || 0 }))
     }));
 
-    res.json({ labels, byCompany, byDeveloper });
+    const devStatusResult = await pool.query(`
+      SELECT u.name AS developer_name, s.name AS status_name, COUNT(*)::int AS count
+      FROM requests r
+      LEFT JOIN users u ON r.assigned_to = u.id
+      LEFT JOIN statuses s ON r.status_id = s.id
+      WHERE r.created_at::date >= ($1::date - INTERVAL '1 day' * $2)
+        AND u.role IN ('developer', 'support')
+      GROUP BY u.name, s.name
+      ORDER BY u.name, s.name
+    `, [dates[dates.length - 1], days]);
+
+    const devStatusMap = {};
+    devStatusResult.rows.forEach(row => {
+      if (!devStatusMap[row.developer_name]) {
+        devStatusMap[row.developer_name] = {};
+      }
+      devStatusMap[row.developer_name][row.status_name] = row.count;
+    });
+    const developerStats = Object.entries(devStatusMap).map(([name, statuses]) => ({
+      name,
+      ...statuses
+    }));
+
+    res.json({ labels, byCompany, byDeveloper, companyStats, developerStats });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
