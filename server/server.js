@@ -2120,6 +2120,7 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
       { key: 'backupFrequency', value: 'weekly' },
       { key: 'accentColor', value: '#00b4d8' },
       { key: 'sidebarStyle', value: 'comfortable' },
+      { key: 'systemLogo', value: '' },
     ];
     for (const s of defaultSettings) {
       await pool.query(
@@ -2135,7 +2136,7 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
 
 app.get('/api/settings/public', async (req, res) => {
   try {
-    const result = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('theme', 'language', 'systemName', 'maintenanceMode', 'companyName')");
+    const result = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('theme', 'language', 'systemName', 'maintenanceMode', 'companyName', 'systemLogo')");
     const settings = {};
     for (const row of result.rows) {
       if (row.value === 'true') settings[row.key] = true;
@@ -2233,6 +2234,7 @@ app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (
       { key: 'holidaysEnabled', value: 'true' },
       { key: 'autoBackup', value: 'false' },
       { key: 'backupFrequency', value: 'weekly' },
+      { key: 'systemLogo', value: '' },
     ];
     for (const s of defaults) {
       await pool.query(
@@ -2248,6 +2250,45 @@ app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (
 });
 
 
+
+// Logo upload
+app.post('/api/settings/logo', authMiddleware, roleMiddleware('admin'), upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const logoPath = `/uploads/${req.file.filename}`;
+    await pool.query(
+      'INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
+      ['systemLogo', logoPath]
+    );
+    res.json({ logo: logoPath });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.delete('/api/settings/logo', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    await pool.query(
+      'INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
+      ['systemLogo', '']
+    );
+    res.json({ message: 'Logo removed' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Error handler for multer/file upload errors
+app.use((err, req, res, next) => {
+  if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'File too large. Max 10MB.' });
+  if (err.code === 'LIMIT_UNEXPECTED_FILE') return res.status(400).json({ error: 'Unexpected file field: ' + err.field });
+  if (err) return res.status(500).json({ error: err.message || 'Server error' });
+  next();
+});
+
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
 
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {

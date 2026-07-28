@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { api } from '../api';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTranslation } from '../i18n/useTranslation';
@@ -33,6 +33,8 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef(null);
   const [companies, setCompanies] = useState([]);
   const [groups, setGroups] = useState([]);
   const [statuses, setStatuses] = useState([]);
@@ -80,6 +82,7 @@ export default function Settings() {
     holidaysEnabled: true,
     autoBackup: false,
     backupFrequency: 'weekly',
+    systemLogo: '',
   };
 
   const [form, setForm] = useState({ ...initialForm });
@@ -288,9 +291,55 @@ export default function Settings() {
             </select>
           </div>
           <div className="settings-field">
-            <label>Company Logo</label>
-            <input type="file" accept="image/*" disabled title="Upload via Company page" />
-            <span style={{ fontSize: '12px', color: '#9ca3af' }}>Upload logo in the Company management page</span>
+            <label>System Logo</label>
+            <div className="logo-upload-area">
+              {form.systemLogo ? (
+                <div className="logo-preview">
+                  <img src={`${API_BASE}${form.systemLogo}`} alt="Logo" />
+                  <button type="button" className="logo-remove-btn" onClick={async () => {
+                    try {
+                      await api.delete('/api/settings/logo');
+                      handleChange('systemLogo', '');
+                      addToast('Logo removed', 'success');
+                    } catch { addToast('Failed to remove logo', 'error'); }
+                  }}>&times;</button>
+                </div>
+              ) : (
+                <div className="logo-placeholder">No logo uploaded</div>
+              )}
+              <button
+                type="button"
+                className="logo-upload-btn"
+                disabled={logoUploading}
+                onClick={() => logoInputRef.current?.click()}
+              >
+                {logoUploading ? 'Uploading...' : 'Choose Image'}
+              </button>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  setLogoUploading(true);
+                  try {
+                    const fd = new FormData();
+                    fd.append('logo', file);
+                    const res = await api.upload('/api/settings/logo', fd);
+                    handleChange('systemLogo', res.logo);
+                    addToast('Logo uploaded', 'success');
+                  } catch (err) {
+                    console.error('Logo upload error:', err);
+                    addToast('Upload failed: ' + (err.message || 'unknown error'), 'error');
+                  } finally {
+                    if (logoInputRef.current) logoInputRef.current.value = '';
+                    setLogoUploading(false);
+                  }
+                }}
+              />
+            </div>
           </div>
         </div>
 

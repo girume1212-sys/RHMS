@@ -34,4 +34,18 @@ export const api = {
   put: (url, body) => apiFetch(url, { method: 'PUT', body: JSON.stringify(body) }),
   patch: (url, body) => apiFetch(url, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: (url) => apiFetch(url, { method: 'DELETE' }),
+  upload: async (url, formData) => {
+    const token = localStorage.getItem('rhms_token');
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}${url}`, { method: 'POST', headers, body: formData });
+    if (res.status === 401) {
+      localStorage.removeItem('rhms_token');
+      window.location.href = '/login?expired=1';
+      throw new Error('Session expired');
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    return data;
+  },
 };

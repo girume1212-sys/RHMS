@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('rhms_darkMode') === 'true');
   const [systemName, setSystemName] = useState('RHMS');
+  const [systemLogo, setSystemLogo] = useState('');
   const timeoutRef = useRef(null);
 
   const toggleDarkMode = () => {
@@ -32,6 +33,7 @@ export function AuthProvider({ children }) {
         localStorage.setItem('rhms_darkMode', 'true');
       }
       if (data.systemName) setSystemName(data.systemName);
+      if (data.systemLogo) setSystemLogo(data.systemLogo);
       if (data.language) {
         localStorage.setItem('rhms_language', data.language);
       }
@@ -125,7 +127,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading, darkMode, toggleDarkMode, updateUser, systemName }}>
+    <AuthContext.Provider value={{ user, token, login, logout, loading, darkMode, toggleDarkMode, updateUser, systemName, systemLogo }}>
       {children}
     </AuthContext.Provider>
   );
