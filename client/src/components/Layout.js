@@ -421,8 +421,8 @@ export default function Layout() {
                     </div>
                   </div>
                   <div className="dropdown-divider"></div>
-                  <button className="dropdown-item">👤 {t('topbar.myProfile')}</button>
-                  <button className="dropdown-item">⚙️ {t('topbar.settingsLabel')}</button>
+                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/profile'); }}>👤 {t('topbar.myProfile')}</button>
+                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/settings'); }}>⚙️ {t('topbar.settingsLabel')}</button>
                   <div className="dropdown-divider"></div>
                   <button className="dropdown-item logout" onClick={() => { logout(); navigate('/login'); }}>
                     🚪 {t('topbar.signOut')}

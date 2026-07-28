@@ -20,6 +20,7 @@ import Feedback from './components/Feedback';
 import Reports from './components/Reports';
 import ActivityLog from './components/ActivityLog';
 import Settings from './components/Settings';
+import Profile from './components/Profile';
 import Company from './components/Company';
 import ClientLayout from './components/ClientLayout';
 import ClientDashboard from './components/ClientDashboard';
@@ -64,6 +65,7 @@ function AppRoutes() {
         <Route path="reports" element={<Reports />} />
         <Route path="activity" element={<ActivityLog />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="profile" element={<Profile />} />
       </Route>
       <Route path="/client" element={<ProtectedRoute allowedRoles={['client']}><ClientLayout /></ProtectedRoute>}>
         <Route index element={<ClientDashboard />} />
