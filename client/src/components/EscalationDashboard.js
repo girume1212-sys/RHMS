@@ -269,8 +269,8 @@ export default function EscalationDashboard() {
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
+          <span style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>All Requests ({filteredRequests.length})</span>
           <div className="table-header-actions">
-            <span style={{ fontSize: '16px', fontWeight: 700, color: '#fff', marginRight: '8px' }}>All Requests ({filteredRequests.length})</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
               <span>Show My Tasks</span>
               <div

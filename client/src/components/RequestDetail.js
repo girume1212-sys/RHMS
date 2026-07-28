@@ -702,7 +702,7 @@ export default function RequestDetail() {
 
           {/* Assignee */}
           <div className="detail-card">
-            <h3>Assignee</h3>
+            <h3>Assigned to</h3>
             {request.assignee ? (
               <div className="assignee-info">
                 <div className="assignee-avatar-lg" style={{ background: '#3B82F6' }}>{request.assignee.name.charAt(0)}</div>
