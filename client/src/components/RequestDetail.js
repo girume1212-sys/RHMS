@@ -653,9 +653,11 @@ export default function RequestDetail() {
                     {statuses
                       .filter(s => !(user.role === 'support' && s.name === 'Escalated'))
                       .filter(s => s.name !== 'Reopened')
+                      .filter(s => !(user.role !== 'admin' && (s.name === 'Closed' || s.name === 'Rejected')))
                       .map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
+                {user?.role === 'admin' && (
                 <div className="action-group">
                   <label>Assign To</label>
                   <select value={request.assignedTo || ''} onChange={(e) => handleAssign(e.target.value)}>
@@ -672,6 +674,7 @@ export default function RequestDetail() {
                     </optgroup>
                   </select>
                 </div>
+                )}
               </div>
             </div>
           )}

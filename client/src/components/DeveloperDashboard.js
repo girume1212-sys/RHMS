@@ -7,7 +7,6 @@ import { showStatusToast } from '../notify';
 export default function DeveloperDashboard() {
   const [requests, setRequests] = useState([]);
   const [statuses, setStatuses] = useState([]);
-  const [groups, setGroups] = useState([]);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -35,12 +34,10 @@ export default function DeveloperDashboard() {
     Promise.all([
       api.get(`/api/requests?myRequests=${showAssignedOnly}`),
       api.get('/api/statuses'),
-      api.get('/api/groups'),
       api.get('/api/activity')
-    ]).then(([requestsData, statusesData, groupsData, activityData]) => {
+    ]).then(([requestsData, statusesData, activityData]) => {
       setRequests(requestsData);
       setStatuses(statusesData);
-      setGroups(groupsData);
       setActivityLog(activityData);
     }).catch(err => setError('Failed to load data: ' + err.message));
   };
@@ -82,22 +79,6 @@ export default function DeveloperDashboard() {
       showStatusToast(`Request #${requestId} marked as ${statusName}`, 'status', requestId);
     } catch (err) {
       showStatusToast('Failed to update status: ' + err.message, 'error');
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const handleAssignedGroupChange = async (e, requestId) => {
-    e.stopPropagation();
-    const groupId = e.target.value || null;
-    setUpdatingId(`group-${requestId}`);
-    try {
-      await api.put(`/api/requests/${requestId}`, { assignedGroup: groupId });
-      const grp = groups.find(g => g.id === groupId);
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedGroup: grp ? { id: grp.id, name: grp.name, color: grp.color } : null } : r));
-      showStatusToast(`Request #${requestId} group → ${grp?.name || 'None'}`, 'status', requestId);
-    } catch (err) {
-      showStatusToast('Failed to update group: ' + err.message, 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -199,7 +180,6 @@ export default function DeveloperDashboard() {
       actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓' });
       actions.push({ label: 'Need Info', status: 'Waiting for Client', color: '#F97316', icon: '❓' });
     }
-    actions.push({ label: 'Delete', color: '#EF4444', icon: '🗑', type: 'delete' });
     return actions;
   };
 

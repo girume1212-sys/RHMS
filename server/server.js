@@ -954,8 +954,15 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
 assignee: r.assignee_name ? { id: r.assigned_to, name: r.assignee_name, email: r.assignee_email, role: r.assignee_role, avatar: r.assignee_avatar, createdAt: r.assignee_created_at } : null,
       assignedGroup: r.assigned_group_name ? { id: r.assigned_group_id, name: r.assigned_group_name, color: r.assigned_group_color } : null,
-      groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.groups) : []
+groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.groups) : []
     }));
+    if (req.user.role === 'developer' || req.user.role === 'support') {
+      const userGroupsRes = await pool.query('SELECT group_id FROM user_groups WHERE user_id = $1', [req.user.id]);
+      const userGroupIds = userGroupsRes.rows.map(r => r.group_id);
+      enriched.forEach(r => {
+        r.groups = (r.groups || []).filter(g => userGroupIds.includes(g.id));
+      });
+    }
     res.json(enriched);
   } catch (err) {
     console.error(err);
@@ -1040,6 +1047,13 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
         user: c.user_name ? { id: c.user_id, name: c.user_name, email: c.user_email, role: c.user_role, avatar: c.user_avatar, createdAt: c.user_created_at } : null
       }))
     };
+    if (req.user.role === 'developer' || req.user.role === 'support') {
+      const userGroupsRes = await pool.query(
+        `SELECT g.id, g.name, g.color FROM user_groups ug JOIN groups g ON ug.group_id = g.id WHERE ug.user_id = $1`,
+        [req.user.id]
+      );
+      enriched.groups = userGroupsRes.rows;
+    }
     res.json(enriched);
   } catch (err) {
     console.error(err);
@@ -1155,7 +1169,10 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
     if (assignedTo !== undefined) newAssignedTo = assignedTo || null;
 
     if (assignedTo && assignedTo !== existing.rows[0].assigned_to) {
-      newStatusId = '2';
+      // Preserve escalated status when assigning to escalation team
+      if (existing.rows[0].status_id !== '9') {
+        newStatusId = '2';
+      }
     }
 
     const newAttachments = attachments !== undefined ? attachments : (typeof existing.rows[0].attachments === 'string' ? JSON.parse(existing.rows[0].attachments) : existing.rows[0].attachments);

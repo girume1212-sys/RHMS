@@ -19,10 +19,7 @@ export default function EscalationDashboard() {
   const [showAssignedOnly, setShowAssignedOnly] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(null);
-  const [activityLog, setActivityLog] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -38,14 +35,12 @@ export default function EscalationDashboard() {
       api.get(`/api/requests?myRequests=${showAssignedOnly}`),
       api.get('/api/statuses'),
       api.get('/api/users'),
-      api.get('/api/groups'),
-      api.get('/api/activity')
-    ]).then(([requestsData, statusesData, usersData, groupsData, activityData]) => {
+      api.get('/api/groups')
+    ]).then(([requestsData, statusesData, usersData, groupsData]) => {
       setRequests(requestsData);
       setStatuses(statusesData);
       setUsers(usersData);
       setGroups(groupsData);
-      setActivityLog(activityData);
     }).catch(err => setError('Failed to load data: ' + err.message));
   };
 
@@ -220,7 +215,6 @@ export default function EscalationDashboard() {
       actions.push({ label: 'Handle', status: 'In Progress', color: '#F59E0B', icon: '🔧', type: 'status' });
       actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
     }
-    actions.push({ label: 'Delete', color: '#EF4444', icon: '🗑', type: 'delete' });
     return actions;
   };
 
@@ -275,8 +269,8 @@ export default function EscalationDashboard() {
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
-          <h3>{showAssignedOnly ? 'My Requests' : 'All Requests'} ({filteredRequests.length})</h3>
           <div className="table-header-actions">
+            <span style={{ fontSize: '16px', fontWeight: 700, color: '#fff', marginRight: '8px' }}>All Requests ({filteredRequests.length})</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
               <span>Show My Tasks</span>
               <div
@@ -458,43 +452,6 @@ export default function EscalationDashboard() {
         </div>
       )}
 
-      <div className="detail-card" style={{ marginTop: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <h3 style={{ margin: 0, border: 'none', padding: 0 }}>📜 History</h3>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="action-btn-text edit" onClick={() => setShowHistory(!showHistory)}>
-              {showHistory ? 'Hide History' : 'Show History'}
-            </button>
-            <button className="action-btn-text delete" onClick={() => setShowClearConfirm(true)}>
-              Clear History
-            </button>
-          </div>
-        </div>
-        {showHistory && (
-          <div className="timeline">
-            {activityLog.length === 0 ? (
-              <div className="empty-state">No activity yet</div>
-            ) : (
-              <div className="timeline-list">
-                {activityLog.map((a) => (
-                  <div key={a.id} className="timeline-item">
-                    <div className="timeline-dot" style={{ background: a.user?.role === 'admin' ? '#EF4444' : a.user?.role === 'support' ? '#8B5CF6' : '#3B82F6' }}></div>
-                    <div className="timeline-content">
-                      <div className="timeline-header">
-                        <strong>{a.user?.name || 'System'}</strong>
-                        <span className="timeline-time">{a.createdAt ? new Date(a.createdAt).toLocaleString() : ''}</span>
-                      </div>
-                      <p className="timeline-message">{a.message}</p>
-                      {a.request && <small style={{ color: '#6B7280' }}>on: {a.request.subject}</small>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
@@ -502,24 +459,6 @@ export default function EscalationDashboard() {
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
               <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
               <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showClearConfirm && (
-        <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', background: '#1e293b' }}>
-            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to clear this history?</p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
-              <button onClick={() => setShowClearConfirm(false)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => {
-                api.delete('/api/activity').then(() => {
-                  setActivityLog([]);
-                  showStatusToast('History cleared', 'success');
-                  setShowClearConfirm(false);
-                }).catch(() => { showStatusToast('Failed to clear history', 'error'); setShowClearConfirm(false); });
-              }} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Clear</button>
             </div>
           </div>
         </div>

@@ -95,7 +95,7 @@ export default function Layout() {
       { path: '/', label: t('sidebar.dashboard'), icon: '🏠' },
     ]},
     { section: null, items: [
-      { path: '/requests', label: 'All Requests', icon: '📄', roles: ['support'] },
+      
       { path: '/requests', label: t('sidebar.requests'), icon: '📄', roles: ['admin'] },
     ]},
     { section: t('sidebar.management'), items: [
