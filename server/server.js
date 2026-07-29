@@ -1169,6 +1169,10 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
           return res.status(403).json({ error: 'Reopening requests is not allowed. Contact an administrator.' });
         }
       }
+      // Clients can only close or reject a resolved request
+      if (req.user.role === 'client' && (statusId === '6' || statusId === '8') && existing.rows[0].status_id !== '5') {
+        return res.status(400).json({ error: 'You can only close or reject a request that is in Resolved status.' });
+      }
     }
 
     let newStatusId = existing.rows[0].status_id;

@@ -51,12 +51,12 @@ export default function RequestDetail() {
   useEffect(() => {
     loadRequest();
     loadActivity();
-    api.get('/api/statuses').then(setStatuses);
+    api.get('/api/statuses').then(setStatuses).catch(() => {});
     if (!isClient) {
-      api.get('/api/users').then(setUsers);
+      api.get('/api/users').then(setUsers).catch(() => {});
     }
-    api.get('/api/categories').then(setCategories);
-    api.get('/api/priorities').then(setPriorities);
+    api.get('/api/categories').then(setCategories).catch(() => {});
+    api.get('/api/priorities').then(setPriorities).catch(() => {});
     loadFeedback();
   }, [id]);
 
@@ -94,7 +94,7 @@ export default function RequestDetail() {
       setEditForm({ subject: data.subject, description: data.description, categoryId: data.categoryId, priorityId: data.priorityId, statusId: data.statusId, assignedTo: data.assignedTo || '', attachments });
       setEditAttachments(attachments);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   };
 
   const loadActivity = () => {
@@ -110,6 +110,10 @@ export default function RequestDetail() {
   };
 
   const handleStatusChange = async (statusId) => {
+    if (isClient && (statusId === '6' || statusId === '8') && request.statusId !== '5') {
+      addToast('You can only close or reject a request that is in Resolved status.', 'error');
+      return;
+    }
     try {
       await api.put(`/api/requests/${id}`, { statusId });
       loadRequest();

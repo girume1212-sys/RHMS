@@ -59,6 +59,19 @@ export default function ClientDashboard() {
     setPage(1);
   };
 
+  const ClientStatCard = ({ icon, value, label, color }) => {
+    const [h, setH] = useState(false);
+    return (
+      <div className="stat-card" style={{ cursor: 'pointer', transform: h ? 'translateY(-4px)' : '', boxShadow: h ? `0 8px 25px ${color}30` : '', borderLeft: h ? `4px solid ${color}` : '4px solid transparent', transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s' }} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}>
+        <div className="stat-icon" style={{ background: color + '15', color: color }}>{icon}</div>
+        <div className="stat-content">
+          <h3>{value}</h3>
+          <p>{label}</p>
+        </div>
+      </div>
+    );
+  };
+
   const getSortIcon = (key) => {
     const isActive = sort.key === key;
     if (!isActive) return <span className="sort-icon" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>⇅</span>;
@@ -153,34 +166,10 @@ export default function ClientDashboard() {
       )}
 
       <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: '#3B82F615', color: '#3B82F6' }}>📋</div>
-          <div className="stat-content">
-            <h3>{stats.total}</h3>
-            <p>Total Requests</p>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: '#10B98115', color: '#10B981' }}>📂</div>
-          <div className="stat-content">
-            <h3>{stats.open}</h3>
-            <p>New</p>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: '#F59E0B15', color: '#F59E0B' }}>⏳</div>
-          <div className="stat-content">
-            <h3>{stats.inProgress}</h3>
-            <p>In Progress</p>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: '#8B5CF615', color: '#8B5CF6' }}>✅</div>
-          <div className="stat-content">
-            <h3>{stats.resolved}</h3>
-            <p>Resolved</p>
-          </div>
-        </div>
+        <ClientStatCard icon="📋" value={stats.total} label="Total Requests" color="#3B82F6" />
+        <ClientStatCard icon="📂" value={stats.open} label="New" color="#10B981" />
+        <ClientStatCard icon="⏳" value={stats.inProgress} label="In Progress" color="#F59E0B" />
+        <ClientStatCard icon="✅" value={stats.resolved} label="Resolved" color="#8B5CF6" />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>

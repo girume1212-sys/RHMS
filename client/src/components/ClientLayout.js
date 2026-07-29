@@ -297,8 +297,8 @@ export default function ClientLayout() {
                 )}
               </button>
               {showNotifications && (
-                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.15)', width: 360, maxHeight: 400, overflow: 'auto', zIndex: 1000, border: '1px solid #e5e7eb' }}>
-                  <div style={{ padding: '14px 16px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, background: darkMode ? '#1e293b' : '#fff', borderRadius: 12, boxShadow: darkMode ? '0 4px 24px rgba(0,0,0,0.4)' : '0 4px 24px rgba(0,0,0,0.15)', width: 360, maxHeight: 400, overflow: 'auto', zIndex: 1000, border: darkMode ? '1px solid #334155' : '1px solid #e5e7eb' }}>
+                  <div style={{ padding: '14px 16px', borderBottom: darkMode ? '1px solid #334155' : '1px solid #e5e7eb', fontWeight: 600, fontSize: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: darkMode ? '#e2e8f0' : 'inherit' }}>
                     <span>{t('common.notifications')} {unreadCount > 0 && <span style={{ color: '#EF4444', fontWeight: 400 }}>({unreadCount})</span>}</span>
                     {unreadCount > 0 && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={clearUnreadCount}>Clear all</span>}
                   </div>
@@ -306,11 +306,11 @@ export default function ClientLayout() {
                     <div style={{ padding: '32px 16px', textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>{t('common.noNotifications')}</div>
                   ) : (
                     notifications.map((n) => (
-                      <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6', fontSize: 13, cursor: 'pointer', display: 'flex', gap: '12px', alignItems: 'flex-start', background: newNotifIds.current.has(n.id) ? '#fef2f2' : 'transparent', borderLeft: newNotifIds.current.has(n.id) ? '3px solid #ef4444' : 'none' }}
+                      <div key={n.id} style={{ padding: '12px 16px', borderBottom: darkMode ? '1px solid #334155' : '1px solid #f3f4f6', fontSize: 13, cursor: 'pointer', display: 'flex', gap: '12px', alignItems: 'flex-start', background: newNotifIds.current.has(n.id) ? (darkMode ? '#3b1a1a' : '#fef2f2') : 'transparent', borderLeft: newNotifIds.current.has(n.id) ? '3px solid #ef4444' : 'none' }}
                         onClick={() => { setShowNotifications(false); if (n.requestId) navigate(`/client/requests/${n.requestId}`); }}>
                         <div style={{ fontSize: '18px', flexShrink: 0 }}>{getNotificationIcon(n.type)}</div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ color: '#1f2937' }}>{n.message}</div>
+                          <div style={{ color: darkMode ? '#e2e8f0' : '#1f2937' }}>{n.message}</div>
                           <div style={{ color: '#9ca3af', fontSize: 11, marginTop: 4 }}>{n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</div>
                         </div>
                       </div>
