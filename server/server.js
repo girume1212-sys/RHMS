@@ -1177,8 +1177,9 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
     if (statusId) newStatusId = statusId;
     if (assignedTo !== undefined) newAssignedTo = assignedTo || null;
 
-    if (assignedTo && assignedTo !== existing.rows[0].assigned_to) {
-      // Preserve escalated status when assigning to escalation team
+    if (statusId && newStatusId === '1') {
+      newAssignedTo = null;
+    } else if (assignedTo && assignedTo !== existing.rows[0].assigned_to) {
       if (existing.rows[0].status_id !== '9') {
         newStatusId = '2';
       }

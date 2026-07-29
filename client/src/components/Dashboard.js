@@ -336,7 +336,7 @@ export default function Dashboard() {
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}</td>
                   <td>
-                    {r.assignee ? (
+                    {r.assignee && r.status?.name !== 'New' ? (
                       <div className="assigned-user-cell">
                         <div className="assigned-avatar" style={{ background: '#3B82F6' }}>
                           {r.assignee.name.charAt(0)}

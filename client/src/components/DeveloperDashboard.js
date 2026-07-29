@@ -146,6 +146,7 @@ export default function DeveloperDashboard() {
       switch (sort.key) {
         case 'id': aVal = a.id; bVal = b.id; break;
         case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
+        case 'assignee': aVal = (a.assignee?.name || '').toLowerCase(); bVal = (b.assignee?.name || '').toLowerCase(); break;
         case 'client': aVal = (a.client?.name || '').toLowerCase(); bVal = (b.client?.name || '').toLowerCase(); break;
         case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
         case 'assignedGroup': aVal = (a.assignedGroup?.name || '').toLowerCase(); bVal = (b.assignedGroup?.name || '').toLowerCase(); break;
@@ -279,6 +280,7 @@ export default function DeveloperDashboard() {
               <tr>
                 <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>ID</span> {getSortIcon('id')}</th>
                 <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>Request Title</span> {getSortIcon('subject')}</th>
+                <th className="sortable"><span onClick={() => handleSort('assignee')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned To</span> {getSortIcon('assignee')}</th>
                 <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>Client</span> {getSortIcon('client')}</th>
                 <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned Group</span> {getSortIcon('groups')}</th>
                 <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>Category</span> {getSortIcon('category')}</th>
@@ -293,6 +295,16 @@ export default function DeveloperDashboard() {
                 <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row" style={isReadOnly(r) ? { opacity: 0.75 } : {}}>
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>(read-only)</span>}</td>
+                  <td>
+                    {r.assignee ? (
+                      <div className="assigned-user-cell">
+                        <div className="assigned-avatar" style={{ background: '#3B82F6' }}>
+                          {r.assignee.name.charAt(0)}
+                        </div>
+                        <span>{r.assignee.name}</span>
+                      </div>
+                    ) : <span style={{ color: '#9ca3af' }}>-</span>}
+                  </td>
                   <td>{r.client?.name || '-'}</td>
                   <td>
                     {r.groups && r.groups.length > 0
@@ -353,7 +365,7 @@ export default function DeveloperDashboard() {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
+                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
                   {displayRequests.length === 0 ? (showAssignedOnly ? 'No requests assigned to you.' : 'No requests yet.') : 'No requests match your filters.'}
                 </td></tr>
               )}

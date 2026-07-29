@@ -127,13 +127,20 @@ export default function RequestDetail() {
   };
 
   const handleAssign = async (assignedTo) => {
+    const prev = { assignedTo: request.assignedTo, statusId: request.statusId, status: request.status, assignee: request.assignee };
+    const optAssignee = assignedTo ? users.find(u => u.id === assignedTo) : null;
+    const optStatus = !prev.assignedTo && assignedTo && prev.statusId === '1' ? statuses.find(s => s.id === '2') : prev.status;
+    setRequest(v => ({ ...v, assignedTo: assignedTo || null, statusId: optStatus ? optStatus.id : prev.statusId, status: optStatus || prev.status, assignee: optAssignee ? { id: optAssignee.id, name: optAssignee.name, avatar: optAssignee.avatar } : null }));
     try {
-      await api.put(`/api/requests/${id}`, { assignedTo });
-      loadRequest();
+      const result = await api.put(`/api/requests/${id}`, { assignedTo });
+      const serverStatus = statuses.find(s => s.id === result.statusId);
+      const serverAssignee = result.assignedTo ? users.find(u => u.id === result.assignedTo) : null;
+      setRequest(v => ({ ...v, assignedTo: result.assignedTo, statusId: result.statusId, status: serverStatus || v.status, assignee: serverAssignee ? { id: serverAssignee.id, name: serverAssignee.name, avatar: serverAssignee.avatar } : null }));
       loadActivity();
       addToast('Assignee updated successfully!');
       showStatusToast(`Request #${id} assignee updated`, 'assignment', id);
     } catch (err) {
+      setRequest(v => ({ ...v, assignedTo: prev.assignedTo, statusId: prev.statusId, status: prev.status, assignee: prev.assignee }));
       addToast('Failed to update assignee: ' + err.message, 'error');
     }
   };
@@ -267,41 +274,57 @@ export default function RequestDetail() {
   };
 
   const getStatusFlow = () => {
-    const lifecycle = ['New', 'Assigned', 'In Progress', 'Waiting for Client', 'Resolved', 'Closed'];
-    const visitedStatuses = new Set();
-    const statusTimestamps = {};
+    const statusSequence = [];
+
+    const createdLog = activityLog.find(a => a.type === 'created');
+    if (createdLog) {
+      statusSequence.push({
+        name: 'New',
+        time: createdLog.createdAt,
+        user: createdLog.user?.name
+      });
+    }
 
     activityLog.forEach(a => {
       if (a.type === 'status_update') {
-        const match = a.message.match(/to\s+(.+)/i);
+        const match = a.message.match(/to (.+)/i);
         if (match) {
-          const name = match[1].trim();
-          visitedStatuses.add(name);
-          if (!statusTimestamps[name]) {
-            statusTimestamps[name] = { time: a.createdAt, user: a.user?.name };
-          }
+          const toStatus = match[1].trim();
+          statusSequence.push({
+            name: toStatus,
+            time: a.createdAt,
+            user: a.user?.name
+          });
         }
       }
     });
 
-    if (request.status) {
-      visitedStatuses.add(request.status.name);
-      if (!statusTimestamps[request.status.name]) {
-        statusTimestamps[request.status.name] = { time: request.createdAt, user: request.client?.name };
-      }
+    if (statusSequence.length === 0 && request.status) {
+      statusSequence.push({
+        name: request.status.name,
+        time: request.createdAt,
+        user: request.client?.name
+      });
     }
 
+    const lastItem = statusSequence[statusSequence.length - 1];
     const currentStatus = request.status?.name;
-    const currentIdx = lifecycle.indexOf(currentStatus);
+    if (currentStatus && (!lastItem || lastItem.name !== currentStatus)) {
+      statusSequence.push({
+        name: currentStatus,
+        time: request.updatedAt || request.createdAt,
+        user: request.client?.name
+      });
+    }
 
-    return lifecycle.map((name, idx) => ({
-      name,
-      color: getStatusColor({ name }),
-      visited: visitedStatuses.has(name),
-      current: name === currentStatus,
-      isPast: currentIdx >= 0 && idx < currentIdx,
-      time: statusTimestamps[name]?.time,
-      user: statusTimestamps[name]?.user
+    return statusSequence.map((step, idx) => ({
+      name: step.name,
+      color: getStatusColor({ name: step.name }),
+      visited: true,
+      current: idx === statusSequence.length - 1,
+      isPast: idx < statusSequence.length - 1,
+      time: step.time,
+      user: step.user
     }));
   };
 
@@ -782,44 +805,47 @@ export default function RequestDetail() {
                     <span className="lifecycle-title">Status Flow</span>
                   </div>
                   <div className="lifecycle-flow">
-                    {getStatusFlow().map((step, idx) => (
-                      <React.Fragment key={step.name}>
-                        <div className={`lifecycle-step ${step.visited ? 'visited' : ''} ${step.current ? 'current' : ''} ${step.isPast ? 'past' : ''}`}>
-                          <div className="lifecycle-dot" style={{
-                            background: step.visited ? step.color : '#d1d5db',
-                            boxShadow: step.current ? `0 0 0 4px ${step.color}30, 0 0 12px ${step.color}50` : 'none'
-                          }}>
-                            {step.visited && <span className="lifecycle-check">✓</span>}
-                            {step.current && <span className="lifecycle-pulse" style={{ borderColor: step.color }}></span>}
-                          </div>
-                          <span className="lifecycle-label" style={{ color: step.visited ? step.color : 'rgb(156, 163, 175)', fontWeight: step.current ? 700 : step.visited ? 600 : 400 }}>
-                            {step.name}
-                          </span>
-                          {step.time && (
-                            <span className="lifecycle-time">
-                              {step.user && <span className="lifecycle-user">{step.user}</span>}
-                              {new Date(step.time).toLocaleDateString()}
+                    {(() => {
+                      const flowSteps = getStatusFlow();
+                      return flowSteps.map((step, idx) => (
+                        <React.Fragment key={idx}>
+                          <div className={`lifecycle-step visited ${step.current ? 'current' : ''} ${step.isPast ? 'past' : ''}`}>
+                            <div className="lifecycle-dot" style={{
+                              background: step.color,
+                              boxShadow: step.current ? `0 0 0 4px ${step.color}30, 0 0 12px ${step.color}50` : 'none'
+                            }}>
+                              {step.isPast && <span className="lifecycle-check">✓</span>}
+                              {step.current && <span className="lifecycle-pulse" style={{ borderColor: step.color }}></span>}
+                            </div>
+                            <span className="lifecycle-label" style={{ color: step.color, fontWeight: step.current ? 700 : 600 }}>
+                              {step.name}
                             </span>
+                            {step.time && (
+                              <span className="lifecycle-time">
+                                {step.user && <span className="lifecycle-user">{step.user}</span>}
+                                {new Date(step.time).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                          {idx < flowSteps.length - 1 && (
+                            <div className="lifecycle-connector" style={{
+                              background: `linear-gradient(90deg, ${step.color}, ${flowSteps[idx + 1].color})`
+                            }}></div>
                           )}
-                        </div>
-                        {idx < getStatusFlow().length - 1 && (
-                          <div className="lifecycle-connector" style={{
-                            background: step.isPast ? `linear-gradient(90deg, ${step.color}, ${getStatusFlow()[idx + 1].color})` : '#e5e7eb'
-                          }}></div>
-                        )}
-                      </React.Fragment>
-                    ))}
+                        </React.Fragment>
+                      ));
+                    })()}
                   </div>
                 </div>
 
                 <div className="timeline">
                   {loadingActivity ? (
                     <div className="loading-screen" style={{ minHeight: 'auto', padding: '20px' }}><div className="spinner"></div></div>
-                  ) : activityLog.filter(a => a.user?.id !== user?.id).length === 0 ? (
-                    <div className="empty-state">No activity from others yet</div>
+                  ) : activityLog.length === 0 ? (
+                    <div className="empty-state">No activity yet</div>
                   ) : (
                     <div className="timeline-list">
-                      {activityLog.filter(a => a.user?.id !== user?.id).map((activity) => (
+                      {activityLog.map((activity) => (
                         <div key={activity.id} className="timeline-item">
                           <div className="timeline-marker" style={{ background: getActivityColor(activity.type) }}></div>
                           <div className="timeline-connector"></div>
