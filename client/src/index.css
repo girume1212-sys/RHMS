@@ -571,6 +571,8 @@ body {
   border-bottom: 1px solid #f3f4f6;
 }
 .dropdown-panel-item:hover { background: #f9fafb; }
+.dropdown-panel-item.notification-new { background: #fef2f2; border-left: 3px solid #ef4444; }
+body.dark-mode .dropdown-panel-item.notification-new { background: #3b1a1a; border-left-color: #ef4444; }
 .dropdown-panel-item:last-child { border-bottom: none; }
 .dropdown-panel-icon {
   width: 32px;

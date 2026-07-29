@@ -20,6 +20,7 @@ export default function Layout() {
   const [unreadCount, setUnreadCount] = useState(0);
   const prevNotifCount = useRef(0);
   const dismissedIds = useRef(new Set());
+  const newNotifIds = useRef(new Set());
   const eventSourceRef = useRef(null);
   const audioUnlocked = useRef(false);
   const notificationAudio = useRef(null);
@@ -127,12 +128,13 @@ export default function Layout() {
         const newItems = newNotifs.slice(0, newNotifs.length - prevNotifCount.current);
         newItems.forEach((n, i) => {
           if (!dismissedIds.current.has(n.id)) {
-            setTimeout(() => {
+            const timer = setTimeout(() => {
               setBubbleNotifications(prev => {
                 if (prev.find(p => p.id === n.id)) return prev;
                 return [n, ...prev].slice(0, 5);
               });
             }, i * 300);
+            setTimeout(() => removeBubble(n.id), i * 300 + 2000);
           }
         });
       }
@@ -171,7 +173,6 @@ export default function Layout() {
           const data = JSON.parse(event.data);
           
           if (data.type === 'init') {
-            setUnreadCount(data.count || 0);
             return;
           }
 
@@ -188,10 +189,11 @@ export default function Layout() {
 
           setNotifications(prev => [notification, ...prev].slice(0, 20));
 
-          if (!dismissedIds.current.has(notification.id)) {
+          if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
+            setTimeout(() => removeBubble(notification.id), 2000);
           }
-
+          newNotifIds.current.add(notification.id);
           setUnreadCount(prev => prev + 1);
 
           if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
@@ -234,7 +236,7 @@ export default function Layout() {
       const { message, type } = e.detail;
       if (statusToastTimeout.current) clearTimeout(statusToastTimeout.current);
       setStatusToast({ message, type });
-      statusToastTimeout.current = setTimeout(() => setStatusToast(null), 3000);
+      statusToastTimeout.current = setTimeout(() => setStatusToast(null), 2000);
     };
     window.addEventListener('status-toast', handleStatusToast);
     return () => {
@@ -245,6 +247,7 @@ export default function Layout() {
 
   const clearUnreadCount = useCallback(() => {
     setUnreadCount(0);
+    newNotifIds.current.clear();
   }, []);
 
   const getRoleLabel = (role) => {
@@ -367,7 +370,7 @@ export default function Layout() {
                   <div className="dropdown-panel-list">
                     {notifications.length === 0 && <div className="dropdown-panel-empty">{t('topbar.noNotifications')}</div>}
                     {notifications.map(n => (
-                      <div key={n.id} className={`dropdown-panel-item bubble-type-${getNotificationType(n.message)}`} onClick={() => { if (n.requestId) navigate(`/requests/${n.requestId}`); setShowNotifications(false); }}>
+                      <div key={n.id} className={`dropdown-panel-item${newNotifIds.current.has(n.id) ? ' notification-new' : ''} bubble-type-${getNotificationType(n.message)}`} onClick={() => { if (n.requestId) navigate(`/requests/${n.requestId}`); setShowNotifications(false); }}>
                         <div className="dropdown-panel-icon">
                           {getNotificationIcon(n.type || getNotificationType(n.message))}
                         </div>

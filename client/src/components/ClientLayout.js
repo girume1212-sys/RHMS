@@ -24,6 +24,7 @@ export default function ClientLayout() {
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
   const eventSourceRef = useRef(null);
   const dismissedIds = useRef(new Set());
+  const newNotifIds = useRef(new Set());
   const audioUnlocked = useRef(false);
 
   // Unlock audio on first user interaction
@@ -104,7 +105,6 @@ export default function ClientLayout() {
           const data = JSON.parse(event.data);
           
           if (data.type === 'init') {
-            setUnreadCount(data.count || 0);
             return;
           }
 
@@ -120,9 +120,11 @@ export default function ClientLayout() {
 
           setNotifications(prev => [notification, ...prev].slice(0, 20));
 
-          if (!dismissedIds.current.has(notification.id)) {
+          if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
+            setTimeout(() => removeBubble(notification.id), 2000);
           }
+          newNotifIds.current.add(notification.id);
           setUnreadCount(prev => prev + 1);
 
           if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
@@ -166,7 +168,7 @@ export default function ClientLayout() {
       const { message, type } = e.detail;
       if (statusToastTimeout.current) clearTimeout(statusToastTimeout.current);
       setStatusToast({ message, type });
-      statusToastTimeout.current = setTimeout(() => setStatusToast(null), 3000);
+      statusToastTimeout.current = setTimeout(() => setStatusToast(null), 2000);
     };
     window.addEventListener('status-toast', handleStatusToast);
     return () => {
@@ -177,6 +179,7 @@ export default function ClientLayout() {
 
   const clearUnreadCount = useCallback(() => {
     setUnreadCount(0);
+    newNotifIds.current.clear();
   }, []);
 
   const menuItems = [
@@ -303,7 +306,7 @@ export default function ClientLayout() {
                     <div style={{ padding: '32px 16px', textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>{t('common.noNotifications')}</div>
                   ) : (
                     notifications.map((n) => (
-                      <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6', fontSize: 13, cursor: 'pointer', display: 'flex', gap: '12px', alignItems: 'flex-start' }}
+                      <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6', fontSize: 13, cursor: 'pointer', display: 'flex', gap: '12px', alignItems: 'flex-start', background: newNotifIds.current.has(n.id) ? '#fef2f2' : 'transparent', borderLeft: newNotifIds.current.has(n.id) ? '3px solid #ef4444' : 'none' }}
                         onClick={() => { setShowNotifications(false); if (n.requestId) navigate(`/client/requests/${n.requestId}`); }}>
                         <div style={{ fontSize: '18px', flexShrink: 0 }}>{getNotificationIcon(n.type)}</div>
                         <div style={{ flex: 1 }}>
