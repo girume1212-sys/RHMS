@@ -660,6 +660,15 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
           await pool.query('INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, gid]);
         }
       }
+      // Sync request_groups for user's existing requests (only if not explicitly group-assigned)
+      const userRequests = await pool.query('SELECT id FROM requests WHERE client_id = $1 AND assigned_group IS NULL', [req.params.id]);
+      if (userRequests.rows.length > 0 && groupIds && groupIds.length > 0) {
+        for (const r of userRequests.rows) {
+          for (const gid of groupIds) {
+            await pool.query('INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [r.id, gid]);
+          }
+        }
+      }
     } catch (e) { console.log('user_groups save error:', e.message); }
     const user = mapUser(result.rows[0]);
     try {
