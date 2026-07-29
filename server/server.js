@@ -1500,6 +1500,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     const resolved = statusMap['5'] || 0;
     const closed = statusMap['6'] || 0;
     const escalated = statusMap['9'] || 0;
+    const rejected = statusMap['8'] || 0;
 
     const statusesResult = await pool.query('SELECT * FROM statuses ORDER BY id');
     const statuses = statusesResult.rows;
@@ -1578,6 +1579,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       resolved,
       closed,
       escalated,
+      rejected,
       byStatus,
       byPriority,
       byCategory,
@@ -1589,7 +1591,8 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       waitingLastWeek: Math.floor(waiting * 0.9),
       resolvedLastWeek: Math.floor(resolved * 0.85),
       closedLastWeek: Math.floor(closed * 1.05),
-      escalatedLastWeek: Math.floor(escalated * 0.9)
+      escalatedLastWeek: Math.floor(escalated * 0.9),
+      rejectedLastWeek: Math.floor(rejected * 0.9)
     });
   } catch (err) {
     console.error(err);
@@ -1952,7 +1955,7 @@ app.delete('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (re
 });
 
 // Group Members Routes
-app.get('/api/groups/:id/members', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+app.get('/api/groups/:id/members', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT u.id, u.name, u.email, u.role, u.approved

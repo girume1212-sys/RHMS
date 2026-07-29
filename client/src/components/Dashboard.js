@@ -172,10 +172,11 @@ export default function Dashboard() {
         <StatCard icon="📋" value={stats.total} label="Total Requests" change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} color="#3B82F6" onClick={() => navigate('/requests')} />
         <StatCard icon="📂" value={stats.open} label="New Requests" change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} color="#10B981" onClick={() => navigate('/requests?status=1')} />
         <StatCard icon="⏳" value={stats.inProgress} label="In Progress" change={getChangePercent(stats.inProgress, stats.inProgressLastWeek).text} changeType={getChangePercent(stats.inProgress, stats.inProgressLastWeek).type} color="#F59E0B" onClick={() => navigate('/requests?status=3')} />
-        <StatCard icon="❓" value={stats.waiting} label="Waiting for Client" change={getChangePercent(stats.waiting, stats.waitingLastWeek).text} changeType={getChangePercent(stats.waiting, stats.waitingLastWeek).type} color="#F97316" onClick={() => navigate('/requests?status=4')} />
+        <StatCard icon="⏰" value={stats.waiting} label="Waiting for Client" change={getChangePercent(stats.waiting, stats.waitingLastWeek).text} changeType={getChangePercent(stats.waiting, stats.waitingLastWeek).type} color="#F97316" onClick={() => navigate('/requests?status=4')} />
         <StatCard icon="✅" value={stats.resolved} label="Resolved" change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} color="#8B5CF6" onClick={() => navigate('/requests?status=5')} />
         <StatCard icon="🚨" value={stats.escalated} label="Escalated" change={getChangePercent(stats.escalated, stats.escalatedLastWeek).text} changeType={getChangePercent(stats.escalated, stats.escalatedLastWeek).type} color="#EF4444" onClick={() => navigate('/requests?status=9')} />
-        <StatCard icon="📁" value={stats.closed} label="Closed" change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} color="#EF4444" onClick={() => navigate('/requests?status=6')} />
+        <StatCard icon="📁" value={stats.closed} label="Closed" change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} color="#6B7280" onClick={() => navigate('/requests?status=6')} />
+        <StatCard icon="❌" value={stats.rejected} label="Rejected" change={getChangePercent(stats.rejected, stats.rejectedLastWeek).text} changeType={getChangePercent(stats.rejected, stats.rejectedLastWeek).type} color="#DC2626" onClick={() => navigate('/requests?status=8')} />
       </div>
 
       <div className="charts-row">
@@ -304,7 +305,7 @@ export default function Dashboard() {
           <h3>Latest Requests</h3>
           <div className="table-header-actions">
             <div className="table-search-box">
-              <span className="search-icon">🔍</span>
+              <span className="search-icon"></span>
               <input
                 type="text"
                 placeholder="Search requests..."
@@ -369,7 +370,7 @@ export default function Dashboard() {
                   <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
                   <td>
                     <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
-                      {r.status?.name === 'New' ? (
+                      {r.status?.name === 'New' || r.status?.name === 'Assigned' ? (
                         <>
                           <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
                           <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(r.id); }}>Delete</button>

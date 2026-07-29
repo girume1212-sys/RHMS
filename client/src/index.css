@@ -388,6 +388,8 @@ body {
 .sidebar-brand { display: flex; align-items: center; gap: 12px; }
 .sidebar-brand h2 { font-size: 18px; font-weight: 700; color: #1f2937; }
 .sidebar-brand span { font-size: 10px; color: #6b7280; }
+.brand-title { display: flex; flex-direction: column; gap: 0; }
+.support-system-sub { font-size: 10px; font-weight: 400; color: #6b7280; }
 .sidebar-toggle {
   background: none;
   border: none;
@@ -700,7 +702,7 @@ body.dark-mode .dropdown-panel-message { color: #94a3b8 !important; }
 /* Stat Cards */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -3827,8 +3829,8 @@ body.dark-mode .logo-upload-btn:hover {
 
 /* Sidebar Logo */
 .sidebar-logo {
-  width: 36px;
-  height: 36px;
+  width: 80px;
+  height: 80px;
   object-fit: contain;
   border-radius: 8px;
   flex-shrink: 0;
@@ -4469,8 +4471,9 @@ body.dark-mode .timeline-user {
 /* ========== STATUS TOAST ========== */
 .status-toast {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -4483,6 +4486,12 @@ body.dark-mode .timeline-user {
   font-weight: 500;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   animation: statusToastIn 0.3s ease;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.status-toast:hover {
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
 .status-toast-success {
   background: linear-gradient(135deg, #10B981, #059669);

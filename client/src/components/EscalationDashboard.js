@@ -50,7 +50,7 @@ export default function EscalationDashboard() {
 
   const developers = users.filter(u => u.role === 'developer');
   const displayRequests = showAssignedOnly
-    ? requests.filter(r => r.status?.name === 'Escalated' && r.assignedTo === user.id)
+    ? requests.filter(r => r.assignedTo === user.id && r.status?.name !== 'New')
     : requests;
 
   const stats = {
@@ -61,6 +61,8 @@ export default function EscalationDashboard() {
     resolved: displayRequests.filter(r => r.status?.name === 'Resolved').length,
     assigned: displayRequests.filter(r => r.status?.name === 'Assigned').length,
     escalated: displayRequests.filter(r => r.status?.name === 'Escalated').length,
+    closed: displayRequests.filter(r => r.status?.name === 'Closed').length,
+    rejected: displayRequests.filter(r => r.status?.name === 'Rejected').length,
   };
 
   const getStatusColor = (status) => {
@@ -80,7 +82,7 @@ export default function EscalationDashboard() {
     setUpdatingId(`status-${requestId}`);
     try {
       await api.put(`/api/requests/${requestId}`, { statusId: status.id });
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: status } : r));
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: status, assignedTo: statusName === 'New' ? null : r.assignedTo, assignee: statusName === 'New' ? null : r.assignee } : r));
       showStatusToast(`Request #${requestId} → ${statusName}`, 'status', requestId);
     } catch (err) {
       showStatusToast('Failed to update status: ' + err.message, 'error');
@@ -258,13 +260,15 @@ export default function EscalationDashboard() {
         </div>
       )}
 
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+      <div className="stats-grid">
         <DevStatCard icon="📥" value={stats.newCount} label="New" color="#3B82F6" onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')} />
         <DevStatCard icon="📋" value={stats.assigned} label="Newly Assigned" color="#8B5CF6" onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')} />
         <DevStatCard icon="⚡" value={stats.inProgress} label="In Progress" color="#F59E0B" onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')} />
-        <DevStatCard icon="⏳" value={stats.waiting} label="Awaiting Client" color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
+        <DevStatCard icon="⏰" value={stats.waiting} label="Awaiting Client" color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
         <DevStatCard icon="🚨" value={stats.escalated} label="Escalated" color="#EF4444" onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')} />
         <DevStatCard icon="✅" value={stats.resolved} label="Resolved" color="#10B981" onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')} />
+        <DevStatCard icon="🔒" value={stats.closed} label="Closed" color="#6B7280" onClick={() => setStatusFilter(statusFilter === 'Closed' ? '' : 'Closed')} />
+        <DevStatCard icon="❌" value={stats.rejected} label="Rejected" color="#DC2626" onClick={() => setStatusFilter(statusFilter === 'Rejected' ? '' : 'Rejected')} />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
@@ -330,7 +334,7 @@ export default function EscalationDashboard() {
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>(read-only)</span>}</td>
                   <td>
-                    {r.assignee ? (
+                    {r.assignee && r.status?.name !== 'New' ? (
                       <div className="assigned-user-cell">
                         <div className="assigned-avatar" style={{ background: '#3B82F6' }}>
                           {r.assignee.name.charAt(0)}

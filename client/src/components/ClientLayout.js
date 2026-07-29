@@ -197,7 +197,7 @@ export default function ClientLayout() {
             {systemLogo ? (
               <img src={`${API_BASE}${systemLogo}`} alt="Logo" className="sidebar-logo" />
             ) : (
-              <svg width="36" height="36" viewBox="0 0 48 48" fill="none">
+              <svg width="80" height="80" viewBox="0 0 48 48" fill="none">
                 <circle cx="24" cy="24" r="24" fill="#7c3aed"/>
                 <path d="M16 18C16 15.79 17.79 14 20 14H28C30.21 14 32 15.79 32 18V22C32 24.21 30.21 26 28 26H20C17.79 26 16 24.21 16 22V18Z" fill="white"/>
                 <circle cx="24" cy="32" r="4" fill="white"/>
@@ -206,7 +206,10 @@ export default function ClientLayout() {
             )}
             {sidebarOpen && (
               <div>
-                <h2>{systemName}</h2>
+                <h2 className="brand-title">
+                  {t('general.appName')}
+                  <span className="support-system-sub">{t('general.supportSystem')}</span>
+                </h2>
                 <span>{t('common.clientPortal')}</span>
               </div>
             )}

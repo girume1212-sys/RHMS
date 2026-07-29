@@ -16,10 +16,7 @@ export default function DeveloperDashboard() {
   const [priorityFilter, setPriorityFilter] = useState('');
   const [showAssignedOnly, setShowAssignedOnly] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
-  const [activityLog, setActivityLog] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -33,12 +30,10 @@ export default function DeveloperDashboard() {
   const loadData = () => {
     Promise.all([
       api.get(`/api/requests?myRequests=${showAssignedOnly}`),
-      api.get('/api/statuses'),
-      api.get('/api/activity')
-    ]).then(([requestsData, statusesData, activityData]) => {
+      api.get('/api/statuses')
+    ]).then(([requestsData, statusesData]) => {
       setRequests(requestsData);
       setStatuses(statusesData);
-      setActivityLog(activityData);
     }).catch(err => setError('Failed to load data: ' + err.message));
   };
 
@@ -46,7 +41,9 @@ export default function DeveloperDashboard() {
     loadData();
   }, [showAssignedOnly]);
 
-  const displayRequests = requests;
+  const displayRequests = showAssignedOnly
+    ? requests.filter(r => r.assignedTo === user.id && r.status?.name !== 'New')
+    : requests;
 
   const stats = {
     total: displayRequests.length,
@@ -56,6 +53,8 @@ export default function DeveloperDashboard() {
     resolved: displayRequests.filter(r => r.status?.name === 'Resolved').length,
     assigned: displayRequests.filter(r => r.status?.name === 'Assigned').length,
     escalated: displayRequests.filter(r => r.status?.name === 'Escalated').length,
+    closed: displayRequests.filter(r => r.status?.name === 'Closed').length,
+    rejected: displayRequests.filter(r => r.status?.name === 'Rejected').length,
   };
 
   const getStatusColor = (status) => {
@@ -75,7 +74,7 @@ export default function DeveloperDashboard() {
     setUpdatingId(`status-${requestId}`);
     try {
       await api.put(`/api/requests/${requestId}`, { statusId: status.id });
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: status } : r));
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: status, assignedTo: statusName === 'New' ? null : r.assignedTo, assignee: statusName === 'New' ? null : r.assignee } : r));
       showStatusToast(`Request #${requestId} marked as ${statusName}`, 'status', requestId);
     } catch (err) {
       showStatusToast('Failed to update status: ' + err.message, 'error');
@@ -224,13 +223,15 @@ export default function DeveloperDashboard() {
         </div>
       )}
 
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+      <div className="stats-grid">
         <DevStatCard icon="📥" value={stats.newCount} label="New" color="#3B82F6" onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')} />
         <DevStatCard icon="📋" value={stats.assigned} label="Newly Assigned" color="#8B5CF6" onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')} />
         <DevStatCard icon="⚡" value={stats.inProgress} label="In Progress" color="#F59E0B" onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')} />
-        <DevStatCard icon="⏳" value={stats.waiting} label="Awaiting Client" color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
+        <DevStatCard icon="⏰" value={stats.waiting} label="Awaiting Client" color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
         <DevStatCard icon="🚨" value={stats.escalated} label="Escalated" color="#EF4444" onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')} />
         <DevStatCard icon="✅" value={stats.resolved} label="Resolved" color="#10B981" onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')} />
+        <DevStatCard icon="🔒" value={stats.closed} label="Closed" color="#6B7280" onClick={() => setStatusFilter(statusFilter === 'Closed' ? '' : 'Closed')} />
+        <DevStatCard icon="❌" value={stats.rejected} label="Rejected" color="#DC2626" onClick={() => setStatusFilter(statusFilter === 'Rejected' ? '' : 'Rejected')} />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
@@ -268,7 +269,7 @@ export default function DeveloperDashboard() {
               <option value="Low">Low</option>
             </select>
             <div className="table-search-box">
-              <span className="search-icon">🔍</span>
+              <span className="search-icon"></span>
               <input type="text" placeholder="Search requests..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
             </div>
           </div>
@@ -296,7 +297,7 @@ export default function DeveloperDashboard() {
                   <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>(read-only)</span>}</td>
                   <td>
-                    {r.assignee ? (
+                    {r.assignee && r.status?.name !== 'New' ? (
                       <div className="assigned-user-cell">
                         <div className="assigned-avatar" style={{ background: '#3B82F6' }}>
                           {r.assignee.name.charAt(0)}
@@ -394,43 +395,6 @@ export default function DeveloperDashboard() {
         </div>
       </div>
 
-      <div className="detail-card" style={{ marginTop: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <h3 style={{ margin: 0, border: 'none', padding: 0 }}>📜 History</h3>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="action-btn-text edit" onClick={() => setShowHistory(!showHistory)}>
-              {showHistory ? 'Hide History' : 'Show History'}
-            </button>
-            <button className="action-btn-text delete" onClick={() => setShowClearConfirm(true)}>
-              Clear History
-            </button>
-          </div>
-        </div>
-        {showHistory && (
-          <div className="timeline">
-            {activityLog.length === 0 ? (
-              <div className="empty-state">No activity yet</div>
-            ) : (
-              <div className="timeline-list">
-                {activityLog.map((a) => (
-                  <div key={a.id} className="timeline-item">
-                    <div className="timeline-dot" style={{ background: a.user?.role === 'admin' ? '#EF4444' : a.user?.role === 'support' ? '#8B5CF6' : '#3B82F6' }}></div>
-                    <div className="timeline-content">
-                      <div className="timeline-header">
-                        <strong>{a.user?.name || 'System'}</strong>
-                        <span className="timeline-time">{a.createdAt ? new Date(a.createdAt).toLocaleString() : ''}</span>
-                      </div>
-                      <p className="timeline-message">{a.message}</p>
-                      {a.request && <small style={{ color: '#6B7280' }}>on: {a.request.subject}</small>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
@@ -443,23 +407,7 @@ export default function DeveloperDashboard() {
         </div>
       )}
 
-      {showClearConfirm && (
-        <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to clear this history?</p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
-              <button onClick={() => setShowClearConfirm(false)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => {
-                api.delete('/api/activity').then(() => {
-                  setActivityLog([]);
-                  showStatusToast('History cleared', 'success');
-                  setShowClearConfirm(false);
-                }).catch(() => { showStatusToast('Failed to clear history', 'error'); setShowClearConfirm(false); });
-              }} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Clear</button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

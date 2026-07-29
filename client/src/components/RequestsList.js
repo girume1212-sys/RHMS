@@ -120,7 +120,7 @@ export default function RequestsList() {
     setUpdatingId(`status-${requestId}`);
     try {
       await api.put(`/api/requests/${requestId}`, { statusId: status.id });
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: status, statusId: status.id } : r));
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: status, statusId: status.id, assignedTo: statusName === 'New' ? null : r.assignedTo, assignee: statusName === 'New' ? null : r.assignee } : r));
       showStatusToast(`Request #${requestId} marked as ${statusName}`, 'status', requestId);
     } catch (err) {
       showStatusToast('Failed to update status: ' + err.message, 'error');
@@ -310,7 +310,7 @@ export default function RequestsList() {
                   <tr key={r.id} onClick={() => navigate(`${basePath}/requests/${r.id}`)} className="clickable-row">
                     <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
                     <td>{r.subject}</td>
-                    {!isClient && <td>{r.assignee ? (
+                    {!isClient && <td>{r.assignee && r.status?.name !== 'New' ? (
                       <div className="assigned-user-cell">
                         <div className="assigned-avatar" style={{ background: '#3B82F6' }}>{r.assignee.name.charAt(0)}</div>
                         <span>{r.assignee.name}</span>

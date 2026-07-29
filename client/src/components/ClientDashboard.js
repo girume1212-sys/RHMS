@@ -39,8 +39,12 @@ export default function ClientDashboard() {
       const total = requestsData.length;
       const open = requestsData.filter(r => r.status?.name === 'New').length;
       const inProgress = requestsData.filter(r => r.status?.name === 'In Progress' || r.status?.name === 'Assigned').length;
-      const resolved = requestsData.filter(r => r.status?.name === 'Resolved' || r.status?.name === 'Closed').length;
-      setStats({ total, open, inProgress, resolved });
+      const resolved = requestsData.filter(r => r.status?.name === 'Resolved').length;
+      const closed = requestsData.filter(r => r.status?.name === 'Closed').length;
+      const rejected = requestsData.filter(r => r.status?.name === 'Rejected').length;
+      const waitingClient = requestsData.filter(r => r.status?.name === 'Waiting for Client').length;
+      const escalated = requestsData.filter(r => r.status?.name === 'Escalated').length;
+      setStats({ total, open, inProgress, resolved, closed, rejected, waitingClient, escalated });
     }).catch(err => setError('Failed to load data: ' + err.message));
   }, []);
 
@@ -170,6 +174,10 @@ export default function ClientDashboard() {
         <ClientStatCard icon="📂" value={stats.open} label="New" color="#10B981" />
         <ClientStatCard icon="⏳" value={stats.inProgress} label="In Progress" color="#F59E0B" />
         <ClientStatCard icon="✅" value={stats.resolved} label="Resolved" color="#8B5CF6" />
+        <ClientStatCard icon="🔒" value={stats.closed} label="Closed" color="#6B7280" />
+        <ClientStatCard icon="❌" value={stats.rejected} label="Rejected" color="#DC2626" />
+        <ClientStatCard icon="⏰" value={stats.waitingClient} label="Waiting for Client" color="#F97316" />
+        <ClientStatCard icon="🚨" value={stats.escalated} label="Escalated" color="#EF4444" />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
