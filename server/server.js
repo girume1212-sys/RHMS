@@ -1173,6 +1173,10 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       if (req.user.role === 'client' && (statusId === '6' || statusId === '8') && existing.rows[0].status_id !== '5') {
         return res.status(400).json({ error: 'You can only close or reject a request that is in Resolved status.' });
       }
+      // Developers must claim and assign a new request to themselves before changing its status
+      if (req.user.role === 'developer' && existing.rows[0].status_id === '1' && statusId) {
+        return res.status(403).json({ error: 'You must claim and assign this request to yourself before changing its status' });
+      }
     }
 
     let newStatusId = existing.rows[0].status_id;
@@ -1266,7 +1270,9 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
     }
 
     if (req.user.role === 'support') {
-      return res.status(403).json({ error: 'Escalation team cannot claim requests' });
+      if (existing.rows[0].status_id !== '9') {
+        return res.status(403).json({ error: 'Escalation team can only claim escalated requests' });
+      }
     }
 
     const groupAccess = await pool.query(
@@ -1278,7 +1284,7 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
     }
 
     const now = new Date().toISOString();
-    const assignedStatus = '2';
+    const assignedStatus = req.user.role === 'support' ? '9' : '2';
 
     await pool.query(
       'UPDATE requests SET assigned_to = $1, status_id = $2, updated_at = $3 WHERE id = $4',

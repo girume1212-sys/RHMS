@@ -112,10 +112,9 @@ export default function EscalationDashboard() {
     e.stopPropagation();
     setUpdatingId(`claim-${requestId}`);
     try {
-      const data = await api.put(`/api/requests/${requestId}/claim`);
-      setRequests(prev => prev.filter(r => r.id !== requestId));
+      await api.put(`/api/requests/${requestId}/claim`);
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: user.id, assignee: { id: user.id, name: user.name } } : r));
       showStatusToast('Request claimed successfully', 'assignment', requestId);
-      loadData();
     } catch (err) {
       showStatusToast('Failed to claim: ' + err.message, 'error');
     } finally {
@@ -188,7 +187,7 @@ export default function EscalationDashboard() {
 
   const isReadOnly = (r) => {
     if (user?.role === 'support') {
-      return !(r.status?.name === 'Escalated' && r.assignedTo === user.id);
+      return !(r.status?.name === 'Escalated' && (!r.assignedTo || r.assignedTo === user.id));
     }
     return r.assignedTo && r.assignedTo !== user.id;
   };
@@ -214,8 +213,12 @@ export default function EscalationDashboard() {
       actions.push({ label: 'Follow Up', status: 'In Progress', color: '#F59E0B', icon: '📞', type: 'status' });
     }
     if (statusName === 'Escalated') {
-      actions.push({ label: 'Handle', status: 'In Progress', color: '#F59E0B', icon: '🔧', type: 'status' });
-      actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
+      if (!r.assignedTo) {
+        actions.push({ label: 'Claim', status: 'Escalated', color: '#8B5CF6', icon: '👤', type: 'claim' });
+      } else if (r.assignedTo === user.id) {
+        actions.push({ label: 'Handle', status: 'In Progress', color: '#F59E0B', icon: '🔧', type: 'status' });
+        actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
+      }
     }
     return actions;
   };

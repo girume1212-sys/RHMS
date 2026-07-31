@@ -94,10 +94,7 @@ export default function Layout() {
   const menuItems = [
     { section: null, items: [
       { path: '/', label: t('sidebar.dashboard'), icon: '🏠' },
-    ]},
-    { section: null, items: [
-      
-      { path: '/requests', label: t('sidebar.requests'), icon: '📄', roles: ['admin'] },
+      { path: '/requests', label: 'All Requests', icon: '📄' },
     ]},
     { section: t('sidebar.management'), items: [
       { path: '/users', label: t('sidebar.users'), icon: '👥', roles: ['admin'] },

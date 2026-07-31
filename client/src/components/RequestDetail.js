@@ -36,6 +36,7 @@ export default function RequestDetail() {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [claiming, setClaiming] = useState(false);
   const isClient = user?.role === 'client';
   const basePath = isClient ? '/client' : '';
 
@@ -122,6 +123,21 @@ export default function RequestDetail() {
       showStatusToast(`Request #${id} status updated`, 'status', id);
     } catch (err) {
       addToast('Failed to update status: ' + err.message, 'error');
+    }
+  };
+
+  const handleClaim = async () => {
+    setClaiming(true);
+    try {
+      await api.put(`/api/requests/${id}/claim`);
+      loadRequest();
+      loadActivity();
+      addToast('Request claimed successfully!');
+      showStatusToast(`Request #${id} claimed`, 'assignment', id);
+    } catch (err) {
+      addToast('Failed to claim: ' + err.message, 'error');
+    } finally {
+      setClaiming(false);
     }
   };
 
@@ -685,13 +701,24 @@ export default function RequestDetail() {
               <div className="action-list">
                 <div className="action-group">
                   <label>Change Status</label>
-                  <select value={request.statusId} onChange={(e) => handleStatusChange(e.target.value)}>
-                    {statuses
-                      .filter(s => !(user.role === 'support' && s.name === 'Escalated'))
-                      .filter(s => s.name !== 'Reopened')
-                      .filter(s => !(user.role !== 'admin' && (s.name === 'Closed' || s.name === 'Rejected')))
-                      .map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  {user?.role === 'developer' && request.status?.name === 'New' && request.assignedTo !== user.id ? (
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleClaim}
+                      disabled={claiming}
+                      style={{ width: '100%' }}
+                    >
+                      {claiming ? 'Claiming...' : '👤 Claim & Assign to Me'}
+                    </button>
+                  ) : (
+                    <select value={request.statusId} onChange={(e) => handleStatusChange(e.target.value)}>
+                      {statuses
+                        .filter(s => !(user.role === 'support' && s.name === 'Escalated'))
+                        .filter(s => s.name !== 'Reopened')
+                        .filter(s => !(user.role !== 'admin' && (s.name === 'Closed' || s.name === 'Rejected')))
+                        .map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  )}
                 </div>
                 {user?.role === 'admin' && (
                 <div className="action-group">
