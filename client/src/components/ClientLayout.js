@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
-import { API_BASE } from '../api';
+import { API_BASE, isTokenExpired } from '../api';
+import GlobalSearch from './GlobalSearch';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -16,7 +17,6 @@ export default function ClientLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState([]);
@@ -98,11 +98,21 @@ export default function ClientLayout() {
     const token = localStorage.getItem('rhms_token');
     if (!token) return;
 
+    if (isTokenExpired(token)) {
+      localStorage.removeItem('rhms_token');
+      localStorage.removeItem('rhms_sessionTimeout');
+      window.location.href = '/login?expired=1';
+      return;
+    }
+
     let reconnectTimeout = null;
+    let failedAttempts = 0;
 
     function connectSSE() {
       const eventSource = new EventSource(`${API_BASE}/api/notifications/stream?token=${token}`);
       eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => { failedAttempts = 0; };
 
       eventSource.onmessage = (event) => {
         try {
@@ -150,11 +160,19 @@ export default function ClientLayout() {
 
       eventSource.onerror = () => {
         eventSource.close();
+        if (isTokenExpired(token)) {
+          localStorage.removeItem('rhms_token');
+          localStorage.removeItem('rhms_sessionTimeout');
+          window.location.href = '/login?expired=1';
+          return;
+        }
+        failedAttempts += 1;
+        const delay = Math.min(3000 * Math.pow(2, failedAttempts - 1), 30000);
         reconnectTimeout = setTimeout(() => {
           if (eventSourceRef.current === eventSource) {
             connectSSE();
           }
-        }, 3000);
+        }, delay);
       };
     }
 
@@ -303,20 +321,7 @@ export default function ClientLayout() {
         <header className="topbar">
           <div className="topbar-left">
             <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-            <div className="search-box">
-              <span className="search-icon" style={{ cursor: 'pointer' }} onClick={() => { if (searchQuery.trim()) navigate(`${location.pathname}?search=${encodeURIComponent(searchQuery.trim())}`); }}>🔍</span>
-              <input
-                type="text"
-                placeholder="Search requests, users, categories..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && searchQuery.trim()) {
-                    navigate(`${location.pathname}?search=${encodeURIComponent(searchQuery.trim())}`);
-                  }
-                }}
-              />
-            </div>
+            <GlobalSearch clientMode placeholder="Search requests..." />
           </div>
           <div className="topbar-right">
             <button className="theme-toggle" onClick={toggleDarkMode} title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>

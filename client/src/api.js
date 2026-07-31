@@ -1,5 +1,15 @@
 export const API_BASE = process.env.REACT_APP_API_URL || '';
 
+export function isTokenExpired(token) {
+  if (!token) return true;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.exp ? payload.exp * 1000 < Date.now() : false;
+  } catch {
+    return true;
+  }
+}
+
 async function apiFetch(url, options = {}) {
   const token = localStorage.getItem('rhms_token');
   const headers = { 'Content-Type': 'application/json', ...options.headers };

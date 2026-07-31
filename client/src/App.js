@@ -25,6 +25,7 @@ import Company from './components/Company';
 import ClientLayout from './components/ClientLayout';
 import ClientDashboard from './components/ClientDashboard';
 import ClientProfile from './components/ClientProfile';
+import GlobalSearchResults from './components/GlobalSearchResults';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -55,6 +56,7 @@ function AppRoutes() {
         <Route path="requests" element={<RequestsList />} />
         <Route path="requests/create" element={<CreateRequest />} />
         <Route path="requests/:id" element={<RequestDetail />} />
+        <Route path="search" element={<GlobalSearchResults />} />
         <Route path="users" element={<Users />} />
         <Route path="categories" element={<Categories />} />
         <Route path="company" element={<Company />} />
@@ -72,6 +74,7 @@ function AppRoutes() {
         <Route path="requests" element={<RequestsList />} />
         <Route path="requests/create" element={<CreateRequest />} />
         <Route path="requests/:id" element={<RequestDetail />} />
+        <Route path="search" element={<GlobalSearchResults clientMode />} />
         <Route path="activity" element={<ActivityLog />} />
         <Route path="profile" element={<ClientProfile />} />
       </Route>

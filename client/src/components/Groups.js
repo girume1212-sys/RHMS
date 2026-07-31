@@ -23,6 +23,8 @@ export default function Groups() {
   const [membersLoading, setMembersLoading] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [addMemberSearch, setAddMemberSearch] = useState('');
   const [removeTarget, setRemoveTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -126,6 +128,8 @@ export default function Groups() {
     setMembersLoading(true);
     setShowAddMember(false);
     setSelectedUserIds([]);
+    setMemberSearch('');
+    setAddMemberSearch('');
     try {
       const data = await api.get(`/api/groups/${group.id}/members`);
       setMembers(data);
@@ -169,6 +173,27 @@ export default function Groups() {
     const memberIds = new Set(members.map(m => m.id));
     return allUsers.filter(u => !memberIds.has(u.id));
   };
+
+  const getFilteredNonMembers = () => {
+    const nonMembers = getNonMembers();
+    if (!addMemberSearch) return nonMembers;
+    const q = addMemberSearch.toLowerCase();
+    return nonMembers.filter(u =>
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.role || '').toLowerCase().includes(q)
+    );
+  };
+
+  const filteredMembers = members.filter(m => {
+    if (!memberSearch) return true;
+    const q = memberSearch.toLowerCase();
+    return (
+      (m.name || '').toLowerCase().includes(q) ||
+      (m.email || '').toLowerCase().includes(q) ||
+      (m.role || '').toLowerCase().includes(q)
+    );
+  });
 
   const handleSort = (key) => {
     setSort(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
@@ -384,8 +409,12 @@ export default function Groups() {
                             })}
                           </div>
                         )}
+                        <div className="table-search-box" style={{ marginBottom: '12px' }}>
+                          <span className="search-icon"></span>
+                          <input type="text" placeholder="Search users to add..." value={addMemberSearch} onChange={(e) => setAddMemberSearch(e.target.value)} />
+                        </div>
                         <div className="member-checkbox-list">
-                          {getNonMembers().map(u => {
+                          {getFilteredNonMembers().map(u => {
                             const sid = String(u.id);
                             const checked = selectedUserIds.includes(sid);
                             return (
@@ -410,8 +439,8 @@ export default function Groups() {
                               </label>
                             );
                           })}
-                          {getNonMembers().length === 0 && (
-                            <div className="empty-state" style={{ marginTop: '8px' }}>All users are already members.</div>
+                          {getFilteredNonMembers().length === 0 && (
+                            <div className="empty-state" style={{ marginTop: '8px' }}>{addMemberSearch ? `No users matching "${addMemberSearch}"` : 'All users are already members.'}</div>
                           )}
                         </div>
                         <div className="add-member-actions">
@@ -426,6 +455,14 @@ export default function Groups() {
                       <div className="empty-state">No members in this group yet.</div>
                     )}
                     {!showAddMember && members.length > 0 && (
+                      <>
+                        <div className="table-search-box" style={{ marginBottom: '12px' }}>
+                          <span className="search-icon"></span>
+                          <input type="text" placeholder="Search members..." value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} />
+                        </div>
+                        {filteredMembers.length === 0 ? (
+                          <div className="empty-state">No members matching "{memberSearch}"</div>
+                        ) : (
                       <div className="table-card" style={{ overflow: 'auto' }}>
             <table className="data-table">
                         <thead>
@@ -437,7 +474,7 @@ export default function Groups() {
                           </tr>
                         </thead>
                         <tbody>
-                          {members.map(m => (
+                          {filteredMembers.map(m => (
                             <tr key={m.id}>
                               <td>
                                 <div className="user-cell">
@@ -459,6 +496,8 @@ export default function Groups() {
                         </tbody>
                       </table>
                     </div>
+                        )}
+                      </>
                   )}
                 </>
               )}

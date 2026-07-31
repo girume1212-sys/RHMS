@@ -1058,6 +1058,125 @@ groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.grou
   }
 });
 
+// Global search endpoint: server-side filtering, RBAC-scoped, paginated
+app.get('/api/search', authMiddleware, async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const type = req.query.type || 'all';
+    const offset = (page - 1) * limit;
+    const pattern = `%${q}%`;
+    const role = req.user.role;
+
+    const results = { requests: { total: 0, items: [] }, users: { total: 0, items: [] }, groups: { total: 0, items: [] } };
+
+    if (!q) {
+      return res.json({ q, page, limit, type, results });
+    }
+
+    // --- Requests: visible per role (admin: all, client: own, dev/support: assigned or group-based) ---
+    if (type === 'all' || type === 'requests') {
+      let visibility = '1=1';
+      const visParams = [];
+      if (role === 'client') {
+        visibility = 'r.client_id = $1';
+        visParams.push(req.user.id);
+      } else if (role === 'developer' || role === 'support') {
+        visibility = `(r.assigned_to = $${visParams.length + 1}
+          OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${visParams.length + 2})`;
+        visParams.push(req.user.id, req.user.id);
+        if (role === 'support') {
+          visibility += ` OR r.status_id = '9'`;
+        }
+        visibility += ')';
+      }
+
+      const searchClause = `(
+        r.id ILIKE $a OR r.subject ILIKE $a OR r.description ILIKE $a OR
+        u.name ILIKE $a OR a.name ILIKE $a OR ag.name ILIKE $a OR
+        c.name ILIKE $a OR s.name ILIKE $a OR p.name ILIKE $a OR
+        EXISTS (SELECT 1 FROM request_groups rgs JOIN groups g2 ON rgs.group_id = g2.id WHERE rgs.request_id = r.id AND g2.name ILIKE $a)
+      )`;
+
+      const base = `
+        FROM requests r
+        LEFT JOIN users u ON r.client_id = u.id
+        LEFT JOIN users a ON r.assigned_to = a.id
+        LEFT JOIN groups ag ON r.assigned_group = ag.id
+        LEFT JOIN categories c ON r.category_id = c.id
+        LEFT JOIN statuses s ON r.status_id = s.id
+        LEFT JOIN priorities p ON r.priority_id = p.id
+        WHERE ${visibility} AND ${searchClause}
+      `;
+
+      const searchIndex = visParams.length + 1;
+      const countParams = [...visParams, pattern];
+      const countResult = await pool.query(
+        `SELECT COUNT(*)::int AS total ${base}`.replaceAll('$a', `$${searchIndex}`),
+        countParams
+      );
+
+      const itemsParams = [...visParams, pattern, limit, offset];
+      const itemsResult = await pool.query(`
+        SELECT r.id, r.subject, r.description, r.created_at,
+          u.name AS client_name,
+          a.name AS assignee_name,
+          ag.name AS assigned_group_name, ag.color AS assigned_group_color,
+          c.name AS category_name, c.color AS category_color,
+          s.name AS status_name, s.color AS status_color,
+          p.name AS priority_name, p.color AS priority_color
+        ${base}
+        ORDER BY r.created_at DESC LIMIT $${searchIndex + 1} OFFSET $${searchIndex + 2}
+      `.replaceAll('$a', `$${searchIndex}`), itemsParams);
+
+      results.requests = { total: countResult.rows[0].total, items: itemsResult.rows };
+    }
+
+    // --- Users: admin only ---
+    if ((type === 'all' || type === 'users') && role === 'admin') {
+      const countResult = await pool.query(
+        `SELECT COUNT(*)::int AS total FROM users u
+         WHERE u.id ILIKE $1 OR u.name ILIKE $1 OR u.email ILIKE $1 OR u.role ILIKE $1 OR u.company_name ILIKE $1`,
+        [pattern]
+      );
+      const itemsResult = await pool.query(
+        `SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name
+         FROM users u
+         WHERE u.id ILIKE $1 OR u.name ILIKE $1 OR u.email ILIKE $1 OR u.role ILIKE $1 OR u.company_name ILIKE $1
+         ORDER BY u.name LIMIT $2 OFFSET $3`,
+        [pattern, limit, offset]
+      );
+      results.users = { total: countResult.rows[0].total, items: itemsResult.rows };
+    }
+
+    // --- Groups: admin only ---
+    if ((type === 'all' || type === 'groups') && role === 'admin') {
+      const countResult = await pool.query(
+        `SELECT COUNT(*)::int AS total FROM groups g
+         LEFT JOIN companies c ON c.id = g.company_id
+         WHERE g.id ILIKE $1 OR g.name ILIKE $1 OR g.description ILIKE $1 OR c.name ILIKE $1`,
+        [pattern]
+      );
+      const itemsResult = await pool.query(
+        `SELECT g.id, g.name, g.description, g.color, c.name AS company_name,
+          (SELECT COUNT(*) FROM user_groups ug WHERE ug.group_id = g.id) AS "memberCount"
+         FROM groups g
+         LEFT JOIN companies c ON c.id = g.company_id
+         WHERE g.id ILIKE $1 OR g.name ILIKE $1 OR g.description ILIKE $1 OR c.name ILIKE $1
+         ORDER BY g.name LIMIT $2 OFFSET $3`,
+        [pattern, limit, offset]
+      );
+      results.groups = { total: countResult.rows[0].total, items: itemsResult.rows };
+    }
+
+    res.json({ q, page, limit, type, results });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.get('/api/requests/:id', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(`
