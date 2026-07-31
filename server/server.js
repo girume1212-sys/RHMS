@@ -115,6 +115,7 @@ const pool = require('./db');
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS priority_id VARCHAR(50)`);
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS status_id VARCHAR(50)`);
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT '[]'`);
+    await pool.query(`ALTER TABLE comments ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT '[]'`);
     console.log('requests columns ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255) DEFAULT ''`);
     console.log('company_name column ready');
@@ -1060,6 +1061,7 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
         userId: c.user_id,
         content: c.content,
         createdAt: c.created_at,
+        attachments: typeof c.attachments === 'string' ? JSON.parse(c.attachments) : (c.attachments || []),
         user: c.user_name ? { id: c.user_id, name: c.user_name, email: c.user_email, role: c.user_role, avatar: c.user_avatar, createdAt: c.user_created_at } : null
       }))
     };
@@ -1380,13 +1382,13 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
       }
     }
 
-    const { content } = req.body;
+    const { content, attachments } = req.body;
     const id = uuidv4();
     const now = new Date().toISOString();
 
     await pool.query(
-      'INSERT INTO comments (id, request_id, user_id, content, created_at) VALUES ($1, $2, $3, $4, $5)',
-      [id, req.params.id, req.user.id, content, now]
+      'INSERT INTO comments (id, request_id, user_id, content, attachments, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, req.params.id, req.user.id, content, JSON.stringify(attachments || []), now]
     );
 
     await pool.query(

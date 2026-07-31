@@ -30,6 +30,13 @@ export default function RequestDetail() {
   const [loadingActivity, setLoadingActivity] = useState(true);
   const [showHistory, setShowHistory] = useState(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [commentSearch, setCommentSearch] = useState('');
+  const [commentFilter, setCommentFilter] = useState('all');
+  const [commentSort, setCommentSort] = useState('latest');
+  const commentFileInputRef = useRef(null);
+  const commentTextareaRef = useRef(null);
   const [existingFeedback, setExistingFeedback] = useState(null);
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -238,13 +245,23 @@ export default function RequestDetail() {
     }
   };
 
-  const handleComment = async (e) => {
-    e.preventDefault();
-    if (!comment.trim()) return;
+  const handleComment = async () => {
+    if (submitting) return;
+    if (!comment.trim() && pendingFiles.length === 0) return;
     setSubmitting(true);
     try {
-      await api.post(`/api/requests/${id}/comments`, { content: comment });
+      let attachments = [];
+      if (pendingFiles.length > 0) {
+        for (const file of pendingFiles) {
+          const fd = new FormData();
+          fd.append('file', file);
+          const res = await api.upload('/api/upload', fd);
+          if (res.path) attachments.push({ name: file.name, size: file.size, path: res.path });
+        }
+      }
+      await api.post(`/api/requests/${id}/comments`, { content: comment, attachments });
       setComment('');
+      setPendingFiles([]);
       addToast('Comment added successfully!');
       loadRequest();
       loadActivity();
@@ -276,27 +293,202 @@ export default function RequestDetail() {
     return colors[type] || '#6B7280';
   };
 
+  const roleLabel = (role) => {
+    const labels = { admin: 'Admin', developer: 'Developer', client: 'Client', support: 'Escalation Team', escalation: 'Escalation Team', system: 'System' };
+    return labels[role] || role || 'System';
+  };
+
+  const chatRoleLabel = (role) => {
+    const labels = { admin: 'Administrator', developer: 'Developer', client: 'Client', support: 'Escalation Team', escalation: 'Escalation Team', system: 'System' };
+    return labels[role] || role || 'System';
+  };
+
+  const formatSize = (bytes) => {
+    if (!bytes && bytes !== 0) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const dayLabel = (d) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const day = new Date(d);
+    day.setHours(0, 0, 0, 0);
+    if (day.getTime() === today.getTime()) return 'Today';
+    if (day.getTime() === yesterday.getTime()) return 'Yesterday';
+    return day.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+  };
+
+  const systemMessageText = (a) => {
+    if (a.type === 'created') return 'Request created';
+    if (a.type === 'status_update') {
+      const match = a.message.match(/Changed status from (.+) to (.+)/i);
+      if (match) return `Status changed from ${match[1].trim()} to ${match[2].trim()}`;
+      return a.message;
+    }
+    if (a.type === 'assigned') return a.message || 'Request assigned';
+    if (a.type === 'updated') return a.message || 'Request updated';
+    return a.message || 'Activity';
+  };
+
+  const renderInline = (text) => {
+    const parts = text.split(/(`[^`]+`|https?:\/\/\S+)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('`') && part.endsWith('`') && part.length > 1) {
+        return <code key={i} className="msg-inline-code">{part.slice(1, -1)}</code>;
+      }
+      if (/^https?:\/\//.test(part)) {
+        return <a key={i} className="msg-link" href={part} target="_blank" rel="noopener noreferrer">{part}</a>;
+      }
+      return part;
+    });
+  };
+
+  const renderMessageContent = (text) => {
+    const lines = String(text || '').split('\n');
+    const blocks = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i].trim();
+      if (line.startsWith('```')) {
+        const codeLines = [];
+        i++;
+        while (i < lines.length && !lines[i].trim().startsWith('```')) {
+          codeLines.push(lines[i]);
+          i++;
+        }
+        i++;
+        blocks.push(<pre key={blocks.length} className="msg-code">{codeLines.join('\n')}</pre>);
+      } else if (/^[-*•]\s+/.test(line)) {
+        const bullets = [];
+        while (i < lines.length && /^[-*•]\s+/.test(lines[i].trim())) {
+          bullets.push(lines[i].trim().replace(/^[-*•]\s+/, ''));
+          i++;
+        }
+        blocks.push(<ul key={blocks.length} className="msg-list">{bullets.map((b, bi) => <li key={bi}>{renderInline(b)}</li>)}</ul>);
+      } else if (line !== '') {
+        const para = [];
+        while (i < lines.length && lines[i].trim() !== '' && !/^[-*•]\s+/.test(lines[i].trim()) && !lines[i].trim().startsWith('```')) {
+          para.push(lines[i]);
+          i++;
+        }
+        blocks.push(
+          <p key={blocks.length} className="msg-p">
+            {para.map((p, pi) => <span key={pi}>{renderInline(p)}{pi < para.length - 1 && <br />}</span>)}
+          </p>
+        );
+      } else {
+        i++;
+      }
+    }
+    return blocks;
+  };
+
+  const buildChatItems = () => {
+    const comments = request?.comments || [];
+    const activities = activityLog.filter(a => a.type !== 'comment');
+
+    let filteredComments = comments;
+    if (commentSearch.trim()) {
+      const q = commentSearch.toLowerCase();
+      filteredComments = filteredComments.filter(c => String(c.content || '').toLowerCase().includes(q));
+    }
+    if (commentFilter === 'client') filteredComments = filteredComments.filter(c => c.user?.role === 'client');
+    if (commentFilter === 'staff') filteredComments = filteredComments.filter(c => c.user?.role !== 'client');
+
+    const sortedComments = [...filteredComments].sort((a, b) => {
+      const diff = new Date(a.createdAt) - new Date(b.createdAt);
+      return commentSort === 'latest' ? -diff : diff;
+    });
+
+    const all = [];
+    sortedComments.forEach(c => all.push({ kind: 'comment', ts: new Date(c.createdAt), comment: c }));
+    activities.forEach(a => all.push({ kind: 'system', ts: new Date(a.createdAt), activity: a }));
+    all.sort((a, b) => a.ts - b.ts);
+
+    const items = [];
+    let lastDay = null;
+    all.forEach(item => {
+      const day = item.ts.toDateString();
+      if (day !== lastDay) {
+        items.push({ kind: 'separator', ts: item.ts });
+        lastDay = day;
+      }
+      if (item.kind === 'comment') {
+        items.push({ kind: 'comment', comment: item.comment });
+      } else {
+        items.push({ kind: 'system', activity: item.activity });
+      }
+    });
+    return items;
+  };
+
+  const insertEmoji = (emoji) => {
+    const ta = commentTextareaRef.current;
+    const start = ta ? (ta.selectionStart || comment.length) : comment.length;
+    const end = ta ? (ta.selectionEnd || comment.length) : comment.length;
+    const next = comment.slice(0, start) + emoji + comment.slice(end);
+    setComment(next);
+    requestAnimationFrame(() => {
+      if (ta) {
+        ta.focus();
+        ta.setSelectionRange(start + emoji.length, start + emoji.length);
+      }
+    });
+    setShowEmojiPicker(false);
+  };
+
+  const renderAvatar = (u) => {
+    if (u?.avatar) {
+      return <img src={`${API_BASE}${u.avatar}`} alt="" className="chat-avatar-img" />;
+    }
+    return <span className="chat-avatar-initial">{(u?.name || 'U').charAt(0)}</span>;
+  };
+
   const getStatusFlow = () => {
     const statusSequence = [];
+    const chronological = [...activityLog].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-    const createdLog = activityLog.find(a => a.type === 'created');
-    if (createdLog) {
-      statusSequence.push({
-        name: 'New',
-        time: createdLog.createdAt,
-        user: createdLog.user?.name
-      });
-    }
+    const pushStep = (step) => {
+      const last = statusSequence[statusSequence.length - 1];
+      if (last && last.name === step.name) {
+        last.description = `${last.description} · ${step.description}`;
+        return;
+      }
+      statusSequence.push(step);
+    };
 
-    activityLog.forEach(a => {
-      if (a.type === 'status_update') {
-        const match = a.message.match(/to (.+)/i);
-        if (match) {
-          const toStatus = match[1].trim();
-          statusSequence.push({
+    chronological.forEach((a) => {
+      if (a.type === 'created') {
+        pushStep({
+          name: 'New',
+          time: a.createdAt,
+          user: a.user?.name || 'System',
+          role: a.user?.role || 'system',
+          description: 'Created'
+        });
+      } else if (a.type === 'assigned') {
+        pushStep({
+          name: 'Assigned',
+          time: a.createdAt,
+          user: a.user?.name || 'System',
+          role: a.user?.role || 'system',
+          description: a.message || 'Assigned'
+        });
+      } else if (a.type === 'status_update') {
+        const match = a.message.match(/Changed status from (.+) to (.+)/i);
+        const fromStatus = match ? match[1].trim() : null;
+        const toStatus = match ? match[2].trim() : null;
+        if (toStatus) {
+          pushStep({
             name: toStatus,
             time: a.createdAt,
-            user: a.user?.name
+            user: a.user?.name || 'System',
+            role: a.user?.role || 'system',
+            description: fromStatus ? `${fromStatus} → ${toStatus}` : a.message
           });
         }
       }
@@ -306,7 +498,9 @@ export default function RequestDetail() {
       statusSequence.push({
         name: request.status.name,
         time: request.createdAt,
-        user: request.client?.name
+        user: request.client?.name || 'System',
+        role: request.client?.role || 'client',
+        description: 'Created'
       });
     }
 
@@ -316,7 +510,9 @@ export default function RequestDetail() {
       statusSequence.push({
         name: currentStatus,
         time: request.updatedAt || request.createdAt,
-        user: request.client?.name
+        user: 'System',
+        role: 'system',
+        description: 'Current status'
       });
     }
 
@@ -327,7 +523,9 @@ export default function RequestDetail() {
       current: idx === statusSequence.length - 1,
       isPast: idx < statusSequence.length - 1,
       time: step.time,
-      user: step.user
+      user: step.user,
+      role: step.role,
+      description: step.description
     }));
   };
 
@@ -610,49 +808,166 @@ export default function RequestDetail() {
             </div>
           )}
 
-          {/* Comments / Reply */}
-          <div className="detail-card">
-            <h3>💬 Comments ({request.comments?.length || 0})</h3>
-            <div className="comments-list">
-              {request.comments?.map((c) => (
-                <div key={c.id} className="comment-item">
-                  <div className="comment-avatar" style={{ background: c.user?.role === 'client' ? '#7c3aed' : '#3B82F6' }}>
-                    {c.user?.name?.charAt(0) || 'U'}
-                  </div>
-                  <div className="comment-body">
-                    <div className="comment-header">
-                      <strong>{c.user?.name || 'Unknown'}</strong>
-                      <span className="comment-role" style={{ 
-                        background: c.user?.role === 'client' ? '#7c3aed20' : '#3B82F620',
-                        color: c.user?.role === 'client' ? '#7c3aed' : '#3B82F6',
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        fontSize: '11px',
-                        fontWeight: '600'
-                      }}>
-                        {c.user?.role === 'client' ? 'Client' : c.user?.role === 'admin' ? 'Admin' : c.user?.role === 'support' ? 'Support' : 'Developer'}
-                      </span>
-                      <span className="comment-time">{new Date(c.createdAt).toLocaleString()}</span>
-                    </div>
-                    <p>{c.content}</p>
-                  </div>
+          {/* Comments / Chat */}
+          <div className="chat-card">
+            <div className="chat-header">
+              <div className="chat-header-title">
+                <span className="chat-header-icon">💬</span>
+                <span className="chat-header-text">Comments</span>
+                <span className="chat-count">({request.comments?.length || 0})</span>
+              </div>
+              <div className="chat-header-actions">
+                <div className="chat-search">
+                  <span className="chat-search-icon">🔍</span>
+                  <input
+                    type="text"
+                    placeholder="Search comments..."
+                    value={commentSearch}
+                    onChange={(e) => setCommentSearch(e.target.value)}
+                  />
                 </div>
-              ))}
-              {(!request.comments || request.comments.length === 0) && (
-                <div className="empty-state">No comments yet. Be the first to reply!</div>
+                <select className="chat-filter" value={commentFilter} onChange={(e) => setCommentFilter(e.target.value)}>
+                  <option value="all">All</option>
+                  <option value="client">From Client</option>
+                  <option value="staff">From Staff</option>
+                </select>
+                <button
+                  className="chat-sort-btn"
+                  onClick={() => setCommentSort(commentSort === 'latest' ? 'oldest' : 'latest')}
+                  title="Toggle sort order"
+                >
+                  {commentSort === 'latest' ? 'Sort by Latest' : 'Sort by Oldest'}
+                </button>
+              </div>
+            </div>
+
+            <div className="chat-conversation">
+              {buildChatItems().map((item, idx) => {
+                if (item.kind === 'separator') {
+                  return (
+                    <div key={`sep-${idx}`} className="chat-date-separator">
+                      <span>{dayLabel(item.ts)}</span>
+                    </div>
+                  );
+                }
+                if (item.kind === 'system') {
+                  return (
+                    <div key={`sys-${idx}`} className="chat-system">
+                      <span className="chat-system-line"></span>
+                      <span className="chat-system-text">{systemMessageText(item.activity)}</span>
+                      <span className="chat-system-line"></span>
+                    </div>
+                  );
+                }
+                const c = item.comment;
+                const isClientRole = c.user?.role === 'client';
+                return (
+                  <div key={c.id || `cm-${idx}`} className={`chat-row ${isClientRole ? '' : 'right'}`}>
+                    <div className={`chat-avatar ${isClientRole ? 'client' : 'staff'}`}>{renderAvatar(c.user)}</div>
+                    <div className="chat-column">
+                      <div className="chat-meta">
+                        <span className="chat-name">{c.user?.name || 'Unknown'}</span>
+                        <span className={`chat-role-badge ${isClientRole ? 'client' : 'staff'}`}>{chatRoleLabel(c.user?.role)}</span>
+                        <span className="chat-time">{new Date(c.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                      </div>
+                      <div className={`chat-bubble ${isClientRole ? 'client' : 'staff'}`}>
+                        {renderMessageContent(c.content)}
+                        {c.attachments && c.attachments.length > 0 && (
+                          <div className="msg-attachments">
+                            {c.attachments.map((att, ai) => (
+                              <div key={ai} className="msg-attachment">
+                                <span className="msg-att-icon">{isImageFile(att.path) ? '🖼️' : '📎'}</span>
+                                <div className="msg-att-info">
+                                  <span className="msg-att-name">{att.name || getFileName(att.path)}</span>
+                                  <span className="msg-att-size">{formatSize(att.size)}</span>
+                                </div>
+                                <a className="msg-att-download" href={`${API_BASE}${att.path}`} download target="_blank" rel="noopener noreferrer" title="Download">⬇</a>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {c.attachments && c.attachments.filter(a => isImageFile(a.path)).length > 0 && (
+                          <div className="msg-images">
+                            {c.attachments.filter(a => isImageFile(a.path)).map((att, ai) => (
+                              <img
+                                key={ai}
+                                src={`${API_BASE}${att.path}`}
+                                alt={att.name || 'image'}
+                                className="msg-image"
+                                onClick={() => setLightbox(`${API_BASE}${att.path}`)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {(request.comments || []).length === 0 && (
+                <div className="chat-empty">No messages yet. Start the conversation!</div>
               )}
             </div>
-            <form onSubmit={handleComment} className="comment-form">
-              <textarea 
-                value={comment} 
-                onChange={(e) => setComment(e.target.value)} 
-                placeholder="Write a reply..." 
-                rows={3} 
-              />
-              <button type="submit" className="btn btn-primary" disabled={submitting || !comment.trim()}>
-                {submitting ? 'Sending...' : '💬 Send Reply'}
-              </button>
-            </form>
+
+            <div className="chat-composer">
+              {pendingFiles.length > 0 && (
+                <div className="composer-pending">
+                  {pendingFiles.map((file, i) => (
+                    <div key={`pf-${i}`} className="composer-pending-item">
+                      <span className="composer-pending-icon">📎</span>
+                      <span className="composer-pending-name">{file.name}</span>
+                      <button type="button" className="composer-pending-remove" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {showEmojiPicker && (
+                <div className="emoji-picker">
+                  {['😀', '😂', '😊', '😍', '👍', '👏', '🙏', '🎉', '🔥', '✅', '❌', '⚠️', '📌', '💡', '📎', '🕐', '🚀', '👀'].map(e => (
+                    <button key={e} type="button" className="emoji-picker-item" onClick={() => insertEmoji(e)}>{e}</button>
+                  ))}
+                </div>
+              )}
+              <div className="composer-toolbar">
+                <button type="button" className="composer-btn" title="Attach file" onClick={() => commentFileInputRef.current?.click()}>📎</button>
+                <button type="button" className="composer-btn" title="Emoji" onClick={() => setShowEmojiPicker(v => !v)}>😊</button>
+                <textarea
+                  ref={commentTextareaRef}
+                  className="composer-textarea"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleComment();
+                    }
+                  }}
+                  placeholder="Type a comment..."
+                  rows={1}
+                />
+                <button
+                  type="button"
+                  className="composer-send"
+                  title="Send"
+                  disabled={submitting || (!comment.trim() && pendingFiles.length === 0)}
+                  onClick={handleComment}
+                >
+                  {submitting ? '⏳' : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13" /><path d="M22 2L15 22l-4-9-9-4z" /></svg>}
+                </button>
+                <input
+                  ref={commentFileInputRef}
+                  type="file"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) setPendingFiles(prev => [...prev, ...files]);
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+              <div className="composer-hint">Press Enter to send • Shift + Enter for new line</div>
+            </div>
           </div>
         </div>
 
@@ -810,12 +1125,14 @@ export default function RequestDetail() {
                   <div className="lifecycle-flow">
                     {(() => {
                       const flowSteps = getStatusFlow();
+                      const requestId = `REQ-${String(id).padStart(4, '0')}`;
                       return flowSteps.map((step, idx) => (
                         <React.Fragment key={idx}>
                           <div className={`lifecycle-step visited ${step.current ? 'current' : ''} ${step.isPast ? 'past' : ''}`}>
                             <div className="lifecycle-dot" style={{
                               background: step.color,
-                              boxShadow: step.current ? `0 0 0 4px ${step.color}30, 0 0 12px ${step.color}50` : 'none'
+                              boxShadow: step.current ? `0 0 0 4px ${step.color}30, 0 0 12px ${step.color}50` : 'none',
+                              animationDelay: `${idx * 0.15}s`
                             }}>
                               {step.isPast && <span className="lifecycle-check">✓</span>}
                               {step.current && <span className="lifecycle-pulse" style={{ borderColor: step.color }}></span>}
@@ -824,15 +1141,21 @@ export default function RequestDetail() {
                               {step.name}
                             </span>
                             {step.time && (
-                              <span className="lifecycle-time">
-                                {step.user && <span className="lifecycle-user">{step.user}</span>}
-                                {new Date(step.time).toLocaleDateString()}
-                              </span>
+                              <div className="lifecycle-meta">
+                                <span className="lifecycle-time">
+                                  {new Date(step.time).toLocaleDateString()} {new Date(step.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                </span>
+                                <span className="lifecycle-user">{step.user}</span>
+                                <span className="lifecycle-role">{roleLabel(step.role)}</span>
+                                <span className="lifecycle-request">{requestId}</span>
+                                <span className="lifecycle-desc">{step.description}</span>
+                              </div>
                             )}
                           </div>
                           {idx < flowSteps.length - 1 && (
                             <div className="lifecycle-connector" style={{
-                              background: `linear-gradient(90deg, ${step.color}, ${flowSteps[idx + 1].color})`
+                              background: `linear-gradient(90deg, ${step.color}, ${flowSteps[idx + 1].color})`,
+                              animationDelay: `${(idx + 1) * 0.15}s`
                             }}></div>
                           )}
                         </React.Fragment>
