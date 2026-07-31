@@ -19,12 +19,12 @@ export default function ClientLayout() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadNotifications, setUnreadNotifications] = useState([]);
+  const [panelNotifications, setPanelNotifications] = useState([]);
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
   const eventSourceRef = useRef(null);
   const dismissedIds = useRef(new Set());
-  const newNotifIds = useRef(new Set());
+  const showNotificationsRef = useRef(false);
   const audioUnlocked = useRef(false);
 
   // Unlock audio on first user interaction
@@ -67,6 +67,10 @@ export default function ClientLayout() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    showNotificationsRef.current = showNotifications;
+  }, [showNotifications]);
 
   const getNotificationIcon = useCallback((type) => {
     const icons = { status_change: '🔄', assigned: '👤', comment: '💬', request_created: '📋', request_deleted: '🗑️', default: '🔔' };
@@ -115,17 +119,23 @@ export default function ClientLayout() {
             type: data.data?.type || 'default',
             message: data.message,
             requestId: data.data?.requestId,
+            userId: data.data?.userId,
+            userName: data.data?.userName,
+            subject: data.data?.subject,
+            status: data.data?.status,
+            assignee: data.data?.assignee,
             timestamp: data.timestamp
           };
 
-          setNotifications(prev => [notification, ...prev].slice(0, 20));
+          setUnreadNotifications(prev => [notification, ...prev].slice(0, 20));
+          if (showNotificationsRef.current) {
+            setPanelNotifications(prev => [notification, ...prev].slice(0, 20));
+          }
 
           if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
             setTimeout(() => removeBubble(notification.id), 2000);
           }
-          newNotifIds.current.add(notification.id);
-          setUnreadCount(prev => prev + 1);
 
           if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
             window.dispatchEvent(new CustomEvent('refresh-requests'));
@@ -177,10 +187,32 @@ export default function ClientLayout() {
     };
   }, []);
 
-  const clearUnreadCount = useCallback(() => {
-    setUnreadCount(0);
-    newNotifIds.current.clear();
+  const openNotifications = () => {
+    const next = !showNotifications;
+    setShowNotifications(next);
+    if (next) {
+      setPanelNotifications(unreadNotifications);
+      setUnreadNotifications([]);
+    }
+  };
+
+  const markAllRead = useCallback(() => {
+    setUnreadNotifications([]);
+    setPanelNotifications([]);
   }, []);
+
+  const getNotifTitle = (type) => {
+    const titles = {
+      request_created: 'New Request',
+      status_change: 'Status Change',
+      assigned: 'Assignment',
+      claimed: 'Request Claimed',
+      comment: 'New Comment',
+      request_deleted: 'Request Deleted',
+      default: 'Notification'
+    };
+    return titles[type] || titles.default;
+  };
 
   const menuItems = [
     { path: '/client', label: t('common.dashboard'), icon: '🏠' },
@@ -197,7 +229,7 @@ export default function ClientLayout() {
             {systemLogo ? (
               <img src={`${API_BASE}${systemLogo}`} alt="Logo" className="sidebar-logo" />
             ) : (
-              <svg width="80" height="80" viewBox="0 0 48 48" fill="none">
+              <svg className="sidebar-logo" viewBox="0 0 48 48" fill="none" preserveAspectRatio="xMidYMid meet">
                 <circle cx="24" cy="24" r="24" fill="#7c3aed"/>
                 <path d="M16 18C16 15.79 17.79 14 20 14H28C30.21 14 32 15.79 32 18V22C32 24.21 30.21 26 28 26H20C17.79 26 16 24.21 16 22V18Z" fill="white"/>
                 <circle cx="24" cy="32" r="4" fill="white"/>
@@ -291,33 +323,41 @@ export default function ClientLayout() {
               {darkMode ? <><span className="toggle-icon">☀️</span><span>{t('common.brightMode')}</span></> : <><span className="toggle-icon">🌙</span><span>{t('common.darkMode')}</span></>}
             </button>
             <div className="notification-container" style={{ position: 'relative' }}>
-              <button className="theme-toggle" onClick={() => { setShowNotifications(!showNotifications); if (!showNotifications) clearUnreadCount(); }} title="Notifications" style={{ position: 'relative' }}>
+              <button className="theme-toggle" onClick={openNotifications} title="Notifications" style={{ position: 'relative' }}>
                 <span className="toggle-icon">🔔</span>
-                {unreadCount > 0 && (
+                {unreadNotifications.length > 0 && (
                   <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                    {unreadCount > 99 ? '99+' : unreadCount}
+                    {unreadNotifications.length > 99 ? '99+' : unreadNotifications.length}
                   </span>
                 )}
               </button>
               {showNotifications && (
-                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, background: darkMode ? '#1e293b' : '#fff', borderRadius: 12, boxShadow: darkMode ? '0 4px 24px rgba(0,0,0,0.4)' : '0 4px 24px rgba(0,0,0,0.15)', width: 360, maxHeight: 400, overflow: 'auto', zIndex: 1000, border: darkMode ? '1px solid #334155' : '1px solid #e5e7eb' }}>
-                  <div style={{ padding: '14px 16px', borderBottom: darkMode ? '1px solid #334155' : '1px solid #e5e7eb', fontWeight: 600, fontSize: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: darkMode ? '#e2e8f0' : 'inherit' }}>
-                    <span>{t('common.notifications')} {unreadCount > 0 && <span style={{ color: '#EF4444', fontWeight: 400 }}>({unreadCount})</span>}</span>
-                    {unreadCount > 0 && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={clearUnreadCount}>Clear all</span>}
+                <div className="dropdown-panel notification-panel" style={{ width: 420, border: darkMode ? '1px solid #334155' : '1px solid #e5e7eb', background: darkMode ? '#1e293b' : '#fff' }}>
+                  <div className="dropdown-panel-header" style={{ color: darkMode ? '#e2e8f0' : 'inherit' }}>
+                    <span>{t('common.notifications')}</span>
+                    {panelNotifications.length > 0 && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>Mark all read</span>}
                   </div>
-                  {notifications.length === 0 ? (
-                    <div style={{ padding: '32px 16px', textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>{t('common.noNotifications')}</div>
+                  {panelNotifications.length === 0 ? (
+                    <div className="dropdown-panel-empty">{t('common.noNotifications')}</div>
                   ) : (
-                    notifications.map((n) => (
-                      <div key={n.id} style={{ padding: '12px 16px', borderBottom: darkMode ? '1px solid #334155' : '1px solid #f3f4f6', fontSize: 13, cursor: 'pointer', display: 'flex', gap: '12px', alignItems: 'flex-start', background: newNotifIds.current.has(n.id) ? (darkMode ? '#3b1a1a' : '#fef2f2') : 'transparent', borderLeft: newNotifIds.current.has(n.id) ? '3px solid #ef4444' : 'none' }}
-                        onClick={() => { setShowNotifications(false); if (n.requestId) navigate(`/client/requests/${n.requestId}`); }}>
-                        <div style={{ fontSize: '18px', flexShrink: 0 }}>{getNotificationIcon(n.type)}</div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ color: darkMode ? '#e2e8f0' : '#1f2937' }}>{n.message}</div>
-                          <div style={{ color: '#9ca3af', fontSize: 11, marginTop: 4 }}>{n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</div>
+                    <div className="dropdown-panel-list">
+                      {panelNotifications.map((n) => (
+                        <div key={n.id} className="dropdown-panel-item" onClick={() => { setShowNotifications(false); if (n.requestId) navigate(`/client/requests/${n.requestId}`); }}>
+                          <div className="dropdown-panel-icon">{getNotificationIcon(n.type)}</div>
+                          <div className="dropdown-panel-content">
+                            <div className="dropdown-panel-title">
+                              {getNotifTitle(n.type)}
+                              {n.requestId && <span className="dropdown-panel-request">REQ-{String(n.requestId).padStart(4, '0')}</span>}
+                            </div>
+                            <p className="dropdown-panel-message">{n.message}</p>
+                            <div className="dropdown-panel-meta">
+                              {n.userName && <span className="dropdown-panel-user">👤 {n.userName}</span>}
+                              <span className="dropdown-panel-time">{n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   )}
                 </div>
               )}

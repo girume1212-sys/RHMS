@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { PieChart, Pie, Cell, LineChart, Line, BarChart, Bar, Rectangle, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
 import { showStatusToast } from '../notify';
+import RequestCalendar from './RequestCalendar';
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
@@ -76,7 +77,7 @@ export default function Dashboard() {
   if (!stats && !error) return <div className="loading-screen"><div className="spinner"></div></div>;
   if (error && !stats) return (
     <div className="dashboard">
-      <div className="page-header"><div><h1>{user?.role === 'developer' ? 'My Tasks' : user?.role === 'support' ? 'My Tasks' : 'Dashboard'}</h1><p>Welcome back, {user?.name?.split(' ')[0]}!</p></div></div>
+      <div className="page-header"><div><h1>{user?.role === 'developer' ? 'My Tasks' : user?.role === 'support' ? 'My Tasks' : 'Dashboard'}</h1><p>Welcome back, {user?.name?.split(' ')[0]}!</p></div><div style={{ display: 'flex', alignItems: 'flex-start' }}><RequestCalendar /></div></div>
       <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '16px 20px', borderRadius: '8px', fontSize: '14px' }}>{error}</div>
     </div>
   );
@@ -126,14 +127,21 @@ export default function Dashboard() {
     .filter(r => {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
-      return (
-        String(r.id).includes(q) ||
-        (r.subject || '').toLowerCase().includes(q) ||
-        (r.clientName || r.client_name || '').toLowerCase().includes(q) ||
-        (r.categoryName || r.category_name || '').toLowerCase().includes(q) ||
-        (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q)) ||
-        (r.assignedGroup?.name || '').toLowerCase().includes(q)
-      );
+      const str = (v) => (v === undefined || v === null) ? '' : String(v).toLowerCase();
+      return [
+        str(r.id),
+        str(r.subject),
+        str(r.description),
+        str(r.statusName || r.status?.name),
+        str(r.priorityName || r.priority?.name),
+        str(r.categoryName || r.category_name || r.category?.name),
+        str(r.clientName || r.client_name || r.client?.name),
+        str(r.assignee?.name),
+        str(r.assignedGroup?.name),
+        ...(r.groups || []).map(g => str(g.name)),
+        r.createdAt ? str(new Date(r.createdAt).toLocaleString()) : '',
+        r.updatedAt ? str(new Date(r.updatedAt).toLocaleString()) : ''
+      ].some(s => s.includes(q));
     })
     .sort((a, b) => {
       if (!sort.key) return 0;
@@ -165,6 +173,9 @@ export default function Dashboard() {
         <div>
           <h1>{user?.role === 'developer' || user?.role === 'support' ? 'My Tasks' : 'Dashboard'}</h1>
           <p>Welcome back, {user?.name?.split(' ')[0]}!</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+          <RequestCalendar />
         </div>
       </div>
 

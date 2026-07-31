@@ -62,6 +62,21 @@ const RequestsTable = forwardRef(function RequestsTable({
   }, [loadData]);
 
   useEffect(() => {
+    let status = initialFilter.status || '';
+    if (status && /^\d+$/.test(status)) {
+      const s = statuses.find(st => st.id === status);
+      status = s ? s.name : '';
+    }
+    setFilter({
+      status,
+      priority: initialFilter.priority || '',
+      category: initialFilter.category || '',
+      search: initialFilter.search || ''
+    });
+    setPage(1);
+  }, [initialFilter.status, initialFilter.priority, initialFilter.category, initialFilter.search, statuses]);
+
+  useEffect(() => {
     if (onDataChange) onDataChange({ requests, statuses, showMyTasks, filter });
   }, [onDataChange, requests, statuses, showMyTasks, filter]);
 
@@ -175,14 +190,21 @@ const RequestsTable = forwardRef(function RequestsTable({
       if (filter.category && r.category?.name !== filter.category) return false;
       if (filter.search) {
         const q = filter.search.toLowerCase();
-        return (
-          String(r.id).includes(q) ||
-          (r.subject || '').toLowerCase().includes(q) ||
-          (r.category?.name || '').toLowerCase().includes(q) ||
-          (r.client?.name || '').toLowerCase().includes(q) ||
-          (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q)) ||
-          (r.assignedGroup?.name || '').toLowerCase().includes(q)
-        );
+        const str = (v) => (v === undefined || v === null) ? '' : String(v).toLowerCase();
+        return [
+          str(r.id),
+          str(r.subject),
+          str(r.description),
+          str(r.status?.name),
+          str(r.priority?.name),
+          str(r.category?.name),
+          str(r.client?.name),
+          str(r.assignee?.name),
+          str(r.assignedGroup?.name),
+          ...(r.groups || []).map(g => str(g.name)),
+          r.createdAt ? str(new Date(r.createdAt).toLocaleString()) : '',
+          r.updatedAt ? str(new Date(r.updatedAt).toLocaleString()) : ''
+        ].some(s => s.includes(q));
       }
       return true;
     })
@@ -334,7 +356,7 @@ const RequestsTable = forwardRef(function RequestsTable({
                               </button>
                             )
                           )
-                        ) : (user?.role === 'admin' || user?.role === 'support') && (r.statusId === '1' || r.statusId === '2') ? (
+                        ) : user?.role === 'admin' && (r.statusId === '1' || r.statusId === '2') ? (
                           <>
                             <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
                             <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>Delete</button>

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
 import RequestsTable from './RequestsTable';
+import RequestCalendar from './RequestCalendar';
 
 export default function DeveloperDashboard() {
   const { user } = useAuth();
@@ -60,6 +61,9 @@ export default function DeveloperDashboard() {
           <h1>Developer Workspace</h1>
           <p>Welcome back, {user?.name?.split(' ')[0]}! View and manage all group requests.</p>
           <h3 style={{ marginTop: '8px', marginBottom: 0 }}>All Requests</h3>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+          <RequestCalendar />
         </div>
       </div>
 

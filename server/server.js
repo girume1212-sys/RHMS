@@ -913,7 +913,11 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
         query += ` AND r.assigned_to = $${paramIndex++}`;
         params.push(req.user.id);
       } else {
-        query += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++}))`;
+        query += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++})`;
+        if (req.user.role === 'support') {
+          query += ` OR r.status_id = '9'`;
+        }
+        query += `)`;
         params.push(req.user.id, req.user.id);
       }
     }
@@ -1011,12 +1015,15 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     if (req.user.role !== 'admin' && req.user.role !== 'client' && r.assigned_to !== req.user.id) {
-      const groupAccess = await pool.query(
-        'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
-        [req.params.id, req.user.id]
-      );
-      if (groupAccess.rows.length === 0) {
-        return res.status(403).json({ error: 'Access denied' });
+      const isEscalated = r.status_id === '9';
+      if (!(req.user.role === 'support' && isEscalated)) {
+        const groupAccess = await pool.query(
+          'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+          [req.params.id, req.user.id]
+        );
+        if (groupAccess.rows.length === 0) {
+          return res.status(403).json({ error: 'Access denied' });
+        }
       }
     }
 
@@ -1106,7 +1113,7 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     }
 
     // Real-time notification
-    notifyAdmins('New request created', { type: 'request_created', requestId: id, subject, userId: req.user.id });
+    notifyAdmins('New request created', { type: 'request_created', requestId: id, subject, userId: req.user.id, userName: req.user.name });
 
     res.status(201).json({ id, subject, description, clientId, categoryId, priorityId: priorityId || '2', statusId: '1', assignedTo: null, attachments: attachments || [], createdAt: now, updatedAt: now });
   } catch (err) {
@@ -1135,11 +1142,16 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
         if (req.user.role === 'developer' && !isAssignedToUser) {
           return res.status(403).json({ error: 'Access denied - you can only modify requests assigned to you' });
         }
-        // Support/escalation can only modify escalated requests assigned to them
+        // Support/escalation members assigned to a request have full permission to
+        // modify it. Otherwise they can modify any escalated request; New requests
+        // they are not assigned to stay read-only.
         if (req.user.role === 'support') {
-          const isEscalated = existing.rows[0].status_id === '9';
-          if (!isEscalated || !isAssignedToUser) {
-            return res.status(403).json({ error: 'Access denied - you can only modify escalated requests assigned to you' });
+          if (isAssignedToUser) {
+            // assigned escalation member: full permission
+          } else if (existing.rows[0].status_id === '1') {
+            return res.status(403).json({ error: 'Access denied - new requests cannot be modified by the escalation team' });
+          } else if (existing.rows[0].status_id !== '9') {
+            return res.status(403).json({ error: 'Access denied - you can only modify requests assigned to you' });
           }
         } else {
           if (!isAssignedToUser && !isUnassigned) {
@@ -1191,6 +1203,8 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       if (existing.rows[0].status_id !== '9') {
         newStatusId = '2';
       }
+    } else if (req.user.role === 'support' && existing.rows[0].status_id === '9' && newAssignedTo !== req.user.id) {
+      newAssignedTo = req.user.id;
     }
 
     const newAttachments = attachments !== undefined ? attachments : (typeof existing.rows[0].attachments === 'string' ? JSON.parse(existing.rows[0].attachments) : existing.rows[0].attachments);
@@ -1225,9 +1239,9 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       );
       const statusName = newStatusName;
       const clientId = existing.rows[0].client_id;
-      notifyAdmins(`Request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id });
+      notifyAdmins(`Request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
       if (clientId && clientId !== req.user.id && notifSettings.notifyClientStatusChange !== false) {
-        notifyUser(clientId, `Your request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id });
+        notifyUser(clientId, `Your request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
       }
     }
 
@@ -1239,12 +1253,12 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       );
       const assigneeName = assigneeResult.rows[0]?.name || 'Unknown';
       const clientId = existing.rows[0].client_id;
-      notifyAdmins(`Request #${req.params.id} assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id });
+      notifyAdmins(`Request #${req.params.id} assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
       if (notifSettings.notifyDeveloperAssignment !== false) {
-        notifyUser(assignedTo, `You have been assigned to Request #${req.params.id}`, { type: 'assigned', requestId: req.params.id, userId: req.user.id });
+        notifyUser(assignedTo, `You have been assigned to Request #${req.params.id}`, { type: 'assigned', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
       }
       if (clientId && clientId !== req.user.id) {
-        notifyUser(clientId, `Your request #${req.params.id} has been assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id });
+        notifyUser(clientId, `Your request #${req.params.id} has been assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
       }
     }
 
@@ -1261,7 +1275,7 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
     const existing = await pool.query('SELECT * FROM requests WHERE id = $1', [requestId]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
 
-    if (existing.rows[0].assigned_to) {
+    if (existing.rows[0].assigned_to && req.user.role !== 'support') {
       return res.status(400).json({ error: 'Request is already assigned to another user' });
     }
 
@@ -1275,12 +1289,14 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
       }
     }
 
-    const groupAccess = await pool.query(
-      'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
-      [requestId, req.user.id]
-    );
-    if (groupAccess.rows.length === 0) {
-      return res.status(403).json({ error: 'Access denied - you are not a member of a group assigned to this request' });
+    if (req.user.role !== 'support') {
+      const groupAccess = await pool.query(
+        'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+        [requestId, req.user.id]
+      );
+      if (groupAccess.rows.length === 0) {
+        return res.status(403).json({ error: 'Access denied - you are not a member of a group assigned to this request' });
+      }
     }
 
     const now = new Date().toISOString();
@@ -1305,11 +1321,11 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
       notifSettings[row.key] = row.value === 'true';
     }
 
-    notifyAdmins(`Request #${requestId} claimed by ${assigneeName}`, { type: 'claimed', requestId, assignee: req.user.id, userId: req.user.id });
+    notifyAdmins(`Request #${requestId} claimed by ${assigneeName}`, { type: 'claimed', requestId, assignee: req.user.id, userId: req.user.id, userName: req.user.name });
 
     const clientId = existing.rows[0].client_id;
     if (clientId && clientId !== req.user.id && notifSettings.notifyClientStatusChange !== false) {
-      notifyUser(clientId, `Your request #${requestId} has been claimed and is being worked on`, { type: 'claimed', requestId, userId: req.user.id });
+      notifyUser(clientId, `Your request #${requestId} has been claimed and is being worked on`, { type: 'claimed', requestId, userId: req.user.id, userName: req.user.name });
     }
 
     const statusResult = await pool.query('SELECT name FROM statuses WHERE id = $1', [assignedStatus]);
@@ -1336,7 +1352,7 @@ app.delete('/api/requests/:id', authMiddleware, roleMiddleware('admin'), async (
     await pool.query('DELETE FROM feedback WHERE request_id = $1', [req.params.id]);
     await pool.query('DELETE FROM requests WHERE id = $1', [req.params.id]);
     // Real-time notification
-    notifyAdmins(`Request #${req.params.id} deleted`, { type: 'request_deleted', requestId: req.params.id, userId: req.user.id });
+    notifyAdmins(`Request #${req.params.id} deleted`, { type: 'request_deleted', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     res.json({ message: 'Request deleted' });
   } catch (err) {
     console.error(err);
@@ -1347,17 +1363,20 @@ app.delete('/api/requests/:id', authMiddleware, roleMiddleware('admin'), async (
 // Comments Routes
 app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
   try {
-    const existing = await pool.query('SELECT id, client_id, assigned_to FROM requests WHERE id = $1', [req.params.id]);
+    const existing = await pool.query('SELECT id, client_id, assigned_to, status_id FROM requests WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
 
     // Check group access for non-admin, non-client, non-assignee users
+    const isEscalated = existing.rows[0].status_id === '9';
     if (req.user.role !== 'admin' && req.user.role !== 'client' && existing.rows[0].client_id !== req.user.id && existing.rows[0].assigned_to !== req.user.id) {
-      const groupAccess = await pool.query(
-        'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
-        [req.params.id, req.user.id]
-      );
-      if (groupAccess.rows.length === 0 && existing.rows[0].assigned_to !== req.user.id) {
-        return res.status(403).json({ error: 'Access denied' });
+      if (!(req.user.role === 'support' && isEscalated)) {
+        const groupAccess = await pool.query(
+          'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+          [req.params.id, req.user.id]
+        );
+        if (groupAccess.rows.length === 0) {
+          return res.status(403).json({ error: 'Access denied' });
+        }
       }
     }
 
@@ -1486,7 +1505,11 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
         whereClause += ` AND r.assigned_to = $${paramIndex++}`;
         params.push(req.user.id);
       } else {
-        whereClause += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++}))`;
+        whereClause += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++})`;
+        if (req.user.role === 'support') {
+          whereClause += ` OR r.status_id = '9'`;
+        }
+        whereClause += `)`;
         params.push(req.user.id, req.user.id);
       }
     }
@@ -1739,7 +1762,11 @@ app.get('/api/activity', authMiddleware, async (req, res) => {
       query += ` WHERE r.client_id = $1`;
       params.push(req.user.id);
     } else if (req.user.role !== 'admin') {
-      query += ` WHERE (r.assigned_to = $1 OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $1))`;
+      query += ` WHERE (r.assigned_to = $1 OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $1)`;
+      if (req.user.role === 'support') {
+        query += ` OR r.status_id = '9'`;
+      }
+      query += `)`;
       params.push(req.user.id);
     }
     query += ' ORDER BY al.created_at DESC LIMIT 20';
@@ -2128,7 +2155,7 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
       { key: 'defaultPriority', value: '2' },
       { key: 'autoRequestId', value: 'true' },
       { key: 'allowReopen', value: 'true' },
-      { key: 'theme', value: 'dark' },
+      { key: 'theme', value: 'partial' },
       { key: 'assignmentMode', value: 'group-based' },
       { key: 'defaultGroup', value: '' },
       { key: 'maintenanceMode', value: 'false' },
@@ -2242,7 +2269,7 @@ app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (
       { key: 'defaultPriority', value: '2' },
       { key: 'autoRequestId', value: 'true' },
       { key: 'allowReopen', value: 'true' },
-      { key: 'theme', value: 'dark' },
+      { key: 'theme', value: 'partial' },
       { key: 'accentColor', value: '#00b4d8' },
       { key: 'sidebarStyle', value: 'comfortable' },
       { key: 'assignmentMode', value: 'group-based' },

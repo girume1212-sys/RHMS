@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
+import RequestCalendar from './RequestCalendar';
 
 export default function ClientDashboard() {
   const [requests, setRequests] = useState([]);
@@ -19,6 +20,7 @@ export default function ClientDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -118,16 +120,21 @@ export default function ClientDashboard() {
     }
   };
 
-  const urlSearch = searchParams.get('search') || '';
   const filteredRequests = requests
     .filter(r => {
-      if (!urlSearch) return true;
-      const q = urlSearch.toLowerCase();
-      return (
-        String(r.id).includes(q) ||
-        (r.subject || '').toLowerCase().includes(q) ||
-        (r.category?.name || '').toLowerCase().includes(q)
-      );
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      const str = (v) => (v === undefined || v === null) ? '' : String(v).toLowerCase();
+      return [
+        str(r.id),
+        str(r.subject),
+        str(r.description),
+        str(r.status?.name),
+        str(r.priority?.name),
+        str(r.category?.name),
+        r.createdAt ? str(new Date(r.createdAt).toLocaleString()) : '',
+        r.updatedAt ? str(new Date(r.updatedAt).toLocaleString()) : ''
+      ].some(s => s.includes(q));
     })
     .sort((a, b) => {
       if (!sort.key) return 0;
@@ -161,6 +168,9 @@ export default function ClientDashboard() {
           <h1>My Dashboard</h1>
           <p>Welcome back, {user?.name?.split(' ')[0]}! Here are your support requests.</p>
         </div>
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+          <RequestCalendar />
+        </div>
       </div>
 
       {error && (
@@ -184,6 +194,7 @@ export default function ClientDashboard() {
         <div className="table-header-bar">
           <h3>My Requests ({filteredRequests.length})</h3>
           <div className="table-header-actions">
+            <input type="text" className="filter-search" placeholder="Search my requests..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
           </div>
         </div>
 

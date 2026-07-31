@@ -14,13 +14,13 @@ export default function Layout() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
-  const [notifications, setNotifications] = useState([]);
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const prevNotifCount = useRef(0);
+  const [unreadNotifications, setUnreadNotifications] = useState([]);
+  const [panelNotifications, setPanelNotifications] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
   const dismissedIds = useRef(new Set());
-  const newNotifIds = useRef(new Set());
+  const showNotificationsRef = useRef(false);
   const eventSourceRef = useRef(null);
   const audioUnlocked = useRef(false);
   const notificationAudio = useRef(null);
@@ -71,6 +71,10 @@ export default function Layout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    showNotificationsRef.current = showNotifications;
+  }, [showNotifications]);
+
   const getNotificationType = useCallback((msg) => {
     if (!msg) return 'default';
     const lower = msg.toLowerCase();
@@ -90,6 +94,14 @@ export default function Layout() {
     dismissedIds.current.add(id);
     setBubbleNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
+
+  const handleRefreshSystem = () => {
+    setShowUserMenu(false);
+    setRefreshing(true);
+    setTimeout(() => {
+      window.location.reload();
+    }, 700);
+  };
 
   const menuItems = [
     { section: null, items: [
@@ -118,25 +130,6 @@ export default function Layout() {
   };
 
   useEffect(() => {
-    api.get('/api/activity').then(data => {
-      const newNotifs = data.slice(0, 10);
-      setNotifications(newNotifs);
-      if (prevNotifCount.current > 0 && newNotifs.length > prevNotifCount.current) {
-        const newItems = newNotifs.slice(0, newNotifs.length - prevNotifCount.current);
-        newItems.forEach((n, i) => {
-          if (!dismissedIds.current.has(n.id)) {
-            const timer = setTimeout(() => {
-              setBubbleNotifications(prev => {
-                if (prev.find(p => p.id === n.id)) return prev;
-                return [n, ...prev].slice(0, 5);
-              });
-            }, i * 300);
-            setTimeout(() => removeBubble(n.id), i * 300 + 2000);
-          }
-        });
-      }
-      prevNotifCount.current = newNotifs.length;
-    }).catch(() => {});
     api.get('/api/requests').then(data => {
       const msgs = [];
       data.forEach(r => {
@@ -181,17 +174,22 @@ export default function Layout() {
             message: data.message,
             requestId: data.data?.requestId,
             userId: data.data?.userId,
+            userName: data.data?.userName,
+            subject: data.data?.subject,
+            status: data.data?.status,
+            assignee: data.data?.assignee,
             timestamp: data.timestamp
           };
 
-          setNotifications(prev => [notification, ...prev].slice(0, 20));
+          setUnreadNotifications(prev => [notification, ...prev].slice(0, 20));
+          if (showNotificationsRef.current) {
+            setPanelNotifications(prev => [notification, ...prev].slice(0, 20));
+          }
 
           if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
             setTimeout(() => removeBubble(notification.id), 2000);
           }
-          newNotifIds.current.add(notification.id);
-          setUnreadCount(prev => prev + 1);
 
           if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
             window.dispatchEvent(new CustomEvent('refresh-requests'));
@@ -242,10 +240,33 @@ export default function Layout() {
     };
   }, []);
 
-  const clearUnreadCount = useCallback(() => {
-    setUnreadCount(0);
-    newNotifIds.current.clear();
+  const openNotifications = () => {
+    const next = !showNotifications;
+    setShowNotifications(next);
+    setShowMessages(false);
+    if (next) {
+      setPanelNotifications(unreadNotifications);
+      setUnreadNotifications([]);
+    }
+  };
+
+  const markAllRead = useCallback(() => {
+    setUnreadNotifications([]);
+    setPanelNotifications([]);
   }, []);
+
+  const getNotifTitle = (type) => {
+    const titles = {
+      request_created: 'New Request',
+      status_change: 'Status Change',
+      assigned: 'Assignment',
+      claimed: 'Request Claimed',
+      comment: 'New Comment',
+      request_deleted: 'Request Deleted',
+      default: 'Notification'
+    };
+    return titles[type] || titles.default;
+  };
 
   const getRoleLabel = (role) => {
     const labels = { admin: t('general.administrator'), support: t('general.escalationTeam'), developer: t('general.developer'), client: t('general.client') };
@@ -260,7 +281,7 @@ export default function Layout() {
             {systemLogo ? (
               <img src={`${API_BASE}${systemLogo}`} alt="Logo" className="sidebar-logo" />
             ) : (
-              <svg width="80" height="80" viewBox="0 0 48 48" fill="none">
+              <svg className="sidebar-logo" viewBox="0 0 48 48" fill="none" preserveAspectRatio="xMidYMid meet">
                 <circle cx="24" cy="24" r="24" fill="#1e3a5f"/>
                 <path d="M16 18C16 15.79 17.79 14 20 14H28C30.21 14 32 15.79 32 18V22C32 24.21 30.21 26 28 26H20C17.79 26 16 24.21 16 22V18Z" fill="#4da6ff"/>
                 <circle cx="24" cy="32" r="4" fill="#4da6ff"/>
@@ -330,6 +351,14 @@ export default function Layout() {
           <span className="status-toast-message">{statusToast.message}</span>
         </div>
       )}
+      {refreshing && (
+        <div className="refresh-overlay">
+          <div className="refresh-overlay-card">
+            <div className="spinner"></div>
+            <p>Refreshing entire system...</p>
+          </div>
+        </div>
+      )}
       <div className="main-area">
         <header className="topbar">
           <div className="topbar-left">
@@ -354,26 +383,33 @@ export default function Layout() {
               {darkMode ? <><span className="toggle-icon">☀️</span><span>{t('topbar.bright')}</span></> : <><span className="toggle-icon">🌙</span><span>{t('topbar.dark')}</span></>}
             </button>
             <div className="topbar-icon-container">
-              <button className="topbar-icon" title={t('topbar.notifications')} onClick={() => { setShowNotifications(!showNotifications); setShowMessages(false); if (!showNotifications) clearUnreadCount(); }}>
+              <button className="topbar-icon" title={t('topbar.notifications')} onClick={openNotifications}>
                 🔔
-                {unreadCount > 0 && <span className="badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+                {unreadNotifications.length > 0 && <span className="badge">{unreadNotifications.length > 99 ? '99+' : unreadNotifications.length}</span>}
               </button>
               {showNotifications && (
-                <div className="dropdown-panel">
+                <div className="dropdown-panel notification-panel">
                   <div className="dropdown-panel-header">
                     {t('topbar.notifications')}
-                    {unreadCount > 0 && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={clearUnreadCount}>Mark all read</span>}
+                    {panelNotifications.length > 0 && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>Mark all read</span>}
                   </div>
                   <div className="dropdown-panel-list">
-                    {notifications.length === 0 && <div className="dropdown-panel-empty">{t('topbar.noNotifications')}</div>}
-                    {notifications.map(n => (
-                      <div key={n.id} className={`dropdown-panel-item${newNotifIds.current.has(n.id) ? ' notification-new' : ''} bubble-type-${getNotificationType(n.message)}`} onClick={() => { if (n.requestId) navigate(`/requests/${n.requestId}`); setShowNotifications(false); }}>
+                    {panelNotifications.length === 0 && <div className="dropdown-panel-empty">{t('topbar.noNotifications')}</div>}
+                    {panelNotifications.map(n => (
+                      <div key={n.id} className={`dropdown-panel-item bubble-type-${getNotificationType(n.message)}`} onClick={() => { if (n.requestId) navigate(`/requests/${n.requestId}`); setShowNotifications(false); }}>
                         <div className="dropdown-panel-icon">
                           {getNotificationIcon(n.type || getNotificationType(n.message))}
                         </div>
                         <div className="dropdown-panel-content">
-                          <p>{n.message}</p>
-                          <span className="dropdown-panel-time">{n.timestamp ? new Date(n.timestamp).toLocaleString() : n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</span>
+                          <div className="dropdown-panel-title">
+                            {getNotifTitle(n.type)}
+                            {n.requestId && <span className="dropdown-panel-request">REQ-{String(n.requestId).padStart(4, '0')}</span>}
+                          </div>
+                          <p className="dropdown-panel-message">{n.message}</p>
+                          <div className="dropdown-panel-meta">
+                            {n.userName && <span className="dropdown-panel-user">👤 {n.userName}</span>}
+                            <span className="dropdown-panel-time">{n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</span>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -421,11 +457,12 @@ export default function Layout() {
                     </div>
                   </div>
                   <div className="dropdown-divider"></div>
-                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/profile'); }}>👤 {t('topbar.myProfile')}</button>
-                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/settings'); }}>⚙️ {t('topbar.settingsLabel')}</button>
+                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/profile'); }}><span className="dropdown-item-icon">👤</span> {t('topbar.myProfile')}</button>
+                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/settings'); }}><span className="dropdown-item-icon">⚙️</span> {t('topbar.settingsLabel')}</button>
+                  <button className="dropdown-item" onClick={handleRefreshSystem} title="Refresh and synchronize the entire RHMS"><span className="dropdown-item-icon">🔄</span> Refresh</button>
                   <div className="dropdown-divider"></div>
                   <button className="dropdown-item logout" onClick={() => { logout(); navigate('/login'); }}>
-                    🚪 {t('topbar.signOut')}
+                    <span className="dropdown-item-icon">🚪</span> {t('topbar.signOut')}
                   </button>
                 </div>
               )}

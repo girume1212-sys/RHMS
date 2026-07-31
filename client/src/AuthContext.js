@@ -8,6 +8,7 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem('rhms_token'));
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('rhms_darkMode') === 'true');
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('rhms_themeMode') || 'partial');
   const [systemName, setSystemName] = useState('RHMS');
   const [systemLogo, setSystemLogo] = useState('');
   const timeoutRef = useRef(null);
@@ -19,18 +20,28 @@ export function AuthProvider({ children }) {
     });
   };
 
+  const applyTheme = (mode) => {
+    localStorage.setItem('rhms_themeMode', mode);
+    setThemeMode(mode);
+    const dark = mode === 'dark';
+    localStorage.setItem('rhms_darkMode', String(dark));
+    setDarkMode(dark);
+  };
+
   useEffect(() => {
     document.body.classList.toggle('dark-mode', darkMode);
-  }, [darkMode]);
+    document.body.classList.toggle('dark-sidebar', themeMode === 'partial' || darkMode);
+  }, [darkMode, themeMode]);
 
   useEffect(() => {
     api.get('/api/settings/public').then(data => {
       if (data.theme === 'light') {
-        setDarkMode(false);
-        localStorage.setItem('rhms_darkMode', 'false');
+        applyTheme('light');
       } else if (data.theme === 'dark') {
-        setDarkMode(true);
-        localStorage.setItem('rhms_darkMode', 'true');
+        applyTheme('dark');
+      } else if (data.theme === 'partial') {
+        localStorage.setItem('rhms_themeMode', 'partial');
+        setThemeMode('partial');
       }
       if (data.systemName) setSystemName(data.systemName);
       if (data.systemLogo) setSystemLogo(data.systemLogo);
@@ -127,7 +138,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading, darkMode, toggleDarkMode, updateUser, systemName, systemLogo }}>
+    <AuthContext.Provider value={{ user, token, login, logout, loading, darkMode, toggleDarkMode, themeMode, applyTheme, updateUser, systemName, systemLogo }}>
       {children}
     </AuthContext.Provider>
   );

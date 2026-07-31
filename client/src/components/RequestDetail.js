@@ -701,7 +701,8 @@ export default function RequestDetail() {
               <div className="action-list">
                 <div className="action-group">
                   <label>Change Status</label>
-                  {user?.role === 'developer' && request.status?.name === 'New' && request.assignedTo !== user.id ? (
+                  {((user?.role === 'developer' && request.status?.name === 'New' && request.assignedTo !== user.id) ||
+                    (user?.role === 'support' && request.status?.name === 'Escalated' && request.assignedTo !== user.id)) ? (
                     <button
                       className="btn btn-primary"
                       onClick={handleClaim}
@@ -713,9 +714,8 @@ export default function RequestDetail() {
                   ) : (
                     <select value={request.statusId} onChange={(e) => handleStatusChange(e.target.value)}>
                       {statuses
-                        .filter(s => !(user.role === 'support' && s.name === 'Escalated'))
                         .filter(s => s.name !== 'Reopened')
-                        .filter(s => !(user.role !== 'admin' && (s.name === 'Closed' || s.name === 'Rejected')))
+                        .filter(s => !((user.role === 'developer' || user.role === 'support') && (s.name === 'Closed' || s.name === 'Rejected')))
                         .map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   )}

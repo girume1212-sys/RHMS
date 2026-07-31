@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { showStatusToast } from '../notify';
+import RequestCalendar from './RequestCalendar';
 
 export default function EscalationDashboard() {
   const [requests, setRequests] = useState([]);
@@ -151,14 +152,21 @@ export default function EscalationDashboard() {
       if (priorityFilter && r.priority?.name !== priorityFilter) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        return (
-          String(r.id).includes(q) ||
-          (r.subject || '').toLowerCase().includes(q) ||
-          (r.category?.name || '').toLowerCase().includes(q) ||
-          (r.client?.name || '').toLowerCase().includes(q) ||
-          (r.groups || []).some(g => (g.name || '').toLowerCase().includes(q)) ||
-          (r.assignedGroup?.name || '').toLowerCase().includes(q)
-        );
+        const str = (v) => (v === undefined || v === null) ? '' : String(v).toLowerCase();
+        return [
+          str(r.id),
+          str(r.subject),
+          str(r.description),
+          str(r.status?.name),
+          str(r.priority?.name),
+          str(r.category?.name),
+          str(r.client?.name),
+          str(r.assignee?.name),
+          str(r.assignedGroup?.name),
+          ...(r.groups || []).map(g => str(g.name)),
+          r.createdAt ? str(new Date(r.createdAt).toLocaleString()) : '',
+          r.updatedAt ? str(new Date(r.updatedAt).toLocaleString()) : ''
+        ].some(s => s.includes(q));
       }
       return true;
     })
@@ -187,7 +195,9 @@ export default function EscalationDashboard() {
 
   const isReadOnly = (r) => {
     if (user?.role === 'support') {
-      return !(r.status?.name === 'Escalated' && (!r.assignedTo || r.assignedTo === user.id));
+      if (r.assignedTo === user.id) return false;
+      if (r.status?.name === 'New') return true;
+      return r.status?.name !== 'Escalated';
     }
     return r.assignedTo && r.assignedTo !== user.id;
   };
@@ -213,11 +223,11 @@ export default function EscalationDashboard() {
       actions.push({ label: 'Follow Up', status: 'In Progress', color: '#F59E0B', icon: '📞', type: 'status' });
     }
     if (statusName === 'Escalated') {
-      if (!r.assignedTo) {
-        actions.push({ label: 'Claim', status: 'Escalated', color: '#8B5CF6', icon: '👤', type: 'claim' });
-      } else if (r.assignedTo === user.id) {
+      if (r.assignedTo === user.id) {
         actions.push({ label: 'Handle', status: 'In Progress', color: '#F59E0B', icon: '🔧', type: 'status' });
         actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
+      } else {
+        actions.push({ label: 'Claim', status: 'Escalated', color: '#8B5CF6', icon: '👤', type: 'claim' });
       }
     }
     return actions;
@@ -253,6 +263,9 @@ export default function EscalationDashboard() {
         <div>
           <h1>Escalation Team Dashboard</h1>
           <p>Welcome back, {user?.name?.split(' ')[0]}! Manage, escalate, and resolve critical requests.</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+          <RequestCalendar />
         </div>
       </div>
 

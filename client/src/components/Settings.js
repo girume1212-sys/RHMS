@@ -27,7 +27,7 @@ const DAYS_OF_WEEK = [
 const FILE_TYPE_OPTIONS = ['jpg', 'png', 'gif', 'svg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'mp4', 'csv'];
 
 export default function Settings() {
-  const { toggleDarkMode } = useAuth();
+  const { applyTheme } = useAuth();
   const { changeLanguage } = useLanguage();
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
@@ -67,7 +67,7 @@ export default function Settings() {
     sessionTimeout: 30,
     maxLoginAttempts: 5,
     twoFactorAuth: false,
-    theme: 'dark',
+    theme: 'partial',
     accentColor: '#00b4d8',
     sidebarStyle: 'comfortable',
     assignmentMode: 'group-based',
@@ -193,11 +193,7 @@ export default function Settings() {
         autoBackup: String(form.autoBackup),
         backupFrequency: form.backupFrequency,
       });
-      if (form.theme === 'dark') {
-        if (!document.body.classList.contains('dark-mode')) toggleDarkMode();
-      } else {
-        if (document.body.classList.contains('dark-mode')) toggleDarkMode();
-      }
+      applyTheme(form.theme);
       if (form.language) changeLanguage(form.language);
       addToast(t('settings.saved'));
       showStatusToast(t('settings.saved'), 'status');
@@ -592,6 +588,7 @@ export default function Settings() {
           <div className="settings-field">
             <label>{t('settings.theme')}</label>
             <select value={form.theme} onChange={e => handleChange('theme', e.target.value)}>
+              <option value="partial">{t('settings.partialMode')}</option>
               <option value="light">{t('settings.lightMode')}</option>
               <option value="dark">{t('settings.darkMode')}</option>
             </select>
