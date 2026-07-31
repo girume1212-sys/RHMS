@@ -195,6 +195,10 @@ export default function Layout() {
             window.dispatchEvent(new CustomEvent('refresh-requests'));
           }
 
+          if (data.data?.type === 'group_assigned' || data.data?.type === 'group_removed') {
+            window.dispatchEvent(new CustomEvent('refresh-requests'));
+          }
+
           playNotificationSound();
         } catch (e) {
           console.error('SSE parse error:', e);

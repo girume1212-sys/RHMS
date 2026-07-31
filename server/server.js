@@ -350,6 +350,84 @@ function notifyUser(userId, message, data = {}) {
   }
 }
 
+// Sync a user's existing requests to their group memberships so that requests
+// created before the user was assigned to a group become visible to that group.
+// Only requests without an explicit group assignment are managed here.
+async function syncUserRequestGroups(userId, groupIds) {
+  if (!userId) return {};
+  const groupList = Array.isArray(groupIds) ? groupIds.filter(Boolean) : [];
+  const added = {};
+  const userRequests = await pool.query(
+    'SELECT id FROM requests WHERE client_id = $1 AND assigned_group IS NULL',
+    [userId]
+  );
+  for (const r of userRequests.rows) {
+    if (groupList.length > 0) {
+      await pool.query(
+        'DELETE FROM request_groups WHERE request_id = $1 AND NOT (group_id = ANY($2::text[]))',
+        [r.id, groupList]
+      );
+    } else {
+      await pool.query('DELETE FROM request_groups WHERE request_id = $1', [r.id]);
+    }
+    for (const gid of groupList) {
+      const result = await pool.query(
+        'INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [r.id, gid]
+      );
+      if (result.rowCount > 0) added[gid] = (added[gid] || 0) + result.rowCount;
+    }
+  }
+  return added;
+}
+
+// Incrementally associate one group with a user's existing requests
+async function addUserRequestGroup(userId, groupId) {
+  if (!userId || !groupId) return 0;
+  const result = await pool.query(
+    `INSERT INTO request_groups (request_id, group_id)
+     SELECT r.id, $2
+     FROM requests r
+     WHERE r.client_id = $1 AND r.assigned_group IS NULL
+     ON CONFLICT DO NOTHING`,
+    [userId, groupId]
+  );
+  return result.rowCount || 0;
+}
+
+// Remove a group association from a user's existing requests (unless the
+// request was explicitly assigned to that group)
+async function removeUserRequestGroup(userId, groupId) {
+  if (!userId || !groupId) return;
+  await pool.query(
+    `DELETE FROM request_groups rg
+     USING requests r
+     WHERE rg.request_id = r.id
+       AND r.client_id = $1
+       AND rg.group_id = $2
+       AND r.assigned_group IS DISTINCT FROM $2`,
+    [userId, groupId]
+  );
+}
+
+// Notify developer/support members of a group so their dashboards update
+async function notifyGroupMembers(groupId, message, data = {}) {
+  try {
+    const groupResult = await pool.query('SELECT name FROM groups WHERE id = $1', [groupId]);
+    const groupName = groupResult.rows[0]?.name || '';
+    const membersResult = await pool.query(
+      "SELECT u.id FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support')",
+      [groupId]
+    );
+    const payload = { type: 'group_assigned', groupId, groupName, ...data };
+    for (const row of membersResult.rows) {
+      notifyUser(row.id, message, payload);
+    }
+  } catch (err) {
+    console.error('notifyGroupMembers error:', err.message);
+  }
+}
+
 const mapUser = (u) => ({
   id: u.id,
   name: u.name,
@@ -662,13 +740,9 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
         }
       }
       // Sync request_groups for user's existing requests (only if not explicitly group-assigned)
-      const userRequests = await pool.query('SELECT id FROM requests WHERE client_id = $1 AND assigned_group IS NULL', [req.params.id]);
-      if (userRequests.rows.length > 0 && groupIds && groupIds.length > 0) {
-        for (const r of userRequests.rows) {
-          for (const gid of groupIds) {
-            await pool.query('INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [r.id, gid]);
-          }
-        }
+      const addedGroups = await syncUserRequestGroups(req.params.id, groupIds);
+      for (const gid of Object.keys(addedGroups)) {
+        notifyGroupMembers(gid, `${addedGroups[gid]} new request${addedGroups[gid] > 1 ? 's' : ''} available for your group`, { groupId: gid });
       }
     } catch (e) { console.log('user_groups save error:', e.message); }
     const user = mapUser(result.rows[0]);
@@ -2013,6 +2087,12 @@ app.post('/api/groups/:id/members', authMiddleware, roleMiddleware('admin'), asy
       'INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
       [user_id, req.params.id]
     );
+    // Associate the user's previously submitted requests with this group so
+    // they become visible to the group's developers/escalation members
+    const synced = await addUserRequestGroup(user_id, req.params.id);
+    if (synced > 0) {
+      notifyGroupMembers(req.params.id, `${synced} new request${synced > 1 ? 's' : ''} available for your group`);
+    }
     res.status(201).json({ message: 'Member added' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -2025,6 +2105,8 @@ app.delete('/api/groups/:id/members/:userId', authMiddleware, roleMiddleware('ad
       'DELETE FROM user_groups WHERE user_id = $1 AND group_id = $2',
       [req.params.userId, req.params.id]
     );
+    // Remove the group association from the user's requests unless explicitly assigned
+    await removeUserRequestGroup(req.params.userId, req.params.id);
     res.json({ message: 'Member removed' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
