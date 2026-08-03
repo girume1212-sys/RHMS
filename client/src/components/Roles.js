@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useTranslation } from '../i18n/useTranslation';
+import Icon from './Icon';
 
 export default function Roles() {
   const { t } = useTranslation();
@@ -14,6 +15,7 @@ export default function Roles() {
   }, []);
 
   const roleColors = { admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981' };
+  const roleIcons = { admin: 'crown', support: 'zap', developer: 'code', client: 'user' };
 
   return (
     <div className="page-container">
@@ -32,7 +34,7 @@ export default function Roles() {
           {roles.map(r => (
             <div key={r.id} className="role-card">
               <div className="role-icon" style={{ background: roleColors[r.id] + '20', color: roleColors[r.id] }}>
-                {r.id === 'admin' ? '👑' : r.id === 'support' ? '⚡' : r.id === 'developer' ? '💻' : '👤'}
+                <Icon name={roleIcons[r.id] || 'user'} size={24} />
               </div>
               <h3>{t('role.' + r.id)}</h3>
               <div className="permissions-list">

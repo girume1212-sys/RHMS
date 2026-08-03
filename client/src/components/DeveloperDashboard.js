@@ -1,8 +1,9 @@
-import React, { useState, useRef, useCallback } from 'react';
+﻿import React, { useState, useRef, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
 import RequestsTable from './RequestsTable';
 import RequestCalendar from './RequestCalendar';
+import Icon from './Icon';
 
 export default function DeveloperDashboard() {
   const { user } = useAuth();
@@ -70,14 +71,14 @@ export default function DeveloperDashboard() {
       </div>
 
       <div className="stats-grid">
-        <DevStatCard icon="📥" value={stats.newCount} label={t('common.new')} color="#3B82F6" onClick={() => toggleStatusFilter('New')} />
-        <DevStatCard icon="📋" value={stats.assigned} label={t('common.newlyAssigned')} color="#8B5CF6" onClick={() => toggleStatusFilter('Assigned')} />
-        <DevStatCard icon="⚡" value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => toggleStatusFilter('In Progress')} />
-        <DevStatCard icon="⏰" value={stats.waiting} label={t('common.awaitingClient')} color="#F97316" onClick={() => toggleStatusFilter('Waiting for Client')} />
-        <DevStatCard icon="🚨" value={stats.escalated} label={t('common.escalated')} color="#EF4444" onClick={() => toggleStatusFilter('Escalated')} />
-        <DevStatCard icon="✅" value={stats.resolved} label={t('common.resolved')} color="#10B981" onClick={() => toggleStatusFilter('Resolved')} />
-        <DevStatCard icon="🔒" value={stats.closed} label={t('common.closed')} color="#6B7280" onClick={() => toggleStatusFilter('Closed')} />
-        <DevStatCard icon="❌" value={stats.rejected} label={t('common.rejected')} color="#DC2626" onClick={() => toggleStatusFilter('Rejected')} />
+        <DevStatCard icon={<Icon name="new" />} value={stats.newCount} label={t('common.new')} color="#3B82F6" onClick={() => toggleStatusFilter('New')} />
+        <DevStatCard icon={<Icon name="assigned" />} value={stats.assigned} label={t('common.newlyAssigned')} color="#8B5CF6" onClick={() => toggleStatusFilter('Assigned')} />
+        <DevStatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => toggleStatusFilter('In Progress')} />
+        <DevStatCard icon={<Icon name="waiting" />} value={stats.waiting} label={t('common.awaitingClient')} color="#F97316" onClick={() => toggleStatusFilter('Waiting for Client')} />
+        <DevStatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} color="#EF4444" onClick={() => toggleStatusFilter('Escalated')} />
+        <DevStatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} color="#10B981" onClick={() => toggleStatusFilter('Resolved')} />
+        <DevStatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} color="#6B7280" onClick={() => toggleStatusFilter('Closed')} />
+        <DevStatCard icon={<Icon name="rejected" />} value={stats.rejected} label={t('common.rejected')} color="#DC2626" onClick={() => toggleStatusFilter('Rejected')} />
       </div>
 
       <div style={{ marginTop: '24px' }}>
@@ -86,3 +87,4 @@ export default function DeveloperDashboard() {
     </div>
   );
 }
+

@@ -5,6 +5,7 @@ import { api } from '../api';
 import { getSavedSearchQuery, saveSearchQuery } from '../utils/searchStore';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
+import Icon from './Icon';
 
 export default function GlobalSearch({ clientMode = false, placeholder }) {
   const navigate = useNavigate();
@@ -100,7 +101,7 @@ export default function GlobalSearch({ clientMode = false, placeholder }) {
   return (
     <form className="global-search" onSubmit={handleSubmit} ref={containerRef}>
       <div className="global-search-input-wrap">
-        <span className="global-search-icon">🔍</span>
+        <span className="global-search-icon"><Icon name="search" /></span>
         <input
           ref={inputRef}
           type="text"
@@ -133,7 +134,7 @@ export default function GlobalSearch({ clientMode = false, placeholder }) {
                           <strong>REQ-{String(r.id).padStart(4, '0')}</strong> {r.subject}
                         </span>
                         <span className="global-search-item-meta">
-                          {r.client_name && <span>👤 {r.client_name}</span>}
+                          {r.client_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="user" size={13} /> {r.client_name}</span>}
                           {r.status_name && <span className="status-badge" style={{ background: (r.status_color || '#6B7280') + '20', color: r.status_color || '#6B7280' }}>{transSeeded(r.status_name, 'status', t)}</span>}
                           {r.priority_name && <span className="priority-badge" style={{ background: (r.priority_color || '#6B7280') + '20', color: r.priority_color || '#6B7280' }}>{r.priority_name}</span>}
                           {r.category_name && <span className="category-tag" style={{ background: (r.category_color || '#3B82F6') + '20', color: r.category_color || '#3B82F6' }}>{r.category_name}</span>}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
@@ -8,6 +8,7 @@ import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
 import PageNumbers from './PageNumbers';
+import Icon from './Icon';
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
@@ -41,7 +42,7 @@ function StatCard({ icon, value, label, change, changeType, color, onClick, chan
         <h3>{value}</h3>
         <p>{label}</p>
         <span className={`stat-change ${changeType}`}>
-          {changeType === 'up' ? '↑' : '↓'} {change} {changeLabel}
+          {'↑'} {change} {changeLabel}
         </span>
       </div>
     </div>
@@ -185,14 +186,14 @@ export default function Dashboard() {
       </div>
 
       <div className="stats-grid">
-        <StatCard icon="📋" value={stats.total} label={t('common.totalRequests')} change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} changeLabel={changeLabel} color="#3B82F6" onClick={() => navigate('/requests')} />
-        <StatCard icon="📂" value={stats.open} label={t('common.newRequests')} change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} changeLabel={changeLabel} color="#10B981" onClick={() => navigate('/requests?status=1')} />
-        <StatCard icon="⏳" value={stats.inProgress} label={t('common.inProgress')} change={getChangePercent(stats.inProgress, stats.inProgressLastWeek).text} changeType={getChangePercent(stats.inProgress, stats.inProgressLastWeek).type} changeLabel={changeLabel} color="#F59E0B" onClick={() => navigate('/requests?status=3')} />
-        <StatCard icon="⏰" value={stats.waiting} label={t('common.waitingForClient')} change={getChangePercent(stats.waiting, stats.waitingLastWeek).text} changeType={getChangePercent(stats.waiting, stats.waitingLastWeek).type} changeLabel={changeLabel} color="#F97316" onClick={() => navigate('/requests?status=4')} />
-        <StatCard icon="✅" value={stats.resolved} label={t('common.resolved')} change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} changeLabel={changeLabel} color="#8B5CF6" onClick={() => navigate('/requests?status=5')} />
-        <StatCard icon="🚨" value={stats.escalated} label={t('common.escalated')} change={getChangePercent(stats.escalated, stats.escalatedLastWeek).text} changeType={getChangePercent(stats.escalated, stats.escalatedLastWeek).type} changeLabel={changeLabel} color="#EF4444" onClick={() => navigate('/requests?status=9')} />
-        <StatCard icon="📁" value={stats.closed} label={t('common.closed')} change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} changeLabel={changeLabel} color="#6B7280" onClick={() => navigate('/requests?status=6')} />
-        <StatCard icon="❌" value={stats.rejected} label={t('common.rejected')} change={getChangePercent(stats.rejected, stats.rejectedLastWeek).text} changeType={getChangePercent(stats.rejected, stats.rejectedLastWeek).type} changeLabel={changeLabel} color="#DC2626" onClick={() => navigate('/requests?status=8')} />
+        <StatCard icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} changeLabel={changeLabel} color="#3B82F6" onClick={() => navigate('/requests')} />
+        <StatCard icon={<Icon name="new" />} value={stats.open} label={t('common.newRequests')} change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} changeLabel={changeLabel} color="#10B981" onClick={() => navigate('/requests?status=1')} />
+        <StatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} change={getChangePercent(stats.inProgress, stats.inProgressLastWeek).text} changeType={getChangePercent(stats.inProgress, stats.inProgressLastWeek).type} changeLabel={changeLabel} color="#F59E0B" onClick={() => navigate('/requests?status=3')} />
+        <StatCard icon={<Icon name="waiting" />} value={stats.waiting} label={t('common.waitingForClient')} change={getChangePercent(stats.waiting, stats.waitingLastWeek).text} changeType={getChangePercent(stats.waiting, stats.waitingLastWeek).type} changeLabel={changeLabel} color="#F97316" onClick={() => navigate('/requests?status=4')} />
+        <StatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} changeLabel={changeLabel} color="#8B5CF6" onClick={() => navigate('/requests?status=5')} />
+        <StatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} change={getChangePercent(stats.escalated, stats.escalatedLastWeek).text} changeType={getChangePercent(stats.escalated, stats.escalatedLastWeek).type} changeLabel={changeLabel} color="#EF4444" onClick={() => navigate('/requests?status=9')} />
+        <StatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} changeLabel={changeLabel} color="#6B7280" onClick={() => navigate('/requests?status=6')} />
+        <StatCard icon={<Icon name="rejected" />} value={stats.rejected} label={t('common.rejected')} change={getChangePercent(stats.rejected, stats.rejectedLastWeek).text} changeType={getChangePercent(stats.rejected, stats.rejectedLastWeek).type} changeLabel={changeLabel} color="#DC2626" onClick={() => navigate('/requests?status=8')} />
       </div>
 
       <div className="charts-row">
@@ -392,7 +393,7 @@ export default function Dashboard() {
                           <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(r.id); }}>{t('common.delete')}</button>
                         </>
                       ) : (
-                        <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>—</span>
+                        <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>-</span>
                       )}
                     </div>
                   </td>
@@ -431,14 +432,12 @@ export default function Dashboard() {
               className={`perf-toggle-btn ${perfView === 'company' ? 'active' : ''}`}
               onClick={() => setPerfView('company')}
             >
-              <span className="perf-toggle-icon">🏢</span>
               {t('dashboard.companyPerformance')}
             </button>
             <button
               className={`perf-toggle-btn ${perfView === 'developer' ? 'active' : ''}`}
               onClick={() => setPerfView('developer')}
             >
-              <span className="perf-toggle-icon">👨‍💻</span>
               {t('dashboard.developerPerformance')}
             </button>
           </div>
@@ -549,7 +548,7 @@ export default function Dashboard() {
             <div className="modal-header">
               <div className="modal-header-content">
                 <div>
-                  <h2>{selectedDetail.data.name} — {t('dashboard.dailyBreakdown')}</h2>
+                  <h2>{selectedDetail.data.name} - {t('dashboard.dailyBreakdown')}</h2>
                   <p className="modal-subtitle">{t('dashboard.last30Days')}</p>
                 </div>
               </div>
@@ -613,3 +612,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

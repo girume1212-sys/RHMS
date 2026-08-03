@@ -5,6 +5,7 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { API_BASE } from '../api';
 import LanguageSelector from './LanguageSelector';
+import Icon from './Icon';
 
 export default function Profile() {
   const { t, language } = useTranslation();
@@ -311,7 +312,7 @@ export default function Profile() {
               background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               color: '#fff', fontSize: '16px'
-            }}>✏️</span>
+            }}><Icon name="edit" size={16} /></span>
             {editing ? t('common.editInfo') : t('common.accountDetails')}
           </h3>
 
@@ -322,7 +323,7 @@ export default function Profile() {
                   <span style={{
                     width: '22px', height: '22px', borderRadius: '6px',
                     background: '#dbeafe', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
-                  }}>👤</span>
+                  }}><Icon name="user" size={14} /></span>
                   {t('common.fullName')}
                 </label>
                 <input
@@ -339,7 +340,7 @@ export default function Profile() {
                   onFocus={(e) => { e.target.style.borderColor = '#3B82F6'; e.target.style.background = '#eff6ff'; e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }}
                   onBlur={(e) => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f9fafb'; e.target.style.boxShadow = 'none'; }}
                 />
-                <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}>👤</span>
+                <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}><Icon name="user" size={14} /></span>
               </div>
 
               <div style={{ position: 'relative' }}>
@@ -347,7 +348,7 @@ export default function Profile() {
                   <span style={{
                     width: '22px', height: '22px', borderRadius: '6px',
                     background: '#e0f2fe', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
-                  }}>📧</span>
+                  }}><Icon name="mail" size={14} /></span>
                   {t('common.emailAddress')}
                 </label>
                 <input
@@ -364,7 +365,7 @@ export default function Profile() {
                   onFocus={(e) => { e.target.style.borderColor = '#0ea5e9'; e.target.style.background = '#f0f9ff'; e.target.style.boxShadow = '0 0 0 3px rgba(14,165,233,0.1)'; }}
                   onBlur={(e) => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f9fafb'; e.target.style.boxShadow = 'none'; }}
                 />
-                <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}>📧</span>
+                <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}><Icon name="mail" size={14} /></span>
               </div>
 
               <div style={{ position: 'relative' }}>
@@ -372,7 +373,7 @@ export default function Profile() {
                   <span style={{
                     width: '22px', height: '22px', borderRadius: '6px',
                     background: '#dbeafe', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
-                  }}>🏢</span>
+                  }}><Icon name="company" size={14} /></span>
                   {t('common.companyName')}
                 </label>
                 <input
@@ -389,7 +390,7 @@ export default function Profile() {
                   onFocus={(e) => { e.target.style.borderColor = '#1e40af'; e.target.style.background = '#eff6ff'; e.target.style.boxShadow = '0 0 0 3px rgba(30,64,175,0.1)'; }}
                   onBlur={(e) => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f9fafb'; e.target.style.boxShadow = 'none'; }}
                 />
-                <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}>🏢</span>
+                <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}><Icon name="company" size={14} /></span>
               </div>
 
               <div style={{ position: 'relative' }}>
@@ -397,7 +398,7 @@ export default function Profile() {
                   <span style={{
                     width: '22px', height: '22px', borderRadius: '6px',
                     background: '#e0e7ff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
-                  }}>🔒</span>
+                  }}><Icon name="lock" size={14} /></span>
                   {t('common.newPassword')}
                 </label>
                 <input
@@ -415,7 +416,7 @@ export default function Profile() {
                   onFocus={(e) => { e.target.style.borderColor = '#3730a3'; e.target.style.background = '#eef2ff'; e.target.style.boxShadow = '0 0 0 3px rgba(55,48,163,0.1)'; }}
                   onBlur={(e) => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f9fafb'; e.target.style.boxShadow = 'none'; }}
                 />
-                <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}>🔒</span>
+                <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}><Icon name="lock" size={14} /></span>
               </div>
 
               {form.password && (
@@ -424,7 +425,7 @@ export default function Profile() {
                     <span style={{
                       width: '22px', height: '22px', borderRadius: '6px',
                       background: '#dbeafe', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
-                    }}>🔐</span>
+                    }}><Icon name="lock" size={14} /></span>
                   {t('common.confirmPassword')}
                 </label>
                   <input
@@ -442,7 +443,7 @@ export default function Profile() {
                     onFocus={(e) => { e.target.style.borderColor = '#1d4ed8'; e.target.style.background = '#eff6ff'; e.target.style.boxShadow = '0 0 0 3px rgba(29,78,216,0.1)'; }}
                     onBlur={(e) => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f9fafb'; e.target.style.boxShadow = 'none'; }}
                   />
-                  <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}>🔐</span>
+                  <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}><Icon name="lock" size={14} /></span>
                 </div>
               )}
 
@@ -481,11 +482,11 @@ export default function Profile() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
               {[
-                { label: t('common.fullName'), value: user?.name, icon: '👤', color: '#2563EB' },
-                { label: t('common.email'), value: user?.email, icon: '📧', color: '#0284c7' },
-                { label: t('common.company'), value: user?.companyName || '-', icon: '🏢', color: '#1e40af' },
-                { label: t('common.role'), value: getRoleLabel(user?.role), icon: '🛡️', color: '#3730a3' },
-                { label: t('common.memberSince'), value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-', icon: '📅', color: '#1d4ed8' },
+                { label: t('common.fullName'), value: user?.name, icon: 'user', color: '#2563EB' },
+                { label: t('common.email'), value: user?.email, icon: 'mail', color: '#0284c7' },
+                { label: t('common.company'), value: user?.companyName || '-', icon: 'company', color: '#1e40af' },
+                { label: t('common.role'), value: getRoleLabel(user?.role), icon: 'shield', color: '#3730a3' },
+                { label: t('common.memberSince'), value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-', icon: 'calendar', color: '#1d4ed8' },
               ].map((item, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: '14px',
@@ -497,7 +498,7 @@ export default function Profile() {
                     background: item.color + '15',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '18px', flexShrink: 0
-                  }}>{item.icon}</div>
+                  }}><Icon name={item.icon} size={18} /></div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '2px' }}>{item.label}</div>
                     <div style={{
@@ -519,7 +520,7 @@ export default function Profile() {
       }}>
         <div>
           <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>
-            🌐 {t('settings.language')}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, verticalAlign: 'middle' }}><Icon name="globe" size={16} /></span> {t('settings.language')}
           </h3>
           <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>{t('settings.languageDescription')}</p>
         </div>

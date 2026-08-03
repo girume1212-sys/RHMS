@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
+import Icon from './Icon';
 
 const pad = (n) => String(n).padStart(2, '0');
 const toKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -237,7 +238,7 @@ export default function RequestCalendar() {
   return (
     <div className="req-calendar" ref={rootRef}>
       <button className="calendar-icon-btn" title={t('calendar.calendar')} onClick={toggle}>
-        <span className="req-cal-btn-icon">📅</span>
+        <span className="req-cal-btn-icon"><Icon name="calendar" size={16} /></span>
         <span className="req-cal-btn-label">{rangeLabel()}</span>
         <span className="req-cal-btn-arrow">▾</span>
       </button>

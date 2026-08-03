@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useTranslation } from '../i18n/useTranslation';
+import Icon from './Icon';
 
 export default function Categories() {
   const { t } = useTranslation();
@@ -11,14 +12,14 @@ export default function Categories() {
   const navigate = useNavigate();
 
   const categoryMeta = [
-    { id: '1', name: 'Hardware', icon: '🖥️', color: '#3B82F6', description: 'Computer, printer, peripherals' },
-    { id: '2', name: 'Software', icon: '💿', color: '#10B981', description: 'Applications, OS, licensing' },
-    { id: '3', name: 'Network', icon: '🌐', color: '#F59E0B', description: 'WiFi, internet, connectivity' },
-    { id: '4', name: 'Security', icon: '🔒', color: '#EF4444', description: 'Viruses, malware, access issues' },
-    { id: '5', name: 'Email', icon: '📧', color: '#8B5CF6', description: 'Email setup, calendar, Outlook' },
-    { id: '6', name: 'Account', icon: '👤', color: '#06B6D4', description: 'Login, password, permissions' },
-    { id: '7', name: 'Data', icon: '💾', color: '#EC4899', description: 'Backup, recovery, storage' },
-    { id: '8', name: 'Other', icon: '📋', color: '#6B7280', description: 'General inquiries, other issues' },
+    { id: '1', name: 'Hardware', icon: 'monitor', color: '#3B82F6', description: 'Computer, printer, peripherals' },
+    { id: '2', name: 'Software', icon: 'disc', color: '#10B981', description: 'Applications, OS, licensing' },
+    { id: '3', name: 'Network', icon: 'wifi', color: '#F59E0B', description: 'WiFi, internet, connectivity' },
+    { id: '4', name: 'Security', icon: 'shield', color: '#EF4444', description: 'Viruses, malware, access issues' },
+    { id: '5', name: 'Email', icon: 'mail', color: '#8B5CF6', description: 'Email setup, calendar, Outlook' },
+    { id: '6', name: 'Account', icon: 'user', color: '#06B6D4', description: 'Login, password, permissions' },
+    { id: '7', name: 'Data', icon: 'database', color: '#EC4899', description: 'Backup, recovery, storage' },
+    { id: '8', name: 'Other', icon: 'clipboard', color: '#6B7280', description: 'General inquiries, other issues' },
   ];
 
   useEffect(() => { loadData(); }, []);
@@ -57,7 +58,7 @@ export default function Categories() {
               return (
                 <div key={c.id} className="category-manage-card" style={{ '--cat-color': c.color }}>
                   <div className="category-manage-card-top">
-                    <div className="category-manage-icon">{c.icon}</div>
+                    <div className="category-manage-icon"><Icon name={c.icon} size={32} /></div>
                     <span className="category-manage-count">{t('category.requestsCount', { count })}</span>
                   </div>
                   <div className="category-manage-name">{t('category.' + c.name)}</div>

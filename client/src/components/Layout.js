@@ -6,6 +6,7 @@ import { api, API_BASE, isTokenExpired } from '../api';
 import GlobalSearch from './GlobalSearch';
 import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
+import Icon from './Icon';
 
 export default function Layout() {
   const { user, logout, darkMode, toggleDarkMode, systemName, systemLogo } = useAuth();
@@ -88,7 +89,7 @@ export default function Layout() {
   }, []);
 
   const getNotificationIcon = useCallback((type) => {
-    const icons = { request: '📋', comment: '💬', status: '🔄', assignment: '👤', default: '🔔' };
+    const icons = { request: 'requests', comment: 'comment', status: 'refresh', assignment: 'user', default: 'bell' };
     return icons[type] || icons.default;
   }, []);
 
@@ -107,22 +108,22 @@ export default function Layout() {
 
   const menuItems = [
     { section: null, items: [
-      { path: '/', label: t('sidebar.dashboard'), icon: '🏠' },
-      { path: '/requests', label: t('sidebar.requests'), icon: '📄' },
+      { path: '/', label: t('sidebar.dashboard'), icon: 'home' },
+      { path: '/requests', label: t('sidebar.requests'), icon: 'requests' },
     ]},
     { section: t('sidebar.management'), items: [
-      { path: '/users', label: t('sidebar.users'), icon: '👥', roles: ['admin'] },
-      { path: '/categories', label: t('sidebar.categories'), icon: '📁', roles: ['admin'] },
-      { path: '/company', label: t('sidebar.company'), icon: '🏢', roles: ['admin'] },
-      { path: '/groups', label: t('sidebar.groups'), icon: '👤', roles: ['admin'] },
-      { path: '/feedback', label: t('sidebar.feedback'), icon: '⭐', roles: ['admin'] },
+      { path: '/users', label: t('sidebar.users'), icon: 'users', roles: ['admin'] },
+      { path: '/categories', label: t('sidebar.categories'), icon: 'categories', roles: ['admin'] },
+      { path: '/company', label: t('sidebar.company'), icon: 'company', roles: ['admin'] },
+      { path: '/groups', label: t('sidebar.groups'), icon: 'groups', roles: ['admin'] },
+      { path: '/feedback', label: t('sidebar.feedback'), icon: 'feedback', roles: ['admin'] },
     ]},
     { section: t('sidebar.reports'), items: [
-      { path: '/reports', label: t('sidebar.reportsAnalytics'), icon: '📊', roles: ['admin'] },
-      { path: '/activity', label: t('sidebar.activityLog'), icon: '📝', roles: ['admin'] },
+      { path: '/reports', label: t('sidebar.reportsAnalytics'), icon: 'reports', roles: ['admin'] },
+      { path: '/activity', label: t('sidebar.activityLog'), icon: 'activity', roles: ['admin'] },
     ]},
     { section: t('sidebar.settings'), items: [
-      { path: '/settings', label: t('sidebar.systemSettings'), icon: '⚙️', roles: ['admin'] },
+      { path: '/settings', label: t('sidebar.systemSettings'), icon: 'settings', roles: ['admin'] },
     ]},
   ];
 
@@ -330,7 +331,7 @@ export default function Layout() {
                     className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
                     onClick={() => navigate(item.path)}
                   >
-                    <span className="nav-icon">{item.icon}</span>
+                    <span className="nav-icon"><Icon name={item.icon} /></span>
                     {sidebarOpen && <span className="nav-label">{item.label}</span>}
                   </button>
                 </div>
@@ -359,7 +360,7 @@ export default function Layout() {
           <div className="bubble-pill">
             <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>
             <div className="bubble-pill-icon">
-              {getNotificationIcon(n.type || getNotificationType(n.message))}
+              <Icon name={getNotificationIcon(n.type || getNotificationType(n.message))} size={16} />
             </div>
             <div className="bubble-pill-body">
               <div className="bubble-pill-title">{n.requestId ? `${t('common.requestShort')} #${n.requestId}` : t('common.notification')}</div>
@@ -386,17 +387,17 @@ export default function Layout() {
       <div className="main-area">
         <header className="topbar">
           <div className="topbar-left">
-            <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
+            <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}><Icon name="menu" /></button>
             <GlobalSearch placeholder={t('topbar.searchPlaceholder')} />
           </div>
           <div className="topbar-right">
             <LanguageSelector variant="topbar" />
             <button className="theme-toggle" onClick={toggleDarkMode} title={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}>
-              {darkMode ? <><span className="toggle-icon">☀️</span><span>{t('topbar.bright')}</span></> : <><span className="toggle-icon">🌙</span><span>{t('topbar.dark')}</span></>}
+              {darkMode ? <><span className="toggle-icon"><Icon name="sun" /></span><span>{t('topbar.bright')}</span></> : <><span className="toggle-icon"><Icon name="moon" /></span><span>{t('topbar.dark')}</span></>}
             </button>
             <div className="topbar-icon-container">
               <button className="topbar-icon" title={t('topbar.notifications')} onClick={openNotifications}>
-                🔔
+                <Icon name="bell" />
                 {unreadNotifications.length > 0 && <span className="badge">{unreadNotifications.length > 99 ? '99+' : unreadNotifications.length}</span>}
               </button>
               {showNotifications && (
@@ -410,7 +411,7 @@ export default function Layout() {
                     {panelNotifications.map(n => (
                       <div key={n.id} className={`dropdown-panel-item bubble-type-${getNotificationType(n.message)}`} onClick={() => { if (n.requestId) navigate(`/requests/${n.requestId}`); setShowNotifications(false); }}>
                         <div className="dropdown-panel-icon">
-                          {getNotificationIcon(n.type || getNotificationType(n.message))}
+                          <Icon name={getNotificationIcon(n.type || getNotificationType(n.message))} size={16} />
                         </div>
                         <div className="dropdown-panel-content">
                           <div className="dropdown-panel-title">
@@ -419,7 +420,7 @@ export default function Layout() {
                           </div>
                           <p className="dropdown-panel-message">{translateNotification(n.message, n, t)}</p>
                           <div className="dropdown-panel-meta">
-                            {n.userName && <span className="dropdown-panel-user">👤 {n.userName}</span>}
+                            {n.userName && <span className="dropdown-panel-user"><Icon name="user" size={12} /> {n.userName}</span>}
                             <span className="dropdown-panel-time">{n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</span>
                           </div>
                         </div>
@@ -431,7 +432,7 @@ export default function Layout() {
             </div>
             <div className="topbar-icon-container">
               <button className="topbar-icon" title={t('topbar.messages')} onClick={() => { setShowMessages(!showMessages); setShowNotifications(false); }}>
-                ✉️
+                <Icon name="mail" />
                 {messages.length > 0 && <span className="badge">{messages.length}</span>}
               </button>
               {showMessages && (
@@ -469,12 +470,12 @@ export default function Layout() {
                     </div>
                   </div>
                   <div className="dropdown-divider"></div>
-                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/profile'); }}><span className="dropdown-item-icon">👤</span> {t('topbar.myProfile')}</button>
-                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/settings'); }}><span className="dropdown-item-icon">⚙️</span> {t('topbar.settingsLabel')}</button>
-                  <button className="dropdown-item" onClick={handleRefreshSystem} title={t('common.refreshTitle')}><span className="dropdown-item-icon">🔄</span> {t('common.refresh')}</button>
+                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/profile'); }}><span className="dropdown-item-icon"><Icon name="user" /></span> {t('topbar.myProfile')}</button>
+                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/settings'); }}><span className="dropdown-item-icon"><Icon name="settings" /></span> {t('topbar.settingsLabel')}</button>
+                  <button className="dropdown-item" onClick={handleRefreshSystem} title={t('common.refreshTitle')}><span className="dropdown-item-icon"><Icon name="refresh" /></span> {t('common.refresh')}</button>
                   <div className="dropdown-divider"></div>
                   <button className="dropdown-item logout" onClick={() => { logout(); navigate('/login'); }}>
-                    <span className="dropdown-item-icon">🚪</span> {t('topbar.signOut')}
+                    <span className="dropdown-item-icon"><Icon name="logout" /></span> {t('topbar.signOut')}
                   </button>
                 </div>
               )}

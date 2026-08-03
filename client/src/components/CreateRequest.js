@@ -6,16 +6,17 @@ import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
+import Icon from './Icon';
 
 const CATEGORY_TEMPLATES = [
-  { id: '1', name: 'Hardware', icon: '🖥️', color: '#3B82F6' },
-  { id: '2', name: 'Software', icon: '💿', color: '#10B981' },
-  { id: '3', name: 'Network', icon: '🌐', color: '#F59E0B' },
-  { id: '4', name: 'Security', icon: '🔒', color: '#EF4444' },
-  { id: '5', name: 'Email', icon: '📧', color: '#8B5CF6' },
-  { id: '6', name: 'Account', icon: '👤', color: '#06B6D4' },
-  { id: '7', name: 'Data', icon: '💾', color: '#EC4899' },
-  { id: '8', name: 'Other', icon: '📋', color: '#6B7280' },
+  { id: '1', name: 'Hardware', icon: 'monitor', color: '#3B82F6' },
+  { id: '2', name: 'Software', icon: 'disc', color: '#10B981' },
+  { id: '3', name: 'Network', icon: 'wifi', color: '#F59E0B' },
+  { id: '4', name: 'Security', icon: 'shield', color: '#EF4444' },
+  { id: '5', name: 'Email', icon: 'mail', color: '#8B5CF6' },
+  { id: '6', name: 'Account', icon: 'user', color: '#06B6D4' },
+  { id: '7', name: 'Data', icon: 'database', color: '#EC4899' },
+  { id: '8', name: 'Other', icon: 'clipboard', color: '#6B7280' },
 ];
 
 export default function CreateRequest() {
@@ -151,7 +152,7 @@ export default function CreateRequest() {
                   onClick={() => setForm({ ...form, categoryId: c.id })}
                   style={{ '--cat-color': c.color }}
                 >
-                  <div className="category-card-icon">{c.icon}</div>
+                  <div className="category-card-icon"><Icon name={c.icon} size={32} /></div>
                   <div className="category-card-name">{transSeeded(c.name, 'category', t)}</div>
                   <div className="category-card-desc">{c.description}</div>
                 </div>
@@ -183,7 +184,7 @@ export default function CreateRequest() {
                 style={{ display: 'none' }}
                 onChange={handleFileChange}
               />
-              <div className="file-upload-icon">📤</div>
+              <div className="file-upload-icon"><Icon name="upload" size={40} /></div>
               <div className="file-upload-text">{t('common.clickToUpload')}</div>
               <div className="file-upload-hint">{t('common.uploadHint')}</div>
             </div>
@@ -192,7 +193,7 @@ export default function CreateRequest() {
                 {files.map((file, i) => (
                   <div key={i} className="file-preview-item">
                     <div className="file-preview-icon">
-                      {file.type.startsWith('image/') ? '🖼️' : '📄'}
+                      <Icon name={file.type.startsWith('image/') ? 'image' : 'file'} size={20} />
                     </div>
                     <div className="file-preview-info">
                       <span className="file-preview-name">{file.name}</span>

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from '../i18n/useTranslation';
+import Icon from './Icon';
 
 export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
   const { t } = useTranslation();
@@ -35,7 +36,7 @@ export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
   return (
     <div className="drp-container" ref={ref}>
       <button className="drp-trigger" onClick={() => setOpen(!open)}>
-        <span className="drp-icon">📅</span>
+        <span className="drp-icon"><Icon name="calendar" size={16} /></span>
         <span className={`drp-label ${!dateFrom && !dateTo ? 'placeholder' : ''}`}>{label}</span>
         <span className={`drp-arrow ${open ? 'open' : ''}`}>▾</span>
       </button>

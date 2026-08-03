@@ -5,6 +5,7 @@ import { api } from '../api';
 import { saveSearchQuery } from '../utils/searchStore';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
+import Icon from './Icon';
 
 function getRoleColor(role) {
   return { admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981' }[role] || '#6B7280';
@@ -36,9 +37,9 @@ function RequestSection({ title, data, requestBase, onNavigate }) {
               <span className="search-result-title">{r.subject}</span>
             </div>
             <div className="search-result-row-meta">
-              {r.client_name && <span>👤 {r.client_name}</span>}
-              {r.assignee_name && <span>🛠 {r.assignee_name}</span>}
-              {r.assigned_group_name && <span>🏢 {r.assigned_group_name}</span>}
+              {r.client_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="user" size={13} /> {r.client_name}</span>}
+              {r.assignee_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="wrench" size={13} /> {r.assignee_name}</span>}
+              {r.assigned_group_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="company" size={13} /> {r.assigned_group_name}</span>}
               {r.category_name && <span className="category-tag" style={{ background: (r.category_color || '#3B82F6') + '20', color: r.category_color || '#3B82F6' }}>{r.category_name}</span>}
               {r.priority_name && <span className="priority-badge" style={{ background: (r.priority_color || '#6B7280') + '20', color: r.priority_color || '#6B7280' }}>{r.priority_name}</span>}
               {r.status_name && <span className="status-badge" style={{ background: (r.status_color || '#6B7280') + '20', color: r.status_color || '#6B7280' }}>{r.status_name}</span>}

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
+import Icon from './Icon';
 
 const LANG_OPTIONS = [
   { code: 'en', label: '🇺🇸 English' },
@@ -29,7 +30,7 @@ export default function LanguageSelector({ variant = 'dropdown' }) {
   return (
     <div className={`lang-selector lang-selector-${variant}`} ref={ref}>
       <button type="button" className="lang-selector-btn" onClick={() => setOpen(!open)} title="Language / ቋንቋ">
-        <span className="lang-selector-icon">🌐</span>
+        <span className="lang-selector-icon"><Icon name="globe" size={16} /></span>
         <span className="lang-selector-current">{current.code === 'en' ? 'EN' : 'አማ'}</span>
         <span className="dropdown-arrow">▾</span>
       </button>

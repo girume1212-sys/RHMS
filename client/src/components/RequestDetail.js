@@ -6,6 +6,7 @@ import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded, translateActivityMessage } from '../i18n/translateServer';
+import Icon from './Icon';
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -286,8 +287,8 @@ export default function RequestDetail() {
   };
 
   const getActivityIcon = (type) => {
-    const icons = { created: '📋', status_update: '🔄', assigned: '👤', comment: '💬', updated: '✏️' };
-    return icons[type] || '📝';
+    const icons = { created: 'requests', status_update: 'refresh', assigned: 'user', comment: 'comment', updated: 'edit' };
+    return icons[type] || 'clipboard';
   };
 
   const getActivityColor = (type) => {
@@ -597,7 +598,7 @@ export default function RequestDetail() {
                           <img src={`${API_BASE}${path}`} alt={getFileName(path)} className="attachment-image" onClick={() => setLightbox(`${API_BASE}${path}`)} />
                         ) : (
                           <a href={`${API_BASE}${path}`} target="_blank" rel="noopener noreferrer" className="attachment-file">
-                            <span className="attachment-file-icon">📄</span>
+                            <span className="attachment-file-icon"><Icon name="file" size={16} /></span>
                             <span>{getFileName(path)}</span>
                           </a>
                         )}
@@ -610,7 +611,7 @@ export default function RequestDetail() {
                           <img src={URL.createObjectURL(file)} alt={file.name} className="attachment-image" />
                         ) : (
                           <div className="attachment-file">
-                            <span className="attachment-file-icon">📄</span>
+                            <span className="attachment-file-icon"><Icon name="file" size={16} /></span>
                             <span>{file.name}</span>
                           </div>
                         )}
@@ -620,7 +621,7 @@ export default function RequestDetail() {
                   </div>
                   <div className="file-upload" onClick={() => fileInputRef.current.click()} style={{ marginTop: 12 }}>
                     <input type="file" ref={fileInputRef} multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style={{ display: 'none' }} onChange={handleFileChange} />
-                    <div className="file-upload-icon">📤</div>
+                <div className="file-upload-icon"><Icon name="upload" size={40} /></div>
                     <div className="file-upload-text">{t('common.clickToUpload')}</div>
                     <div className="file-upload-hint">{t('common.uploadHint')}</div>
                   </div>
@@ -645,8 +646,8 @@ export default function RequestDetail() {
                             <img src={`${API_BASE}${path}`} alt={getFileName(path)} className="attachment-image" onClick={() => setLightbox(`${API_BASE}${path}`)} />
                           ) : (
                             <a href={`${API_BASE}${path}`} target="_blank" rel="noopener noreferrer" className="attachment-file">
-                              <span className="attachment-file-icon">📄</span>
-                              <span>{getFileName(path)}</span>
+                            <span className="attachment-file-icon"><Icon name="file" size={16} /></span>
+                            <span>{getFileName(path)}</span>
                             </a>
                           )}
                         </div>
@@ -661,10 +662,10 @@ export default function RequestDetail() {
           {/* Upload Additional Files (Client) */}
           {isClient && !editing && (
             <div className="detail-card">
-              <h3>📎 {t('common.uploadAdditionalFiles')}</h3>
+              <h3><Icon name="paperclip" size={16} /> {t('common.uploadAdditionalFiles')}</h3>
               <div className="file-upload" onClick={() => fileInputRef.current.click()}>
                 <input type="file" ref={fileInputRef} multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style={{ display: 'none' }} onChange={handleFileChange} />
-                <div className="file-upload-icon">📤</div>
+                <div className="file-upload-icon"><Icon name="upload" size={40} /></div>
                 <div className="file-upload-text">{t('common.clickUploadAdditional')}</div>
                 <div className="file-upload-hint">{t('common.uploadHint')}</div>
               </div>
@@ -677,7 +678,7 @@ export default function RequestDetail() {
                           <img src={URL.createObjectURL(file)} alt={file.name} className="attachment-image" />
                         ) : (
                           <div className="attachment-file">
-                            <span className="attachment-file-icon">📄</span>
+                            <span className="attachment-file-icon"><Icon name="file" size={16} /></span>
                             <span>{file.name}</span>
                           </div>
                         )}
@@ -727,7 +728,7 @@ export default function RequestDetail() {
               ) : (
                 <div className="feedback-form">
                   <div className="feedback-form-header">
-                    <span className="feedback-form-icon">⭐</span>
+                    <span className="feedback-form-icon"><Icon name="feedback" size={22} /></span>
                     <h3>{t('feedback.rateThisRequest')}</h3>
                   </div>
                   <p className="feedback-form-prompt">
@@ -805,13 +806,13 @@ export default function RequestDetail() {
           <div className="chat-card">
             <div className="chat-header">
               <div className="chat-header-title">
-                <span className="chat-header-icon">💬</span>
+                <span className="chat-header-icon"><Icon name="comment" size={16} /></span>
                 <span className="chat-header-text">{t('common.comments')}</span>
                 <span className="chat-count">({request.comments?.length || 0})</span>
               </div>
               <div className="chat-header-actions">
                 <div className="chat-search">
-                  <span className="chat-search-icon">🔍</span>
+                  <span className="chat-search-icon"><Icon name="search" size={13} /></span>
                   <input
                     type="text"
                     placeholder={t('common.searchComments')}
@@ -860,7 +861,7 @@ export default function RequestDetail() {
                           <div className="msg-attachments">
                             {c.attachments.map((att, ai) => (
                               <div key={ai} className="msg-attachment">
-                                <span className="msg-att-icon">{isImageFile(att.path) ? '🖼️' : '📎'}</span>
+                                <span className="msg-att-icon"><Icon name={isImageFile(att.path) ? 'image' : 'paperclip'} size={14} /></span>
                                 <div className="msg-att-info">
                                   <span className="msg-att-name">{att.name || getFileName(att.path)}</span>
                                   <span className="msg-att-size">{formatSize(att.size)}</span>
@@ -898,7 +899,7 @@ export default function RequestDetail() {
                 <div className="composer-pending">
                   {pendingFiles.map((file, i) => (
                     <div key={`pf-${i}`} className="composer-pending-item">
-                      <span className="composer-pending-icon">📎</span>
+                      <span className="composer-pending-icon"><Icon name="paperclip" size={14} /></span>
                       <span className="composer-pending-name">{file.name}</span>
                       <button type="button" className="composer-pending-remove" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}>✕</button>
                     </div>
@@ -913,8 +914,8 @@ export default function RequestDetail() {
                 </div>
               )}
               <div className="composer-toolbar">
-                <button type="button" className="composer-btn" title={t('common.attachFile')} onClick={() => commentFileInputRef.current?.click()}>📎</button>
-                <button type="button" className="composer-btn" title={t('common.emoji')} onClick={() => setShowEmojiPicker(v => !v)}>😊</button>
+                <button type="button" className="composer-btn" title={t('common.attachFile')} onClick={() => commentFileInputRef.current?.click()}><Icon name="paperclip" size={16} /></button>
+                <button type="button" className="composer-btn" title={t('common.emoji')} onClick={() => setShowEmojiPicker(v => !v)}><Icon name="smile" size={16} /></button>
                 <textarea
                   ref={commentTextareaRef}
                   className="composer-textarea"
@@ -1008,7 +1009,7 @@ export default function RequestDetail() {
                       disabled={claiming}
                       style={{ width: '100%' }}
                     >
-                      {claiming ? t('common.claiming') : `👤 ${t('common.claimAssignMe')}`}
+                      {claiming ? t('common.claiming') : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="user" size={16} /> {t('common.claimAssignMe')}</span>}
                     </button>
                   ) : (
                     <select value={request.statusId} onChange={(e) => handleStatusChange(e.target.value)}>
@@ -1097,7 +1098,7 @@ export default function RequestDetail() {
                 {/* Status Lifecycle Flow */}
                 <div className="status-lifecycle">
                   <div className="lifecycle-header">
-                    <span className="lifecycle-icon">🔄</span>
+                    <span className="lifecycle-icon"><Icon name="refresh" size={16} /></span>
                     <span className="lifecycle-title">{t('common.statusFlow')}</span>
                   </div>
                   <div className="lifecycle-flow">
@@ -1156,7 +1157,7 @@ export default function RequestDetail() {
                           <div className="timeline-content">
                             <div className="timeline-header">
                               <span className="timeline-icon" style={{ color: getActivityColor(activity.type) }}>
-                                {getActivityIcon(activity.type)}
+                                {getActivityIcon(activity.type) && <Icon name={getActivityIcon(activity.type)} size={16} />}
                               </span>
                               <span className="timeline-message">{translateActivityMessage(activity.message, activity.type, t)}</span>
                             </div>

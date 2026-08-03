@@ -3,6 +3,7 @@ import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import Icon from './Icon';
 
 export default function Company() {
   const { t } = useTranslation();
@@ -163,15 +164,15 @@ export default function Company() {
 
   const getIndustryIcon = (industry) => {
     const icons = {
-      'IT': '💻',
-      'Healthcare': '🏥',
-      'Finance': '💰',
-      'Education': '📚',
-      'Manufacturing': '🏭',
-      'Retail': '🛒',
-      'Other': '🏢'
+      'IT': 'code',
+      'Healthcare': 'heart',
+      'Finance': 'dollar',
+      'Education': 'book',
+      'Manufacturing': 'factory',
+      'Retail': 'cart',
+      'Other': 'company'
     };
-    return icons[industry] || '🏢';
+    return icons[industry] || 'company';
   };
 
   const getIndustryColor = (industry) => {
@@ -208,7 +209,7 @@ export default function Company() {
           <div className="modal company-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-header-content">
-                <div className="modal-icon">🏢</div>
+                <div className="modal-icon"><Icon name="company" size={22} /></div>
                 <div>
                   <h2>{editingCompany ? t('company.editCompany') : t('company.addNewCompany')}</h2>
                   <p className="modal-subtitle">{editingCompany ? t('company.updateDetails') : t('company.fillDetails')}</p>
@@ -303,7 +304,7 @@ export default function Company() {
             {companies.map((c) => (
               <div key={c.id} className="category-manage-card" style={{ '--cat-color': getIndustryColor(c.industry), cursor: 'pointer' }} onClick={() => setSelectedCompany(c)}>
                 <div className="category-manage-card-top">
-                  <div className="category-manage-icon">{getIndustryIcon(c.industry)}</div>
+                  <div className="category-manage-icon"><Icon name={getIndustryIcon(c.industry)} size={32} /></div>
                   <span className="category-manage-count">{t('company.usersCount', { count: getUserCount(c.name) })}</span>
                 </div>
                 <div className="category-manage-name">{c.name}</div>
@@ -329,7 +330,7 @@ export default function Company() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '1100px' }}>
             <div className="modal-header">
               <div className="modal-header-content">
-                <div className="modal-icon">{getIndustryIcon(selectedCompany.industry)}</div>
+                <div className="modal-icon"><Icon name={getIndustryIcon(selectedCompany.industry)} size={22} /></div>
                 <div>
                   <h2>{t('company.usersTitle', { name: selectedCompany.name })}</h2>
                   <p className="modal-subtitle">{t('company.usersInCompany', { count: getCompanyUsers(selectedCompany.name).length })}</p>
@@ -371,7 +372,7 @@ export default function Company() {
                               {u.role === 'support' ? t('role.escalationTeam') : u.role}
                             </span>
                           </td>
-                          <td>{u.approved ? '✅' : '❌'}</td>
+                          <td>{u.approved ? <span style={{ color: '#10B981' }}><Icon name="resolved" size={16} /></span> : <span style={{ color: '#EF4444' }}><Icon name="rejected" size={16} /></span>}</td>
                           <td>
                             <div className="actions-cell-inline">
                               <button className="action-btn-text edit" onClick={() => openEditUser(u)}>{t('common.edit')}</button>
@@ -397,7 +398,7 @@ export default function Company() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-header-content">
-                <div className="modal-icon">✏️</div>
+                <div className="modal-icon"><Icon name="edit" size={22} /></div>
                 <div>
                   <h2>{t('common.editUser')}</h2>
                   <p className="modal-subtitle">{t('company.updateUserDetails', { name: editingUser.name })}</p>

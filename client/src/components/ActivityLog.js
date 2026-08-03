@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
 import { translateActivityMessage } from '../i18n/translateServer';
+import Icon from './Icon';
 
 export default function ActivityLog() {
   const { user } = useAuth();
@@ -17,8 +18,8 @@ export default function ActivityLog() {
   }, []);
 
   const getActivityIcon = (type) => {
-    const icons = { status_update: '🔄', comment: '💬', resolved: '✅', created: '➕', closed: '🔒', assigned: '👤' };
-    return icons[type] || '📋';
+    const icons = { status_update: 'refresh', comment: 'comment', resolved: 'resolved', created: 'plus', closed: 'lock', assigned: 'user' };
+    return icons[type] || 'clipboard';
   };
 
   const getActivityColor = (type) => {
@@ -42,7 +43,7 @@ export default function ActivityLog() {
         <div className="activity-timeline">
           {activities.filter(a => a.user?.id !== user?.id).length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af' }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}><Icon name="clipboard" size={48} /></div>
               <h3 style={{ margin: '0 0 8px 0', color: '#374151' }}>{t('common.noActivityYet')}</h3>
               <p style={{ margin: 0, fontSize: '14px' }}>{t('common.activityEmptyDesc')}</p>
             </div>
@@ -50,7 +51,7 @@ export default function ActivityLog() {
             activities.filter(a => a.user?.id !== user?.id).map(a => (
               <div key={a.id} className="timeline-item">
                 <div className="timeline-icon" style={{ background: getActivityColor(a.type) + '20', color: getActivityColor(a.type) }}>
-                  {getActivityIcon(a.type)}
+                  <Icon name={getActivityIcon(a.type)} size={18} />
                 </div>
                 <div className="timeline-content">
                   <div className="timeline-header">

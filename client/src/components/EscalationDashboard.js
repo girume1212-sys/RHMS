@@ -7,6 +7,7 @@ import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
 import PageNumbers from './PageNumbers';
+import Icon from './Icon';
 
 export default function EscalationDashboard() {
   const { t } = useTranslation();
@@ -212,26 +213,26 @@ export default function EscalationDashboard() {
     const actions = [];
 
 if (statusName === 'New') {
-      actions.push({ label: t('common.claim'), status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'claim' });
-      actions.push({ label: t('common.assign'), status: 'Assigned', color: '#8B5CF6', icon: '👥', type: 'assign' });
+      actions.push({ label: t('common.claim'), status: 'Assigned', color: '#8B5CF6', icon: 'user', type: 'claim' });
+      actions.push({ label: t('common.assign'), status: 'Assigned', color: '#8B5CF6', icon: 'users', type: 'assign' });
     }
     if (statusName === 'Assigned') {
-      actions.push({ label: t('common.startWork'), status: 'In Progress', color: '#F59E0B', icon: '▶', type: 'status' });
+      actions.push({ label: t('common.startWork'), status: 'In Progress', color: '#F59E0B', icon: 'play', type: 'status' });
     }
     if (statusName === 'In Progress') {
-      actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
-      actions.push({ label: t('common.waitingForClient'), status: 'Waiting for Client', color: '#F97316', icon: '❓', type: 'status' });
-      actions.push({ label: t('common.escalate'), status: 'Escalated', color: '#EF4444', icon: '🚨', type: 'status' });
+      actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: 'check', type: 'status' });
+      actions.push({ label: t('common.waitingForClient'), status: 'Waiting for Client', color: '#F97316', icon: 'help', type: 'status' });
+      actions.push({ label: t('common.escalate'), status: 'Escalated', color: '#EF4444', icon: 'alarm', type: 'status' });
     }
     if (statusName === 'Waiting for Client') {
-      actions.push({ label: t('common.followUp'), status: 'In Progress', color: '#F59E0B', icon: '📞', type: 'status' });
+      actions.push({ label: t('common.followUp'), status: 'In Progress', color: '#F59E0B', icon: 'phone', type: 'status' });
     }
     if (statusName === 'Escalated') {
       if (r.assignedTo === user.id) {
-        actions.push({ label: t('common.handle'), status: 'In Progress', color: '#F59E0B', icon: '🔧', type: 'status' });
-        actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
+        actions.push({ label: t('common.handle'), status: 'In Progress', color: '#F59E0B', icon: 'wrench', type: 'status' });
+        actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: 'check', type: 'status' });
       } else {
-        actions.push({ label: t('common.claim'), status: 'Escalated', color: '#8B5CF6', icon: '👤', type: 'claim' });
+        actions.push({ label: t('common.claim'), status: 'Escalated', color: '#8B5CF6', icon: 'user', type: 'claim' });
       }
     }
     return actions;
@@ -281,14 +282,14 @@ if (statusName === 'New') {
       )}
 
       <div className="stats-grid">
-        <DevStatCard icon="📥" value={stats.newCount} label={t('common.new')} color="#3B82F6" onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')} />
-        <DevStatCard icon="📋" value={stats.assigned} label={t('common.newlyAssigned')} color="#8B5CF6" onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')} />
-        <DevStatCard icon="⚡" value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')} />
-        <DevStatCard icon="⏰" value={stats.waiting} label={t('common.awaitingClient')} color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
-        <DevStatCard icon="🚨" value={stats.escalated} label={t('common.escalated')} color="#EF4444" onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')} />
-        <DevStatCard icon="✅" value={stats.resolved} label={t('common.resolved')} color="#10B981" onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')} />
-        <DevStatCard icon="🔒" value={stats.closed} label={t('common.closed')} color="#6B7280" onClick={() => setStatusFilter(statusFilter === 'Closed' ? '' : 'Closed')} />
-        <DevStatCard icon="❌" value={stats.rejected} label={t('common.rejected')} color="#DC2626" onClick={() => setStatusFilter(statusFilter === 'Rejected' ? '' : 'Rejected')} />
+        <DevStatCard icon={<Icon name="new" />} value={stats.newCount} label={t('common.new')} color="#3B82F6" onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')} />
+        <DevStatCard icon={<Icon name="assigned" />} value={stats.assigned} label={t('common.newlyAssigned')} color="#8B5CF6" onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')} />
+        <DevStatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')} />
+        <DevStatCard icon={<Icon name="waiting" />} value={stats.waiting} label={t('common.awaitingClient')} color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
+        <DevStatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} color="#EF4444" onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')} />
+        <DevStatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} color="#10B981" onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')} />
+        <DevStatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} color="#6B7280" onClick={() => setStatusFilter(statusFilter === 'Closed' ? '' : 'Closed')} />
+        <DevStatCard icon={<Icon name="rejected" />} value={stats.rejected} label={t('common.rejected')} color="#DC2626" onClick={() => setStatusFilter(statusFilter === 'Rejected' ? '' : 'Rejected')} />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
@@ -396,7 +397,7 @@ if (statusName === 'New') {
                             onClick={(e) => handleClaim(e, r.id)}
                             style={{ opacity: updatingId === `claim-${r.id}` ? 0.6 : 1 }}
                           >
-                            {action.icon} {action.label}
+                            <Icon name={action.icon} size={14} /> {action.label}
                           </button>
                         ) : action.type === 'assign' ? (
                           <button
@@ -404,7 +405,7 @@ if (statusName === 'New') {
                             className="action-btn-text edit"
                             onClick={() => setShowAssignModal(showAssignModal === r.id ? null : r.id)}
                           >
-                            {action.icon} {action.label}
+                            <Icon name={action.icon} size={14} /> {action.label}
                           </button>
                         ) : action.type === 'delete' ? (
                           <button
@@ -412,7 +413,7 @@ if (statusName === 'New') {
                             className="action-btn-text delete"
                             onClick={() => setDeleteTarget(r.id)}
                           >
-                            {action.icon} {action.label}
+                            <Icon name={action.icon} size={14} /> {action.label}
                           </button>
                         ) : (
                           <button
@@ -422,7 +423,7 @@ if (statusName === 'New') {
                             onClick={(e) => handleQuickStatusUpdate(e, r.id, action.status)}
                             style={{ opacity: updatingId === `status-${r.id}` ? 0.6 : 1 }}
                           >
-                            {action.icon} {action.label}
+                            <Icon name={action.icon} size={14} /> {action.label}
                           </button>
                         )
                       ))}
@@ -499,3 +500,4 @@ if (statusName === 'New') {
     </div>
   );
 }
+

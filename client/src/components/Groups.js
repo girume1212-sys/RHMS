@@ -4,6 +4,7 @@ import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
+import Icon from './Icon';
 
 export default function Groups() {
   const { t } = useTranslation();
@@ -396,7 +397,7 @@ export default function Groups() {
                 <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={() => { setMemberGroup(null); setShowAddMember(false); }}>← {t('common.back')}</button>
               </div>
               <div className="modal-header-content">
-                <div className="modal-icon">👥</div>
+                <div className="modal-icon"><Icon name="users" size={22} /></div>
                 <div>
                   <h2>{memberGroup.name} — {t('common.members')}</h2>
                   <p className="modal-subtitle">{t('common.memberCount', { count: members.length })}</p>

@@ -4,6 +4,7 @@ import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
+import Icon from './Icon';
 
 const roleColors = {
   admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981'
@@ -143,7 +144,7 @@ export default function Feedback() {
         <div className="chart-card" style={{
           textAlign: 'center', padding: '60px 24px', color: '#94a3b8'
         }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⭐</div>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}><Icon name="feedback" size={48} /></div>
           <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px', color: '#64748b' }}>{t('feedback.noFeedbackYet')}</h3>
           <p style={{ fontSize: '14px' }}>{t('feedback.noFeedbackDesc')}</p>
         </div>

@@ -5,6 +5,7 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
 import PageNumbers from './PageNumbers';
+import Icon from './Icon';
 
 const RequestsTable = forwardRef(function RequestsTable({
   user,
@@ -160,14 +161,14 @@ const RequestsTable = forwardRef(function RequestsTable({
     const statusName = r.status?.name;
     const actions = [];
     if (statusName === 'New') {
-      actions.push({ label: t('common.claim'), status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'claim' });
+      actions.push({ label: t('common.claim'), status: 'Assigned', color: '#8B5CF6', icon: 'user', type: 'claim' });
     }
     if (statusName === 'Assigned') {
-      actions.push({ label: t('common.startWork'), status: 'In Progress', color: '#F59E0B', icon: '▶' });
+      actions.push({ label: t('common.startWork'), status: 'In Progress', color: '#F59E0B', icon: 'play' });
     }
     if (statusName === 'In Progress') {
-      actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: '✓' });
-      actions.push({ label: t('common.waitingForClient'), status: 'Waiting for Client', color: '#F97316', icon: '❓' });
+      actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: 'check' });
+      actions.push({ label: t('common.waitingForClient'), status: 'Waiting for Client', color: '#F97316', icon: 'help' });
     }
     return actions;
   };
@@ -286,7 +287,7 @@ const RequestsTable = forwardRef(function RequestsTable({
                 {statuses.map(s => <option key={s.id} value={s.name}>{transSeeded(s.name, 'status', t)}</option>)}
               </select>
               <div className="table-search-box">
-                <span className="search-icon">🔍</span>
+                <span className="search-icon"><Icon name="search" size={14} /></span>
                 <input type="text" placeholder={t('common.searchRequests')} value={filter.search} onChange={(e) => { setFilter(f => ({ ...f, search: e.target.value })); setPage(1); }} />
               </div>
             </div>
@@ -352,11 +353,11 @@ const RequestsTable = forwardRef(function RequestsTable({
                           quickActions(r).map((action, i) =>
                             action.type === 'claim' ? (
                               <button key={`da-${i}`} className="action-btn-text edit" disabled={updatingId === `claim-${r.id}`} onClick={(e) => handleClaim(e, r.id)} style={{ opacity: updatingId === `claim-${r.id}` ? 0.6 : 1 }}>
-                                {action.icon} {action.label}
+                                <Icon name={action.icon} size={14} /> {action.label}
                               </button>
                             ) : (
                               <button key={`da-${i}`} className="action-btn-text edit" disabled={updatingId === `status-${r.id}`} onClick={(e) => handleQuickStatusUpdate(e, r.id, action.status)} style={{ opacity: updatingId === `status-${r.id}` ? 0.6 : 1 }}>
-                                {action.icon} {action.label}
+                                <Icon name={action.icon} size={14} /> {action.label}
                               </button>
                             )
                           )

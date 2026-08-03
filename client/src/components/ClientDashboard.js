@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
@@ -8,6 +8,7 @@ import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
 import PageNumbers from './PageNumbers';
+import Icon from './Icon';
 
 export default function ClientDashboard() {
   const { t } = useTranslation();
@@ -84,8 +85,8 @@ export default function ClientDashboard() {
 
   const getSortIcon = (key) => {
     const isActive = sort.key === key;
-    if (!isActive) return <span className="sort-icon" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>⇅</span>;
-    return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
+    if (!isActive) return <span className="sort-icon" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>â‡…</span>;
+    return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>{sort.dir === 'asc' ? 'â†‘' : 'â†“'}</span>;
   };
 
   const handleEdit = (e, id) => {
@@ -184,14 +185,14 @@ export default function ClientDashboard() {
       )}
 
       <div className="stats-grid">
-        <ClientStatCard icon="📋" value={stats.total} label={t('common.totalRequests')} color="#3B82F6" />
-        <ClientStatCard icon="📂" value={stats.open} label={t('common.new')} color="#10B981" />
-        <ClientStatCard icon="⏳" value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" />
-        <ClientStatCard icon="✅" value={stats.resolved} label={t('common.resolved')} color="#8B5CF6" />
-        <ClientStatCard icon="🔒" value={stats.closed} label={t('common.closed')} color="#6B7280" />
-        <ClientStatCard icon="❌" value={stats.rejected} label={t('common.rejected')} color="#DC2626" />
-        <ClientStatCard icon="⏰" value={stats.waitingClient} label={t('common.waitingForClient')} color="#F97316" />
-        <ClientStatCard icon="🚨" value={stats.escalated} label={t('common.escalated')} color="#EF4444" />
+        <ClientStatCard icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} color="#3B82F6" />
+        <ClientStatCard icon={<Icon name="new" />} value={stats.open} label={t('common.new')} color="#10B981" />
+        <ClientStatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" />
+        <ClientStatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} color="#8B5CF6" />
+        <ClientStatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} color="#6B7280" />
+        <ClientStatCard icon={<Icon name="rejected" />} value={stats.rejected} label={t('common.rejected')} color="#DC2626" />
+        <ClientStatCard icon={<Icon name="waiting" />} value={stats.waitingClient} label={t('common.waitingForClient')} color="#F97316" />
+        <ClientStatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} color="#EF4444" />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
@@ -254,11 +255,11 @@ export default function ClientDashboard() {
             <span>{t('common.ofRequests', { count: filteredRequests.length })}</span>
           </div>
           <div className="table-pagination">
-            <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
-            <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
+            <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>Â«</button>
+            <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>â€¹</button>
             <PageNumbers page={page} totalPages={totalPages} onPageChange={setPage} />
-            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>›</button>
-            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>»</button>
+            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>â€º</button>
+            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>Â»</button>
           </div>
         </div>
       </div>
@@ -277,3 +278,4 @@ export default function ClientDashboard() {
     </div>
   );
 }
+

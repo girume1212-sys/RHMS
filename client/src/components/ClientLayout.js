@@ -6,6 +6,7 @@ import { API_BASE, isTokenExpired } from '../api';
 import GlobalSearch from './GlobalSearch';
 import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
+import Icon from './Icon';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -75,7 +76,7 @@ export default function ClientLayout() {
   }, [showNotifications]);
 
   const getNotificationIcon = useCallback((type) => {
-    const icons = { status_change: '🔄', assigned: '👤', comment: '💬', request_created: '📋', request_deleted: '🗑️', default: '🔔' };
+    const icons = { status_change: 'refresh', assigned: 'user', comment: 'comment', request_created: 'requests', request_deleted: 'delete', default: 'bell' };
     return icons[type] || icons.default;
   }, []);
 
@@ -235,10 +236,10 @@ export default function ClientLayout() {
   };
 
   const menuItems = [
-    { path: '/client', label: t('common.dashboard'), icon: '🏠' },
-    { path: '/client/requests', label: t('common.myRequests'), icon: '📄' },
-    { path: '/client/activity', label: t('common.activityLog'), icon: '📝' },
-    { path: '/client/profile', label: t('common.myProfile'), icon: '👤' },
+    { path: '/client', label: t('common.dashboard'), icon: 'home' },
+    { path: '/client/requests', label: t('common.myRequests'), icon: 'requests' },
+    { path: '/client/activity', label: t('common.activityLog'), icon: 'activity' },
+    { path: '/client/profile', label: t('common.myProfile'), icon: 'user' },
   ];
 
   return (
@@ -274,7 +275,7 @@ export default function ClientLayout() {
               className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
               onClick={() => navigate(item.path)}
             >
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><Icon name={item.icon} /></span>
               {sidebarOpen && <span className="nav-label">{item.label}</span>}
             </button>
           ))}
@@ -302,7 +303,7 @@ export default function ClientLayout() {
           <div className="bubble-pill">
             <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>
             <div className="bubble-pill-icon">
-              {getNotificationIcon(n.type)}
+              <Icon name={getNotificationIcon(n.type)} size={16} />
             </div>
               <div className="bubble-pill-body">
               <div className="bubble-pill-title">{n.requestId ? `${t('common.requestShort')} #${n.requestId}` : t('common.notifications')}</div>
@@ -322,17 +323,17 @@ export default function ClientLayout() {
       <div className="main-area">
         <header className="topbar">
           <div className="topbar-left">
-            <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
+            <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}><Icon name="menu" /></button>
             <GlobalSearch clientMode placeholder={t('common.searchRequests')} />
           </div>
           <div className="topbar-right">
             <LanguageSelector variant="topbar" />
             <button className="theme-toggle" onClick={toggleDarkMode} title={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}>
-              {darkMode ? <><span className="toggle-icon">☀️</span><span>{t('common.brightMode')}</span></> : <><span className="toggle-icon">🌙</span><span>{t('common.darkMode')}</span></>}
+              {darkMode ? <><span className="toggle-icon"><Icon name="sun" /></span><span>{t('common.brightMode')}</span></> : <><span className="toggle-icon"><Icon name="moon" /></span><span>{t('common.darkMode')}</span></>}
             </button>
             <div className="notification-container" style={{ position: 'relative' }}>
               <button className="theme-toggle" onClick={openNotifications} title={t('common.notifications')} style={{ position: 'relative' }}>
-                <span className="toggle-icon">🔔</span>
+                <span className="toggle-icon"><Icon name="bell" /></span>
                 {unreadNotifications.length > 0 && (
                   <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                     {unreadNotifications.length > 99 ? '99+' : unreadNotifications.length}
@@ -351,7 +352,7 @@ export default function ClientLayout() {
                     <div className="dropdown-panel-list">
                       {panelNotifications.map((n) => (
                         <div key={n.id} className="dropdown-panel-item" onClick={() => { setShowNotifications(false); if (n.requestId) navigate(`/client/requests/${n.requestId}`); }}>
-                          <div className="dropdown-panel-icon">{getNotificationIcon(n.type)}</div>
+                          <div className="dropdown-panel-icon"><Icon name={getNotificationIcon(n.type)} size={16} /></div>
                           <div className="dropdown-panel-content">
                             <div className="dropdown-panel-title">
                               {getNotifTitle(n.type)}
@@ -359,7 +360,7 @@ export default function ClientLayout() {
                             </div>
                             <p className="dropdown-panel-message">{translateNotification(n.message, n, t)}</p>
                             <div className="dropdown-panel-meta">
-                              {n.userName && <span className="dropdown-panel-user">👤 {n.userName}</span>}
+                              {n.userName && <span className="dropdown-panel-user"><Icon name="user" size={12} /> {n.userName}</span>}
                               <span className="dropdown-panel-time">{n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</span>
                             </div>
                           </div>
@@ -386,10 +387,10 @@ export default function ClientLayout() {
                     </div>
                   </div>
                   <div className="dropdown-divider"></div>
-                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/client/profile'); }}>👤 {t('common.myProfile')}</button>
+                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/client/profile'); }}><span className="dropdown-item-icon"><Icon name="user" /></span> {t('common.myProfile')}</button>
                   <div className="dropdown-divider"></div>
                   <button className="dropdown-item logout" onClick={() => { logout(); navigate('/login'); }}>
-                    🚪 {t('common.signOut')}
+                    <span className="dropdown-item-icon"><Icon name="logout" /></span> {t('common.signOut')}
                   </button>
                 </div>
               )}

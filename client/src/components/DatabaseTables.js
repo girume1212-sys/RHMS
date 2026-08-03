@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
+import Icon from './Icon';
 
 export default function DatabaseTables() {
   const { t } = useTranslation();
@@ -116,7 +117,7 @@ export default function DatabaseTables() {
                   onMouseOver={(e) => { if (selectedTable !== t) e.target.style.background = '#f9fafb'; }}
                   onMouseOut={(e) => { if (selectedTable !== t) e.target.style.background = 'transparent'; }}
                 >
-                  <span style={{ fontSize: '16px' }}>📊</span>
+                  <span style={{ display: 'inline-flex' }}><Icon name="table" size={16} /></span>
                   {t}
                 </button>
               ))}
@@ -127,7 +128,7 @@ export default function DatabaseTables() {
         <div className="chart-card" style={{ flex: 1, overflow: 'hidden' }}>
           {!selectedTable ? (
             <div className="empty-state">
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗄️</div>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}><Icon name="database" size={48} /></div>
               <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#374151', margin: '0 0 8px' }}>{t('system.selectTableToView')}</h3>
               <p>{t('system.selectTableHint')}</p>
             </div>
