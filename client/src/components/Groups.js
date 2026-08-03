@@ -29,6 +29,7 @@ export default function Groups() {
   const [addMemberSearch, setAddMemberSearch] = useState('');
   const [removeTarget, setRemoveTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [memberSort, setMemberSort] = useState({ key: '', dir: 'asc' });
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -195,7 +196,29 @@ export default function Groups() {
       (m.email || '').toLowerCase().includes(q) ||
       (m.role || '').toLowerCase().includes(q)
     );
+  }).sort((a, b) => {
+    if (!memberSort.key) return 0;
+    let aVal, bVal;
+    switch (memberSort.key) {
+      case 'name': aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase(); break;
+      case 'email': aVal = (a.email || '').toLowerCase(); bVal = (b.email || '').toLowerCase(); break;
+      case 'role': aVal = (a.role || '').toLowerCase(); bVal = (b.role || '').toLowerCase(); break;
+      default: return 0;
+    }
+    if (aVal < bVal) return memberSort.dir === 'asc' ? -1 : 1;
+    if (aVal > bVal) return memberSort.dir === 'asc' ? 1 : -1;
+    return 0;
   });
+
+  const handleMemberSort = (key) => {
+    setMemberSort(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
+  };
+
+  const getMemberSortIcon = (key) => {
+    const isActive = memberSort.key === key;
+    if (!isActive) return <span className="sort-icon" onClick={(e) => { e.stopPropagation(); handleMemberSort(key); }}>⇅</span>;
+    return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleMemberSort(key); }}>{memberSort.dir === 'asc' ? '↑' : '↓'}</span>;
+  };
 
   const handleSort = (key) => {
     setSort(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
@@ -369,7 +392,10 @@ export default function Groups() {
       {memberGroup && (
         <div className="modal-overlay" onClick={() => { setMemberGroup(null); setShowAddMember(false); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
-            <div className="modal-header">
+            <div className="modal-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '14px' }}>
+              <div className="modal-header-actions" style={{ justifyContent: 'flex-start' }}>
+                <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={() => { setMemberGroup(null); setShowAddMember(false); }}>← {t('common.back')}</button>
+              </div>
               <div className="modal-header-content">
                 <div className="modal-icon">👥</div>
                 <div>
@@ -377,7 +403,6 @@ export default function Groups() {
                   <p className="modal-subtitle">{t('common.memberCount', { count: members.length })}</p>
                 </div>
               </div>
-              <button className="modal-close" onClick={() => { setMemberGroup(null); setShowAddMember(false); }}>&times;</button>
             </div>
               <div className="modal-body">
                 {membersLoading ? (
@@ -460,9 +485,9 @@ export default function Groups() {
             <table className="data-table">
                         <thead>
                           <tr>
-                            <th>{t('common.user')}</th>
-                            <th>{t('common.email')}</th>
-                            <th>{t('common.role')}</th>
+                            <th className="sortable">{t('common.user')} {getMemberSortIcon('name')}</th>
+                            <th className="sortable">{t('common.email')} {getMemberSortIcon('email')}</th>
+                            <th className="sortable">{t('common.role')} {getMemberSortIcon('role')}</th>
                             <th style={{ width: '80px' }}>{t('common.actions')}</th>
                           </tr>
                         </thead>
