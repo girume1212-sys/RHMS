@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import { transSeeded } from '../i18n/translateServer';
 
 const RequestsTable = forwardRef(function RequestsTable({
   user,
@@ -273,15 +274,15 @@ const RequestsTable = forwardRef(function RequestsTable({
               )}
               <select className="filter-select" value={filter.priority} onChange={(e) => { setFilter(f => ({ ...f, priority: e.target.value })); setPage(1); }}>
                 <option value="">{t('common.allPriorities')}</option>
-                {priorities.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                {priorities.map(p => <option key={p.id} value={p.name}>{transSeeded(p.name, 'priority', t)}</option>)}
               </select>
               <select className="filter-select" value={filter.category} onChange={(e) => { setFilter(f => ({ ...f, category: e.target.value })); setPage(1); }}>
                 <option value="">{t('common.allCategories')}</option>
-                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                {categories.map(c => <option key={c.id} value={c.name}>{transSeeded(c.name, 'category', t)}</option>)}
               </select>
               <select className="filter-select" value={filter.status} onChange={(e) => { setFilter(f => ({ ...f, status: e.target.value })); setPage(1); }}>
                 <option value="">{t('common.allStatuses')}</option>
-                {statuses.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                {statuses.map(s => <option key={s.id} value={s.name}>{transSeeded(s.name, 'status', t)}</option>)}
               </select>
               <div className="table-search-box">
                 <span className="search-icon">🔍</span>
@@ -338,9 +339,9 @@ const RequestsTable = forwardRef(function RequestsTable({
                           : '-'}
                       </td>
                     )}
-                    <td><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{r.category?.name || '-'}</span></td>
-                    <td><span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>{r.priority?.name || '-'}</span></td>
-                    <td><span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>{r.status?.name || '-'}</span></td>
+                    <td><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{transSeeded(r.category?.name, 'category', t) || '-'}</span></td>
+                    <td><span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>{transSeeded(r.priority?.name, 'priority', t) || '-'}</span></td>
+                    <td><span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>{transSeeded(r.status?.name, 'status', t) || '-'}</span></td>
                     <td>{r.updatedAt ? new Date(r.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
                     <td>
                       <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>

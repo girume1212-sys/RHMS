@@ -5,6 +5,7 @@ import { useAuth } from '../AuthContext';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import { transSeeded } from '../i18n/translateServer';
 
 const CATEGORY_TEMPLATES = [
   { id: '1', name: 'Hardware', icon: '🖥️', color: '#3B82F6' },
@@ -163,7 +164,7 @@ export default function CreateRequest() {
             <div className="form-group">
               <label>{t('common.priority')}</label>
               <select value={form.priorityId} onChange={(e) => setForm({ ...form, priorityId: e.target.value })}>
-                {prioritiesList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {prioritiesList.map(p => <option key={p.id} value={p.id}>{transSeeded(p.name, 'priority', t)}</option>)}
               </select>
             </div>
           </div>

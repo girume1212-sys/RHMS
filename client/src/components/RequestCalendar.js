@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { useTranslation } from '../i18n/useTranslation';
+import { transSeeded } from '../i18n/translateServer';
 
 const pad = (n) => String(n).padStart(2, '0');
 const toKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -24,6 +25,8 @@ export default function RequestCalendar() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const rootRef = useRef(null);
+
+  const DAY_LABELS = DAY_KEYS.map((k) => t('days.' + k));
 
   const today = useMemo(() => startOfDay(new Date()), []);
 
@@ -209,20 +212,20 @@ export default function RequestCalendar() {
       <div className="req-cal-day">
         <div className="req-cal-day-date">
           {cursor.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-          {toKey(cursor) === toKey(today) && <span className="req-cal-today-badge">Today</span>}
+          {toKey(cursor) === toKey(today) && <span className="req-cal-today-badge">{t('common.today')}</span>}
         </div>
-        {all.length === 0 && <div className="req-cal-empty">No requests on this day</div>}
+        {all.length === 0 && <div className="req-cal-empty">{t('calendar.noRequestsDay')}</div>}
         {all.map(({ r, type }) => (
           <div key={`${r.id}-${type}`} className="req-cal-day-item" onClick={() => openRequest(r.id)}>
             <span className={`req-cal-chip req-cal-chip-${type}`}>
               <span className="req-cal-chip-dot"></span>
-              #{r.id} {type === 'updated' ? '(updated)' : ''}
+              #{r.id} {type === 'updated' ? `(${t('calendar.updated')})` : ''}
             </span>
             <div className="req-cal-day-item-body">
               <div className="req-cal-day-item-title">{r.subject}</div>
               <div className="req-cal-day-item-meta">
                 <span className="status-badge" style={{ background: (r.status?.color || '#6B7280') + '20', color: r.status?.color || '#6B7280' }}>{r.status?.name || '—'}</span>
-                <span className="priority-badge" style={{ background: (r.priority?.color || '#6B7280') + '20', color: r.priority?.color || '#6B7280' }}>{r.priority?.name || '—'}</span>
+                <span className="priority-badge" style={{ background: (r.priority?.color || '#6B7280') + '20', color: r.priority?.color || '#6B7280' }}>{transSeeded(r.priority?.name, 'priority', t) || '—'}</span>
               </div>
             </div>
           </div>
@@ -233,7 +236,7 @@ export default function RequestCalendar() {
 
   return (
     <div className="req-calendar" ref={rootRef}>
-      <button className="calendar-icon-btn" title="Calendar" onClick={toggle}>
+      <button className="calendar-icon-btn" title={t('calendar.calendar')} onClick={toggle}>
         <span className="req-cal-btn-icon">📅</span>
         <span className="req-cal-btn-label">{rangeLabel()}</span>
         <span className="req-cal-btn-arrow">▾</span>
@@ -242,18 +245,18 @@ export default function RequestCalendar() {
         <div className="req-calendar-panel">
           <div className="req-calendar-top">
             <div className="req-calendar-title">{viewLabel()}</div>
-            <button className="req-cal-today-btn" onClick={goToday}>Today</button>
+            <button className="req-cal-today-btn" onClick={goToday}>{t('common.today')}</button>
           </div>
           <div className="req-calendar-toolbar">
-            <button className="req-cal-nav-btn" onClick={() => shift(-1)} title="Previous">‹</button>
+            <button className="req-cal-nav-btn" onClick={() => shift(-1)} title={t('calendar.previous')}>‹</button>
             <div className="req-cal-view-switch">
               {['month', 'week', 'day'].map((v) => (
                 <button key={v} className={`req-cal-view-btn${view === v ? ' active' : ''}`} onClick={() => setView(v)}>
-                  {v.charAt(0).toUpperCase() + v.slice(1)}
+                  {t('calendar.' + v)}
                 </button>
               ))}
             </div>
-            <button className="req-cal-nav-btn" onClick={() => shift(1)} title="Next">›</button>
+            <button className="req-cal-nav-btn" onClick={() => shift(1)} title={t('calendar.next')}>›</button>
           </div>
 
           <div className="req-calendar-body">
@@ -269,9 +272,9 @@ export default function RequestCalendar() {
           </div>
 
           <div className="req-calendar-legend">
-            <span className="req-cal-legend-item"><span className="req-cal-legend-dot created"></span>Created</span>
-            <span className="req-cal-legend-item"><span className="req-cal-legend-dot updated"></span>Updated</span>
-            <span className="req-cal-legend-item"><span className="req-cal-legend-dot today"></span>Today</span>
+            <span className="req-cal-legend-item"><span className="req-cal-legend-dot created"></span>{t('calendar.created')}</span>
+            <span className="req-cal-legend-item"><span className="req-cal-legend-dot updated"></span>{t('calendar.updated')}</span>
+            <span className="req-cal-legend-item"><span className="req-cal-legend-dot today"></span>{t('common.today')}</span>
           </div>
         </div>
       )}

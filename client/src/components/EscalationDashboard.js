@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
 
 export default function EscalationDashboard() {
@@ -314,7 +315,7 @@ if (statusName === 'New') {
             </label>
             <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
               <option value="">{t('common.allStatuses')}</option>
-              {statuses.filter(s => s.name !== 'Closed' && s.name !== 'Reopened').map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              {statuses.filter(s => s.name !== 'Closed' && s.name !== 'Reopened').map(s => <option key={s.id} value={s.name}>{transSeeded(s.name, 'status', t)}</option>)}
             </select>
             <select className="filter-select" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}>
               <option value="">{t('common.allPriorities')}</option>
@@ -371,15 +372,15 @@ if (statusName === 'New') {
                         ))
                       : '-'}
                   </td>
-                  <td><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{r.category?.name || '-'}</span></td>
+                  <td><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{transSeeded(r.category?.name, 'category', t) || '-'}</span></td>
                   <td>
                     <span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>
-                      {r.priority?.name || '-'}
+                      {transSeeded(r.priority?.name, 'priority', t) || '-'}
                     </span>
                   </td>
                   <td>
                     <span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>
-                      {r.status?.name || '-'}
+                      {transSeeded(r.status?.name, 'status', t) || '-'}
                     </span>
                   </td>
                   <td>{r.updatedAt ? new Date(r.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}</td>
@@ -488,10 +489,10 @@ if (statusName === 'New') {
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this request?</p>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>{t('common.confirmDeleteRequest')}</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
-              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.delete')}</button>
             </div>
           </div>
         </div>

@@ -295,8 +295,8 @@ export default function Users() {
                     <td>{new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td>
                       <div className="actions-cell-inline">
-                        <button className="action-btn-text edit" onClick={() => openEdit(u)}>Edit</button>
-                        <button className="action-btn-text delete" onClick={() => setDeleteTarget({ id: u.id, name: u.name })}>Delete</button>
+                        <button className="action-btn-text edit" onClick={() => openEdit(u)}>{t('common.edit')}</button>
+                        <button className="action-btn-text delete" onClick={() => setDeleteTarget({ id: u.id, name: u.name })}>{t('common.delete')}</button>
                       </div>
                     </td>
                   </tr>

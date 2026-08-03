@@ -5,6 +5,7 @@ import { useAuth } from '../AuthContext';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import { transSeeded, translateActivityMessage } from '../i18n/translateServer';
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -328,12 +329,12 @@ export default function RequestDetail() {
     if (a.type === 'created') return t('system.requestCreated');
     if (a.type === 'status_update') {
       const match = a.message.match(/Changed status from (.+) to (.+)/i);
-      if (match) return t('system.statusChangedFromTo', { from: match[1].trim(), to: match[2].trim() });
-      return a.message;
+      if (match) return t('system.statusChangedFromTo', { from: transSeeded(match[1].trim(), 'status', t), to: transSeeded(match[2].trim(), 'status', t) });
+      return translateActivityMessage(a.message, a.type, t);
     }
-    if (a.type === 'assigned') return a.message || t('system.requestAssigned');
-    if (a.type === 'updated') return a.message || t('system.requestUpdated');
-    return a.message || t('system.activity');
+    if (a.type === 'assigned') return translateActivityMessage(a.message, a.type, t) || t('system.requestAssigned');
+    if (a.type === 'updated') return translateActivityMessage(a.message, a.type, t) || t('system.requestUpdated');
+    return translateActivityMessage(a.message, a.type, t) || t('system.activity');
   };
 
   const renderInline = (text) => {
@@ -469,7 +470,7 @@ export default function RequestDetail() {
           time: a.createdAt,
           user: a.user?.name || t('role.system'),
           role: a.user?.role || 'system',
-          description: a.message || t('system.assigned')
+          description: translateActivityMessage(a.message, a.type, t) || t('system.assigned')
         });
       } else if (a.type === 'status_update') {
         const match = a.message.match(/Changed status from (.+) to (.+)/i);
@@ -481,7 +482,7 @@ export default function RequestDetail() {
             time: a.createdAt,
             user: a.user?.name || t('role.system'),
             role: a.user?.role || 'system',
-            description: fromStatus ? `${fromStatus} → ${toStatus}` : a.message
+            description: fromStatus ? `${transSeeded(fromStatus, 'status', t)} → ${transSeeded(toStatus, 'status', t)}` : translateActivityMessage(a.message, a.type, t)
           });
         }
       }
@@ -584,7 +585,7 @@ export default function RequestDetail() {
                   <div className="form-group">
                     <label>{t('common.priority')}</label>
                     <select value={editForm.priorityId} onChange={(e) => setEditForm({ ...editForm, priorityId: e.target.value })}>
-                      {prioritiesList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {prioritiesList.map(p => <option key={p.id} value={p.id}>{transSeeded(p.name, 'priority', t)}</option>)}
                     </select>
                   </div>
                 </div>
@@ -745,7 +746,7 @@ export default function RequestDetail() {
                           onClick={() => setFeedbackRating(i)}
                           onMouseEnter={() => setHoverRating(i)}
                           onMouseLeave={() => setHoverRating(0)}
-                          aria-label={`Rate ${i} star${i > 1 ? 's' : ''}`}
+                          aria-label={t('feedback.rateStars', { count: i })}
                         >
                           <svg width="40" height="40" viewBox="0 0 20 20">
                             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
@@ -962,15 +963,15 @@ export default function RequestDetail() {
             <div className="info-list">
               <div className="info-row">
                 <span className="info-label">{t('common.status')}</span>
-                <span className="status-badge" style={{ background: getStatusColor(request.status) + '20', color: getStatusColor(request.status) }}>{request.status?.name}</span>
+                <span className="status-badge" style={{ background: getStatusColor(request.status) + '20', color: getStatusColor(request.status) }}>{transSeeded(request.status?.name, 'status', t)}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">{t('common.priority')}</span>
-                <span className="priority-badge" style={{ background: getPriorityColor(request.priority) + '20', color: getPriorityColor(request.priority) }}>{request.priority?.name}</span>
+                <span className="priority-badge" style={{ background: getPriorityColor(request.priority) + '20', color: getPriorityColor(request.priority) }}>{transSeeded(request.priority?.name, 'priority', t)}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">{t('common.category')}</span>
-                <span>{request.category?.name}</span>
+                <span>{transSeeded(request.category?.name, 'category', t)}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">{t('common.client')}</span>
@@ -1015,7 +1016,7 @@ export default function RequestDetail() {
                       {statuses
                         .filter(s => s.name !== 'Reopened')
                         .filter(s => !((user.role === 'developer' || user.role === 'support') && (s.name === 'Closed' || s.name === 'Rejected')))
-                        .map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        .map(s => <option key={s.id} value={s.id}>{transSeeded(s.name, 'status', t)}</option>)}
                     </select>
                   )}
                 </div>
@@ -1122,7 +1123,7 @@ export default function RequestDetail() {
                               {step.current && <span className="lifecycle-pulse" style={{ borderColor: step.color }}></span>}
                             </div>
                             <span className="lifecycle-label" style={{ color: step.color, fontWeight: step.current ? 700 : 600 }}>
-                              {step.name}
+                              {transSeeded(step.name, 'status', t)}
                             </span>
                             {step.time && (
                               <div className="lifecycle-meta">
@@ -1164,7 +1165,7 @@ export default function RequestDetail() {
                               <span className="timeline-icon" style={{ color: getActivityColor(activity.type) }}>
                                 {getActivityIcon(activity.type)}
                               </span>
-                              <span className="timeline-message">{activity.message}</span>
+                              <span className="timeline-message">{translateActivityMessage(activity.message, activity.type, t)}</span>
                             </div>
                             <div className="timeline-meta">
                               <span className="timeline-user">{activity.user?.name || t('role.system')}</span>

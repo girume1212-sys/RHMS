@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
+import { translateActivityMessage } from '../i18n/translateServer';
 
 export default function ActivityLog() {
   const { user } = useAuth();
@@ -53,7 +54,7 @@ export default function ActivityLog() {
                 </div>
                 <div className="timeline-content">
                   <div className="timeline-header">
-                    <span className="timeline-action">{a.message}</span>
+                    <span className="timeline-action">{translateActivityMessage(a.message, a.type, t)}</span>
                     <span className="timeline-request">#{a.requestId}</span>
                   </div>
                   <div className="timeline-meta">

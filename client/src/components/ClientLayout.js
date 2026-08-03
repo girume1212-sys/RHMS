@@ -5,6 +5,7 @@ import { useTranslation } from '../i18n/useTranslation';
 import { API_BASE, isTokenExpired } from '../api';
 import GlobalSearch from './GlobalSearch';
 import LanguageSelector from './LanguageSelector';
+import { translateNotification } from '../i18n/translateServer';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -305,7 +306,7 @@ export default function ClientLayout() {
             </div>
               <div className="bubble-pill-body">
               <div className="bubble-pill-title">{n.requestId ? `${t('common.requestShort')} #${n.requestId}` : t('common.notifications')}</div>
-              <div className="bubble-pill-text">{n.message}</div>
+              <div className="bubble-pill-text">{translateNotification(n.message, n, t)}</div>
               <div className="bubble-pill-time">{n.timestamp ? new Date(n.timestamp).toLocaleTimeString() : ''}</div>
             </div>
           </div>
@@ -356,7 +357,7 @@ export default function ClientLayout() {
                               {getNotifTitle(n.type)}
                               {n.requestId && <span className="dropdown-panel-request">{t('common.requestPrefixLabel')}-{String(n.requestId).padStart(4, '0')}</span>}
                             </div>
-                            <p className="dropdown-panel-message">{n.message}</p>
+                            <p className="dropdown-panel-message">{translateNotification(n.message, n, t)}</p>
                             <div className="dropdown-panel-meta">
                               {n.userName && <span className="dropdown-panel-user">👤 {n.userName}</span>}
                               <span className="dropdown-panel-time">{n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</span>

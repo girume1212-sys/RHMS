@@ -4,6 +4,7 @@ import { api } from '../api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import { transSeeded } from '../i18n/translateServer';
 
 export default function Reports() {
   const navigate = useNavigate();
@@ -130,7 +131,7 @@ export default function Reports() {
         <div className="chart-card">
           <h3>{t('dashboard.requestsByStatus')}</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={(report.byStatus || []).map(s => ({ ...s, name: t('status.' + s.name), count: Number(s.count) }))}>
+            <BarChart data={(report.byStatus || []).map(s => ({ ...s, name: transSeeded(s.name, 'status', t), count: Number(s.count) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
               <YAxis stroke="#9ca3af" fontSize={12} />
@@ -142,7 +143,7 @@ export default function Reports() {
         <div className="chart-card">
           <h3>{t('dashboard.requestsByPriority')}</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={(report.byPriority || []).map(p => ({ ...p, name: t('priority.' + p.name), count: Number(p.count) }))}>
+            <BarChart data={(report.byPriority || []).map(p => ({ ...p, name: transSeeded(p.name, 'priority', t), count: Number(p.count) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
               <YAxis stroke="#9ca3af" fontSize={12} />
@@ -154,7 +155,7 @@ export default function Reports() {
         <div className="chart-card">
           <h3>{t('dashboard.requestsByCategory')}</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={(report.byCategory || []).map(c => ({ ...c, name: t('category.' + c.name), count: Number(c.count) }))}>
+            <BarChart data={(report.byCategory || []).map(c => ({ ...c, name: transSeeded(c.name, 'category', t), count: Number(c.count) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
               <YAxis stroke="#9ca3af" fontSize={12} />

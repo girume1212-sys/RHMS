@@ -2,6 +2,58 @@ import { translate } from './i18n/translate';
 
 export const API_BASE = process.env.REACT_APP_API_URL || '';
 
+const SERVER_ERROR_MAP = {
+  'Invalid username, email or password': 'common.invalidCredentials',
+  'Account locked due to too many failed attempts. Contact administrator.': 'common.accountLockedContactAdmin',
+  'System is under maintenance. Please try again later.': 'common.systemUnderMaintenance',
+  'Server error': 'common.serverError',
+  'Database error': 'common.databaseError',
+  'Email already exists': 'common.emailAlreadyExists',
+  'Name, email and password are required': 'common.nameEmailPasswordRequired',
+  'Name is required': 'common.nameRequired',
+  'Please try again': 'common.pleaseTryAgain',
+  'User not found': 'common.userNotFound',
+  'User ID is required': 'common.userIdRequired',
+  'Category not found': 'common.categoryNotFound',
+  'Company not found': 'common.companyNotFound',
+  'Company name is required': 'common.companyNameRequired',
+  'Company ID already exists': 'common.companyIdExists',
+  'Group not found': 'common.groupNotFound',
+  'Feedback not found': 'common.feedbackNotFound',
+  'Request not found': 'common.requestNotFound',
+  'Access denied': 'common.accessDenied',
+  'Insufficient permissions': 'common.insufficientPermissions',
+  'Please fill all required fields': 'common.fillRequiredFields',
+  'Access denied - you can only modify requests assigned to you': 'common.accessDeniedOwnRequests',
+  'Access denied - new requests cannot be modified by the escalation team': 'common.accessDeniedNewRequests',
+  'Access denied - request assigned to another user': 'common.accessDeniedRequestAssigned',
+  'Access denied - you are not a member of a group assigned to this request': 'common.notGroupMember',
+  'Reopening requests is not allowed. Contact an administrator.': 'common.reopenNotAllowed',
+  'You can only close or reject a request that is in Resolved status.': 'common.closeRejectResolvedOnly',
+  'You must claim and assign this request to yourself before changing its status': 'common.claimBeforeStatusChange',
+  'Request is already assigned to another user': 'common.alreadyAssigned',
+  'Clients cannot claim requests': 'common.clientsCannotClaim',
+  'Escalation team can only claim escalated requests': 'common.escalationOnlyClaim',
+  'Rating must be 1-5': 'common.ratingRange',
+  'No file uploaded': 'common.noFileUploaded',
+  'File too large. Max 10MB.': 'common.fileTooLarge',
+  'Google authentication failed': 'common.googleSignInFailed',
+  'Google credential is required': 'common.googleCredentialRequired',
+  'Failed to clear activity log': 'common.failedClearActivity',
+  'Invalid table name': 'common.invalidTableName',
+  'Not found': 'common.notFound',
+  'No token provided': 'common.sessionExpired',
+  'Invalid token': 'common.sessionExpired',
+};
+
+function translateServerError(msg) {
+  if (!msg) return null;
+  const key = SERVER_ERROR_MAP[msg] ||
+    (msg.startsWith('Failed to create request') ? 'common.failedToCreateRequest' : null) ||
+    (msg.startsWith('Unexpected file field') ? 'common.uploadFailed' : null);
+  return key ? translate(key) : null;
+}
+
 export function isTokenExpired(token) {
   if (!token) return true;
   try {
@@ -33,7 +85,7 @@ async function apiFetch(url, options = {}) {
   const contentType = res.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || translate('common.requestFailed'));
+    if (!res.ok) throw new Error(translateServerError(data.error) || data.error || translate('common.requestFailed'));
     return data;
   }
   if (!res.ok) throw new Error(translate('common.requestFailedWithStatus') + ' ' + res.status);
@@ -57,7 +109,7 @@ export const api = {
       throw new Error(translate('common.sessionExpired'));
     }
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || translate('common.uploadFailed'));
+    if (!res.ok) throw new Error(translateServerError(data.error) || translate('common.uploadFailed'));
     return data;
   },
 };

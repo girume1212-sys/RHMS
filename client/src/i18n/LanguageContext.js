@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import en from './en.json';
 import am from './am.json';
 
@@ -18,11 +18,11 @@ export function LanguageProvider({ children }) {
     document.documentElement.lang = language;
   }, [language]);
 
-  const changeLanguage = (langCode) => {
+  const changeLanguage = useCallback((langCode) => {
     if (SUPPORTED.includes(langCode)) {
       setLanguage(langCode);
     }
-  };
+  }, []);
 
   const t = (key, params) => {
     const keys = key.split('.');

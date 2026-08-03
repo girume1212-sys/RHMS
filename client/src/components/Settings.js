@@ -129,7 +129,7 @@ export default function Settings() {
         return merged;
       });
     }).catch(err => {
-      addToast('Failed to load settings', 'error');
+      addToast(t('common.failedToLoadSettings'), 'error');
     }).finally(() => setLoading(false));
   }, []);
 

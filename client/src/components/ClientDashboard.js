@@ -5,6 +5,7 @@ import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
 
 export default function ClientDashboard() {
@@ -221,9 +222,9 @@ export default function ClientDashboard() {
                 <tr key={r.id} onClick={() => navigate(`/client/requests/${r.id}`)} className="clickable-row">
                   <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}</td>
-                  <td><span className="category-tag">{r.category?.name || '-'}</span></td>
-                  <td><span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>{r.priority?.name || '-'}</span></td>
-                  <td><span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>{r.status?.name || '-'}</span></td>
+                  <td><span className="category-tag">{transSeeded(r.category?.name, 'category', t) || '-'}</span></td>
+                  <td><span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>{transSeeded(r.priority?.name, 'priority', t) || '-'}</span></td>
+                  <td><span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>{transSeeded(r.status?.name, 'status', t) || '-'}</span></td>
                   <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
                   <td>
                     <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>

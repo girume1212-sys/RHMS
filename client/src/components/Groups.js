@@ -151,10 +151,10 @@ export default function Groups() {
       setShowAddMember(false);
       const data = await api.get(`/api/groups/${memberGroup.id}/members`);
       setMembers(data);
-      addToast(`${selectedUserIds.length} member(s) added successfully!`);
+      addToast(t('common.membersAdded', { count: selectedUserIds.length }));
       loadGroups();
     } catch (err) {
-      addToast('Failed to add member: ' + err.message, 'error');
+      addToast(t('common.failedToAddMember') + ': ' + err.message, 'error');
     }
   };
 
@@ -162,11 +162,11 @@ export default function Groups() {
     try {
       await api.delete(`/api/groups/${memberGroup.id}/members/${userId}`);
       setMembers(prev => prev.filter(m => m.id !== userId));
-      addToast(`"${userName}" removed from group`);
+      addToast(t('common.memberRemovedFromGroup', { name: userName }));
       loadGroups();
       setRemoveTarget(null);
     } catch (err) {
-      addToast('Failed to remove member: ' + err.message, 'error');
+      addToast(t('common.failedToRemoveMember') + ': ' + err.message, 'error');
       setRemoveTarget(null);
     }
   };
@@ -251,11 +251,11 @@ export default function Groups() {
 
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← Back</button>
-          <h1>Groups</h1>
-          <p>Manage user groups and departments under companies</p>
+          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <h1>{t('sidebar.groups')}</h1>
+          <p>{t('common.manageGroups')}</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ Add Group</button>
+        <button className="btn btn-primary" onClick={openCreate}>+ {t('common.addGroup')}</button>
       </div>
 
       {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{error}</div>}
@@ -265,11 +265,11 @@ export default function Groups() {
       ) : (
         <div className="chart-card">
           <div className="table-header-bar">
-            <h3>Groups ({filteredGroups.length})</h3>
+            <h3>{t('common.groupsCount', { count: filteredGroups.length })}</h3>
             <div className="table-header-actions">
               <div className="table-search-box">
                 <span className="search-icon"></span>
-                <input type="text" placeholder="Search groups..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+                <input type="text" placeholder={t('common.searchGroups')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
               </div>
             </div>
           </div>
@@ -278,11 +278,11 @@ export default function Groups() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th style={{ width: '80px', cursor: 'pointer' }} onClick={() => handleSort('id')}>ID <span className="sort-icon">{sort.key === 'id' ? (sort.dir === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
-                  <th className="sortable">Group {getSortIcon('name')}</th>
-                  <th className="sortable">Company {getSortIcon('company')}</th>
-                  <th className="sortable">Members {getSortIcon('members')}</th>
-                  <th>Actions</th>
+                  <th style={{ width: '80px', cursor: 'pointer' }} onClick={() => handleSort('id')}>{t('common.id')} <span className="sort-icon">{sort.key === 'id' ? (sort.dir === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
+                  <th className="sortable">{t('common.group')} {getSortIcon('name')}</th>
+                  <th className="sortable">{t('common.company')} {getSortIcon('company')}</th>
+                  <th className="sortable">{t('common.members')} {getSortIcon('members')}</th>
+                  <th>{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -303,15 +303,15 @@ export default function Groups() {
                     </td>
                     <td>
                       <div className="actions-cell-inline">
-                        <button className="action-btn-text edit" onClick={(e) => { e.stopPropagation(); openEdit(g); }}>Edit</button>
-                        <button className="action-btn-text" style={{ color: '#3B82F6' }} onClick={(e) => { e.stopPropagation(); openMembers(g); }}>Members</button>
-                        <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}>Delete</button>
+                        <button className="action-btn-text edit" onClick={(e) => { e.stopPropagation(); openEdit(g); }}>{t('common.edit')}</button>
+                        <button className="action-btn-text" style={{ color: '#3B82F6' }} onClick={(e) => { e.stopPropagation(); openMembers(g); }}>{t('common.members')}</button>
+                        <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}>{t('common.delete')}</button>
                       </div>
                     </td>
                   </tr>
                 ))}
                 {paginated.length === 0 && (
-                  <tr><td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No groups found</td></tr>
+                  <tr><td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noGroupsFound')}</td></tr>
                 )}
               </tbody>
             </table>
@@ -319,13 +319,13 @@ export default function Groups() {
 
           <div className="table-footer">
             <div className="table-footer-info">
-              <span>Show</span>
+              <span>{t('common.show')}</span>
               <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={25}>25</option>
               </select>
-              <span>of {filteredGroups.length} groups</span>
+              <span>{t('common.ofGroups', { count: filteredGroups.length })}</span>
             </div>
             <div className="table-pagination">
               <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
@@ -343,23 +343,23 @@ export default function Groups() {
       {(showModal || editingGroup) && (
         <div className="modal-overlay" onClick={() => { setShowModal(false); setEditingGroup(null); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{editingGroup ? 'Edit Group' : 'Add New Group'}</h2>
+            <h2>{editingGroup ? t('common.editGroup') : t('common.addNewGroup')}</h2>
             <form onSubmit={editingGroup ? handleEdit : handleCreate}>
               <div className="form-group">
-                <label>Group Name</label>
+                <label>{t('common.groupName')}</label>
                 <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div className="form-group">
-                <label>Description</label>
+                <label>{t('common.description')}</label>
                 <input type="text" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
               </div>
               <div className="form-group">
-                <label>Color</label>
+                <label>{t('common.color')}</label>
                 <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} style={{ width: '100%', height: '42px', padding: '4px', borderRadius: '10px', border: '1px solid rgba(0,180,216,0.25)', cursor: 'pointer' }} />
               </div>
               <div className="form-actions">
-                <button type="button" className="btn btn-outline" onClick={() => { setShowModal(false); setEditingGroup(null); }}>Cancel</button>
-                <button type="submit" className="btn btn-primary">{editingGroup ? 'Save Changes' : 'Create Group'}</button>
+                <button type="button" className="btn btn-outline" onClick={() => { setShowModal(false); setEditingGroup(null); }}>{t('common.cancel')}</button>
+                <button type="submit" className="btn btn-primary">{editingGroup ? t('common.saveChanges') : t('common.createGroup')}</button>
               </div>
             </form>
           </div>
@@ -373,8 +373,8 @@ export default function Groups() {
               <div className="modal-header-content">
                 <div className="modal-icon">👥</div>
                 <div>
-                  <h2>{memberGroup.name} — Members</h2>
-                  <p className="modal-subtitle">{members.length} member(s)</p>
+                  <h2>{memberGroup.name} — {t('common.members')}</h2>
+                  <p className="modal-subtitle">{t('common.memberCount', { count: members.length })}</p>
                 </div>
               </div>
               <button className="modal-close" onClick={() => { setMemberGroup(null); setShowAddMember(false); }}>&times;</button>
@@ -385,7 +385,7 @@ export default function Groups() {
                 ) : (
                   <>
                     <button className="btn btn-primary" style={{ marginBottom: '16px' }} onClick={() => setShowAddMember(prev => !prev)}>
-                      {showAddMember ? '− Cancel' : '+ Add Member'}
+                      {showAddMember ? `− ${t('common.cancel')}` : `+ ${t('common.addMember')}`}
                     </button>
                     {showAddMember && (
                       <div className="add-member-panel">
@@ -404,7 +404,7 @@ export default function Groups() {
                         )}
                         <div className="table-search-box" style={{ marginBottom: '12px' }}>
                           <span className="search-icon"></span>
-                          <input type="text" placeholder="Search users to add..." value={addMemberSearch} onChange={(e) => setAddMemberSearch(e.target.value)} />
+                          <input type="text" placeholder={t('common.searchUsersToAdd')} value={addMemberSearch} onChange={(e) => setAddMemberSearch(e.target.value)} />
                         </div>
                         <div className="member-checkbox-list">
                           {getFilteredNonMembers().map(u => {
@@ -427,43 +427,43 @@ export default function Groups() {
                                 <span className="member-checkbox-name">{u.name}</span>
                                 <span className="member-checkbox-email">{u.email}</span>
                                 <span className="member-checkbox-role" style={{ color: getRoleColor(u.role) }}>
-                                  {u.role === 'support' ? 'Escalation Team' : u.role.charAt(0).toUpperCase() + u.role.slice(1)}
+                                  {u.role === 'support' ? t('role.escalationTeam') : t('role.' + u.role)}
                                 </span>
                               </label>
                             );
                           })}
                           {getFilteredNonMembers().length === 0 && (
-                            <div className="empty-state" style={{ marginTop: '8px' }}>{addMemberSearch ? `No users matching "${addMemberSearch}"` : 'All users are already members.'}</div>
+                            <div className="empty-state" style={{ marginTop: '8px' }}>{addMemberSearch ? t('common.noUsersMatching', { query: addMemberSearch }) : t('common.allUsersAlreadyMembers')}</div>
                           )}
                         </div>
                         <div className="add-member-actions">
                           <button className="btn btn-primary" onClick={handleAddMember} disabled={!selectedUserIds.length}>
-                            + Add Selected ({selectedUserIds.length})
+                            {t('common.addSelected', { count: selectedUserIds.length })}
                           </button>
-                          <button className="btn btn-outline" onClick={() => { setShowAddMember(false); setSelectedUserIds([]); }}>Cancel</button>
+                          <button className="btn btn-outline" onClick={() => { setShowAddMember(false); setSelectedUserIds([]); }}>{t('common.cancel')}</button>
                         </div>
                       </div>
                     )}
                     {!showAddMember && members.length === 0 && (
-                      <div className="empty-state">No members in this group yet.</div>
+                      <div className="empty-state">{t('common.noMembersInGroup')}</div>
                     )}
                     {!showAddMember && members.length > 0 && (
                       <>
                         <div className="table-search-box" style={{ marginBottom: '12px' }}>
                           <span className="search-icon"></span>
-                          <input type="text" placeholder="Search members..." value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} />
+                          <input type="text" placeholder={t('common.searchMembers')} value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} />
                         </div>
                         {filteredMembers.length === 0 ? (
-                          <div className="empty-state">No members matching "{memberSearch}"</div>
+                          <div className="empty-state">{t('common.noMembersMatching', { query: memberSearch })}</div>
                         ) : (
                       <div className="table-card" style={{ overflow: 'auto' }}>
             <table className="data-table">
                         <thead>
                           <tr>
-                            <th>User</th>
-                            <th>Email</th>
-                            <th>Role</th>
-                            <th style={{ width: '80px' }}>Action</th>
+                            <th>{t('common.user')}</th>
+                            <th>{t('common.email')}</th>
+                            <th>{t('common.role')}</th>
+                            <th style={{ width: '80px' }}>{t('common.actions')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -478,11 +478,11 @@ export default function Groups() {
                               <td>{m.email}</td>
                               <td>
                                 <span className="role-badge" style={{ background: getRoleColor(m.role) + '20', color: getRoleColor(m.role) }}>
-                                  {m.role === 'support' ? 'Escalation Team' : m.role.charAt(0).toUpperCase() + m.role.slice(1)}
+                                  {m.role === 'support' ? t('role.escalationTeam') : t('role.' + m.role)}
                                 </span>
                               </td>
                               <td>
-                                <button className="action-btn-text delete" onClick={() => setRemoveTarget(m)}>Remove</button>
+                                <button className="action-btn-text delete" onClick={() => setRemoveTarget(m)}>{t('common.remove')}</button>
                               </td>
                             </tr>
                           ))}
@@ -496,7 +496,7 @@ export default function Groups() {
               )}
             </div>
             <div className="modal-actions">
-              <button className="btn btn-outline" onClick={() => { setMemberGroup(null); setShowAddMember(false); }}>Close</button>
+              <button className="btn btn-outline" onClick={() => { setMemberGroup(null); setShowAddMember(false); }}>{t('common.close')}</button>
             </div>
           </div>
         </div>
@@ -507,14 +507,14 @@ export default function Groups() {
           <div className="modal" onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: '400px', textAlign: 'center' }}>
             <p style={{ color: '#fff', fontSize: '17px', lineHeight: 1.6, margin: '28px 24px 24px' }}>
-              Are you sure you want to remove this user?
+              {t('common.confirmRemoveUser')}
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 28px' }}>
               <button className="btn btn-outline" onClick={() => setRemoveTarget(null)}
-                style={{ padding: '10px 24px' }}>Cancel</button>
+                style={{ padding: '10px 24px' }}>{t('common.cancel')}</button>
               <button onClick={() => handleRemoveMember(removeTarget.id, removeTarget.name)}
                 style={{ padding: '10px 24px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>
-                Remove
+                {t('common.remove')}
               </button>
             </div>
           </div>
@@ -526,14 +526,14 @@ export default function Groups() {
           <div className="modal" onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: '400px', textAlign: 'center' }}>
             <p style={{ color: '#fff', fontSize: '17px', lineHeight: 1.6, margin: '28px 24px 24px' }}>
-              Are you sure you want to delete this group?
+              {t('common.confirmDeleteGroup')}
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 28px' }}>
               <button className="btn btn-outline" onClick={() => setDeleteTarget(null)}
-                style={{ padding: '10px 24px' }}>Cancel</button>
+                style={{ padding: '10px 24px' }}>{t('common.cancel')}</button>
               <button onClick={() => handleDelete(deleteTarget.id, deleteTarget.name)}
                 style={{ padding: '10px 24px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>
-                Delete
+                {t('common.delete')}
               </button>
             </div>
           </div>

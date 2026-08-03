@@ -5,6 +5,7 @@ import { api } from '../api';
 import { PieChart, Pie, Cell, LineChart, Line, BarChart, Bar, Rectangle, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
@@ -370,15 +371,15 @@ export default function Dashboard() {
                         ))
                       : '-'}
                   </td>
-                  <td>{r.categoryName || r.category_name || '-'}</td>
+                  <td>{transSeeded(r.categoryName || r.category_name, 'category', t) || '-'}</td>
                   <td>
                     <span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>
-                      {r.priorityName || r.priority?.name || '-'}
+                      {transSeeded(r.priorityName || r.priority?.name, 'priority', t) || '-'}
                     </span>
                   </td>
                   <td>
                     <span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>
-                      {r.statusName || r.status?.name || '-'}
+                      {transSeeded(r.statusName || r.status?.name, 'status', t) || '-'}
                     </span>
                   </td>
                   <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
@@ -485,7 +486,7 @@ export default function Dashboard() {
                           <Bar
                             key={s.key}
                             dataKey={s.key}
-                            name={t('status.' + s.key)}
+                            name={transSeeded(s.key, 'status', t)}
                             fill={s.color}
                             radius={[3, 3, 0, 0]}
                             maxBarSize={24}
@@ -534,7 +535,7 @@ export default function Dashboard() {
                           <Bar
                             key={s.key}
                             dataKey={s.key}
-                            name={t('status.' + s.key)}
+                            name={transSeeded(s.key, 'status', t)}
                             fill={s.color}
                             radius={[3, 3, 0, 0]}
                             maxBarSize={24}

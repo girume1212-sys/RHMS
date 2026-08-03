@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { getSavedSearchQuery, saveSearchQuery } from '../utils/searchStore';
 import { useTranslation } from '../i18n/useTranslation';
+import { transSeeded } from '../i18n/translateServer';
 
 export default function GlobalSearch({ clientMode = false, placeholder }) {
   const navigate = useNavigate();
@@ -133,7 +134,7 @@ export default function GlobalSearch({ clientMode = false, placeholder }) {
                         </span>
                         <span className="global-search-item-meta">
                           {r.client_name && <span>👤 {r.client_name}</span>}
-                          {r.status_name && <span className="status-badge" style={{ background: (r.status_color || '#6B7280') + '20', color: r.status_color || '#6B7280' }}>{r.status_name}</span>}
+                          {r.status_name && <span className="status-badge" style={{ background: (r.status_color || '#6B7280') + '20', color: r.status_color || '#6B7280' }}>{transSeeded(r.status_name, 'status', t)}</span>}
                           {r.priority_name && <span className="priority-badge" style={{ background: (r.priority_color || '#6B7280') + '20', color: r.priority_color || '#6B7280' }}>{r.priority_name}</span>}
                           {r.category_name && <span className="category-tag" style={{ background: (r.category_color || '#3B82F6') + '20', color: r.category_color || '#3B82F6' }}>{r.category_name}</span>}
                         </span>
