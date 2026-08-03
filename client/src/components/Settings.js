@@ -205,15 +205,15 @@ export default function Settings() {
   };
 
   const handleReset = async () => {
-    if (!window.confirm('Reset all settings to default values?')) return;
+    if (!window.confirm(t('settings.resetConfirm'))) return;
     setSaving(true);
     try {
       await api.post('/api/settings/reset');
       setForm({ ...initialForm });
-      addToast('Settings reset to defaults');
-      showStatusToast('Settings reset', 'status');
+      addToast(t('settings.resetDone'));
+      showStatusToast(t('settings.resetDone'), 'status');
     } catch (err) {
-      addToast('Failed to reset settings: ' + err.message, 'error');
+      addToast(t('common.failedToSave').replace('{item}', t('settings.title')) + ': ' + err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -242,13 +242,13 @@ export default function Settings() {
         <div className="settings-card">
           <h3>{t('settings.general')}</h3>
           <div className="settings-field">
-            <label>System Name</label>
+            <label>{t('settings.systemName')}</label>
             <input type="text" value={form.systemName} onChange={e => handleChange('systemName', e.target.value)} />
           </div>
           <div className="settings-field">
             <label>{t('settings.companyName')}</label>
             <select value={form.companyName} onChange={e => handleChange('companyName', e.target.value)}>
-              <option value="">Select Company</option>
+              <option value="">{t('settings.selectCompany')}</option>
               {companies.map(c => (
                 <option key={c.id} value={c.name}>{c.name}</option>
               ))}
@@ -271,7 +271,7 @@ export default function Settings() {
             <input type="text" value={form.address} onChange={e => handleChange('address', e.target.value)} />
           </div>
           <div className="settings-field">
-            <label>{t('settings.language')} - Time Zone</label>
+            <label>{t('settings.language')} - {t('settings.timeZone')}</label>
             <select value={form.timeZone} onChange={e => handleChange('timeZone', e.target.value)}>
               {TIMEZONES.map(tz => (
                 <option key={tz} value={tz}>{tz}</option>
@@ -287,7 +287,7 @@ export default function Settings() {
             </select>
           </div>
           <div className="settings-field">
-            <label>System Logo</label>
+            <label>{t('settings.systemLogo')}</label>
             <div className="logo-upload-area">
               {form.systemLogo ? (
                 <div className="logo-preview">
@@ -296,12 +296,12 @@ export default function Settings() {
                     try {
                       await api.delete('/api/settings/logo');
                       handleChange('systemLogo', '');
-                      addToast('Logo removed', 'success');
-                    } catch { addToast('Failed to remove logo', 'error'); }
+                      addToast(t('settings.logoRemoved'), 'success');
+                    } catch { addToast(t('settings.logoRemoveFailed'), 'error'); }
                   }}>&times;</button>
                 </div>
               ) : (
-                <div className="logo-placeholder">No logo uploaded</div>
+                <div className="logo-placeholder">{t('settings.noLogoUploaded')}</div>
               )}
               <button
                 type="button"
@@ -309,7 +309,7 @@ export default function Settings() {
                 disabled={logoUploading}
                 onClick={() => logoInputRef.current?.click()}
               >
-                {logoUploading ? 'Uploading...' : 'Choose Image'}
+                {logoUploading ? t('common.uploading') : t('settings.chooseImage')}
               </button>
               <input
                 ref={logoInputRef}
@@ -325,10 +325,10 @@ export default function Settings() {
                     fd.append('logo', file);
                     const res = await api.upload('/api/settings/logo', fd);
                     handleChange('systemLogo', res.logo);
-                    addToast('Logo uploaded', 'success');
+                    addToast(t('settings.logoUploaded'), 'success');
                   } catch (err) {
                     console.error('Logo upload error:', err);
-                    addToast('Upload failed: ' + (err.message || 'unknown error'), 'error');
+                    addToast(t('common.uploadFailed') + ': ' + (err.message || 'unknown error'), 'error');
                   } finally {
                     if (logoInputRef.current) logoInputRef.current.value = '';
                     setLogoUploading(false);
@@ -341,11 +341,11 @@ export default function Settings() {
 
         {/* Request Settings */}
         <div className="settings-card">
-          <h3>Request Settings</h3>
+          <h3>{t('settings.requestSettings')}</h3>
           <div className="settings-field">
-            <label>Default Status</label>
+            <label>{t('settings.defaultStatus')}</label>
             <select value={form.defaultStatus} onChange={e => handleChange('defaultStatus', e.target.value)}>
-              <option value="">Select Default Status</option>
+              <option value="">{t('settings.selectDefaultStatus')}</option>
               {statuses.map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
@@ -354,7 +354,7 @@ export default function Settings() {
           <div className="settings-field">
             <label>{t('settings.defaultPriority')}</label>
             <select value={form.defaultPriority} onChange={e => handleChange('defaultPriority', e.target.value)}>
-              <option value="">Select Default Priority</option>
+              <option value="">{t('settings.selectDefaultPriority')}</option>
               {priorities.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -362,8 +362,8 @@ export default function Settings() {
           </div>
           <div className="toggle-row-settings">
             <div>
-              <span className="toggle-label">Auto Request ID</span>
-              <span className="toggle-sublabel">Automatically generate request IDs</span>
+              <span className="toggle-label">{t('settings.autoRequestId')}</span>
+              <span className="toggle-sublabel">{t('settings.autoRequestIdDesc')}</span>
             </div>
             <label className="toggle">
               <input type="checkbox" checked={form.autoRequestId} onChange={e => handleChange('autoRequestId', e.target.checked)} />
@@ -377,7 +377,7 @@ export default function Settings() {
           <div className="settings-field">
             <label>{t('settings.allowedFileTypes')}</label>
             <select value={form.allowedFileTypes || ''} onChange={e => handleChange('allowedFileTypes', e.target.value)}>
-              <option value="">Select file type...</option>
+              <option value="">{t('settings.selectFileType')}</option>
               {FILE_TYPE_OPTIONS.map(ft => (
                 <option key={ft} value={ft}>.{ft}</option>
               ))}
@@ -385,8 +385,8 @@ export default function Settings() {
           </div>
           <div className="toggle-row-settings">
             <div>
-              <span className="toggle-label">Allow Rejected</span>
-              <span className="toggle-sublabel">Allow clients to reopen rejected requests</span>
+              <span className="toggle-label">{t('settings.allowReopen')}</span>
+              <span className="toggle-sublabel">{t('settings.allowReopenDesc')}</span>
             </div>
             <label className="toggle">
               <input type="checkbox" checked={form.allowReopen} onChange={e => handleChange('allowReopen', e.target.checked)} />
@@ -411,7 +411,7 @@ export default function Settings() {
           <div className="toggle-row-settings">
             <div>
               <span className="toggle-label">{t('settings.inAppNotifications')}</span>
-              <span className="toggle-sublabel">Show notifications inside the application</span>
+              <span className="toggle-sublabel">{t('settings.inAppAlertsDesc')}</span>
             </div>
             <label className="toggle">
               <input type="checkbox" checked={form.inAppNotifications} onChange={e => handleChange('inAppNotifications', e.target.checked)} />
@@ -450,8 +450,8 @@ export default function Settings() {
           </div>
           <div className="toggle-row-settings">
             <div>
-              <span className="toggle-label">Notify Client on Status Change</span>
-              <span className="toggle-sublabel">Alert clients when their request status changes</span>
+              <span className="toggle-label">{t('settings.notifyClientStatusChange')}</span>
+              <span className="toggle-sublabel">{t('settings.notifyClientStatusChangeDesc')}</span>
             </div>
             <label className="toggle">
               <input type="checkbox" checked={form.notifyClientStatusChange} onChange={e => handleChange('notifyClientStatusChange', e.target.checked)} />
@@ -460,8 +460,8 @@ export default function Settings() {
           </div>
           <div className="toggle-row-settings">
             <div>
-              <span className="toggle-label">Notify Developer on Assignment</span>
-              <span className="toggle-sublabel">Alert developers when assigned to a request</span>
+              <span className="toggle-label">{t('settings.notifyDeveloperAssignment')}</span>
+              <span className="toggle-sublabel">{t('settings.notifyDeveloperAssignmentDesc')}</span>
             </div>
             <label className="toggle">
               <input type="checkbox" checked={form.notifyDeveloperAssignment} onChange={e => handleChange('notifyDeveloperAssignment', e.target.checked)} />
@@ -477,7 +477,7 @@ export default function Settings() {
             <label>{t('settings.responseHours')}</label>
             <div className="input-with-unit">
               <input type="number" value={form.responseHours} onChange={e => handleChange('responseHours', parseInt(e.target.value) || 0)} min="1" />
-              <span className="input-unit">Hours</span>
+              <span className="input-unit">{t('settings.hours')}</span>
             </div>
             <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.responseHoursDesc')}</span>
           </div>
@@ -485,7 +485,7 @@ export default function Settings() {
             <label>{t('settings.resolutionHours')}</label>
             <div className="input-with-unit">
               <input type="number" value={form.resolutionHours} onChange={e => handleChange('resolutionHours', parseInt(e.target.value) || 0)} min="1" />
-              <span className="input-unit">Hours</span>
+              <span className="input-unit">{t('settings.hours')}</span>
             </div>
             <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.resolutionHoursDesc')}</span>
           </div>
@@ -515,7 +515,7 @@ export default function Settings() {
 <div className="settings-field">
             <label>{t('settings.weekendDays')}</label>
             <select value={form.weekendDays || ''} onChange={e => handleChange('weekendDays', e.target.value)}>
-              <option value="">Select weekend day...</option>
+              <option value="">{t('settings.selectWeekendDay')}</option>
               {DAYS_OF_WEEK.map(day => (
                 <option key={day} value={day}>{t('days.' + day)}</option>
               ))}
@@ -545,23 +545,23 @@ export default function Settings() {
             <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.passwordExpiryDesc')}</span>
           </div>
           <div className="settings-field">
-            <label>Password Length</label>
+            <label>{t('settings.passwordLength')}</label>
             <div className="input-with-unit">
               <input type="number" value={form.passwordLength} onChange={e => handleChange('passwordLength', parseInt(e.target.value) || 0)} min="4" max="64" />
-              <span className="input-unit">Characters</span>
+              <span className="input-unit">{t('settings.characters')}</span>
             </div>
           </div>
           <div className="settings-field">
             <label>{t('settings.sessionTimeout')}</label>
             <select value={form.sessionTimeout} onChange={e => handleChange('sessionTimeout', Number(e.target.value))}>
-              <option value={15}>15 Minutes</option>
-              <option value={30}>30 Minutes</option>
-              <option value={45}>45 Minutes</option>
-              <option value={60}>60 Minutes</option>
-              <option value={120}>2 Hours</option>
-              <option value={240}>4 Hours</option>
-              <option value={480}>8 Hours</option>
-              <option value={0}>Never</option>
+              <option value={15}>{t('settings.minutesN', { n: 15 })}</option>
+              <option value={30}>{t('settings.minutesN', { n: 30 })}</option>
+              <option value={45}>{t('settings.minutesN', { n: 45 })}</option>
+              <option value={60}>{t('settings.minutesN', { n: 60 })}</option>
+              <option value={120}>{t('settings.hoursN', { n: 2 })}</option>
+              <option value={240}>{t('settings.hoursN', { n: 4 })}</option>
+              <option value={480}>{t('settings.hoursN', { n: 8 })}</option>
+              <option value={0}>{t('settings.never')}</option>
             </select>
             <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.sessionTimeoutDesc')}</span>
           </div>
@@ -608,19 +608,19 @@ export default function Settings() {
 
         {/* Assignment Settings */}
         <div className="settings-card">
-          <h3>Assignment Settings</h3>
+          <h3>{t('settings.assignmentSettings')}</h3>
           <div className="settings-field">
-            <label>Assignment Mode</label>
+            <label>{t('settings.assignmentMode')}</label>
             <select value={form.assignmentMode} onChange={e => handleChange('assignmentMode', e.target.value)}>
-              <option value="group-based">Group-Based</option>
-              <option value="manual">Manual</option>
-              <option value="auto">Auto</option>
+              <option value="group-based">{t('settings.groupBased')}</option>
+              <option value="manual">{t('settings.manual')}</option>
+              <option value="auto">{t('settings.auto')}</option>
             </select>
           </div>
           <div className="settings-field">
-            <label>Default Group</label>
+            <label>{t('settings.defaultGroup')}</label>
             <select value={form.defaultGroup} onChange={e => handleChange('defaultGroup', e.target.value)}>
-              <option value="">No Default Group</option>
+              <option value="">{t('settings.noDefaultGroup')}</option>
               {groups.map(g => (
                 <option key={g.id} value={g.id}>{g.name}</option>
               ))}
@@ -666,7 +666,7 @@ export default function Settings() {
             {saving ? t('common.saving') : t('common.save')}
           </button>
           <button className="btn btn-outline" onClick={handleReset} disabled={saving} style={{ minWidth: '120px' }}>
-            Reset
+            {t('settings.reset')}
           </button>
         </div>
       </div>

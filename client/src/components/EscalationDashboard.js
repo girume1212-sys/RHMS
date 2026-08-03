@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
 import RequestCalendar from './RequestCalendar';
 
 export default function EscalationDashboard() {
+  const { t } = useTranslation();
   const [requests, setRequests] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [users, setUsers] = useState([]);
@@ -42,7 +44,7 @@ export default function EscalationDashboard() {
       setStatuses(statusesData);
       setUsers(usersData);
       setGroups(groupsData);
-    }).catch(err => setError('Failed to load data: ' + err.message));
+    }).catch(err => setError(t('common.failedToLoadData') + ' ' + err.message));
   };
 
   useEffect(() => {
@@ -84,9 +86,9 @@ export default function EscalationDashboard() {
     try {
       await api.put(`/api/requests/${requestId}`, { statusId: status.id });
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: status, assignedTo: statusName === 'New' ? null : r.assignedTo, assignee: statusName === 'New' ? null : r.assignee } : r));
-      showStatusToast(`Request #${requestId} → ${statusName}`, 'status', requestId);
+      showStatusToast(t('common.statusChangedTo', { id: requestId, status: statusName }), 'status', requestId);
     } catch (err) {
-      showStatusToast('Failed to update status: ' + err.message, 'error');
+      showStatusToast(t('common.failedToUpdateStatus') + ': ' + err.message, 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -101,9 +103,9 @@ export default function EscalationDashboard() {
       const dev = users.find(u => u.id === developerId);
       const newStatus = developerId ? statuses.find(s => s.name === 'Assigned') : statuses.find(s => s.name === 'New');
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: developerId, assignee: dev || null, status: newStatus || r.status } : r));
-      showStatusToast(`Request #${requestId} assigned to ${dev?.name || 'Unassigned'}`, 'assignment', requestId);
+      showStatusToast(t('common.assignedToName', { id: requestId, name: dev?.name || t('common.unassigned') }), 'assignment', requestId);
     } catch (err) {
-      showStatusToast('Failed to assign: ' + err.message, 'error');
+      showStatusToast(t('common.failedToAssign') + ': ' + err.message, 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -115,9 +117,9 @@ export default function EscalationDashboard() {
     try {
       await api.put(`/api/requests/${requestId}/claim`);
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: user.id, assignee: { id: user.id, name: user.name } } : r));
-      showStatusToast('Request claimed successfully', 'assignment', requestId);
+      showStatusToast(t('common.requestClaimed'), 'assignment', requestId);
     } catch (err) {
-      showStatusToast('Failed to claim: ' + err.message, 'error');
+      showStatusToast(t('common.failedToClaim') + ': ' + err.message, 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -127,10 +129,10 @@ export default function EscalationDashboard() {
     try {
       await api.delete(`/api/requests/${id}`);
       setRequests(prev => prev.filter(r => r.id !== id));
-      showStatusToast('Request deleted successfully', 'success');
+      showStatusToast(t('common.requestDeleted'), 'success');
       setDeleteTarget(null);
     } catch (err) {
-      showStatusToast('Failed to delete request: ' + err.message, 'error');
+      showStatusToast(t('common.failedToDeleteRequest') + ': ' + err.message, 'error');
       setDeleteTarget(null);
     }
   };
@@ -207,27 +209,27 @@ export default function EscalationDashboard() {
     const statusName = r.status?.name;
     const actions = [];
 
-    if (statusName === 'New') {
-      actions.push({ label: 'Claim', status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'claim' });
-      actions.push({ label: 'Assign', status: 'Assigned', color: '#8B5CF6', icon: '👥', type: 'assign' });
+if (statusName === 'New') {
+      actions.push({ label: t('common.claim'), status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'claim' });
+      actions.push({ label: t('common.assign'), status: 'Assigned', color: '#8B5CF6', icon: '👥', type: 'assign' });
     }
     if (statusName === 'Assigned') {
-      actions.push({ label: 'Start Work', status: 'In Progress', color: '#F59E0B', icon: '▶', type: 'status' });
+      actions.push({ label: t('common.startWork'), status: 'In Progress', color: '#F59E0B', icon: '▶', type: 'status' });
     }
     if (statusName === 'In Progress') {
-      actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
-      actions.push({ label: 'Waiting for Client', status: 'Waiting for Client', color: '#F97316', icon: '❓', type: 'status' });
-      actions.push({ label: 'Escalate', status: 'Escalated', color: '#EF4444', icon: '🚨', type: 'status' });
+      actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
+      actions.push({ label: t('common.waitingForClient'), status: 'Waiting for Client', color: '#F97316', icon: '❓', type: 'status' });
+      actions.push({ label: t('common.escalate'), status: 'Escalated', color: '#EF4444', icon: '🚨', type: 'status' });
     }
     if (statusName === 'Waiting for Client') {
-      actions.push({ label: 'Follow Up', status: 'In Progress', color: '#F59E0B', icon: '📞', type: 'status' });
+      actions.push({ label: t('common.followUp'), status: 'In Progress', color: '#F59E0B', icon: '📞', type: 'status' });
     }
     if (statusName === 'Escalated') {
       if (r.assignedTo === user.id) {
-        actions.push({ label: 'Handle', status: 'In Progress', color: '#F59E0B', icon: '🔧', type: 'status' });
-        actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
+        actions.push({ label: t('common.handle'), status: 'In Progress', color: '#F59E0B', icon: '🔧', type: 'status' });
+        actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: '✓', type: 'status' });
       } else {
-        actions.push({ label: 'Claim', status: 'Escalated', color: '#8B5CF6', icon: '👤', type: 'claim' });
+        actions.push({ label: t('common.claim'), status: 'Escalated', color: '#8B5CF6', icon: '👤', type: 'claim' });
       }
     }
     return actions;
@@ -261,8 +263,8 @@ export default function EscalationDashboard() {
     <div className="dashboard">
       <div className="page-header">
         <div>
-          <h1>Escalation Team Dashboard</h1>
-          <p>Welcome back, {user?.name?.split(' ')[0]}! Manage, escalate, and resolve critical requests.</p>
+          <h1>{t('dashboard.escalationDashboard')}</h1>
+          <p>{t('dashboard.escalationWelcome', { name: user?.name?.split(' ')[0] })}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start' }}>
           <RequestCalendar />
@@ -272,27 +274,27 @@ export default function EscalationDashboard() {
       {error && (
         <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '16px 20px', borderRadius: '8px', fontSize: '14px', marginBottom: '20px' }}>
           {error}
-          <button onClick={() => { setError(''); loadData(); }} style={{ marginLeft: '12px', background: '#DC2626', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 12px', cursor: 'pointer' }}>Retry</button>
+          <button onClick={() => { setError(''); loadData(); }} style={{ marginLeft: '12px', background: '#DC2626', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 12px', cursor: 'pointer' }}>{t('common.retry')}</button>
         </div>
       )}
 
       <div className="stats-grid">
-        <DevStatCard icon="📥" value={stats.newCount} label="New" color="#3B82F6" onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')} />
-        <DevStatCard icon="📋" value={stats.assigned} label="Newly Assigned" color="#8B5CF6" onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')} />
-        <DevStatCard icon="⚡" value={stats.inProgress} label="In Progress" color="#F59E0B" onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')} />
-        <DevStatCard icon="⏰" value={stats.waiting} label="Awaiting Client" color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
-        <DevStatCard icon="🚨" value={stats.escalated} label="Escalated" color="#EF4444" onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')} />
-        <DevStatCard icon="✅" value={stats.resolved} label="Resolved" color="#10B981" onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')} />
-        <DevStatCard icon="🔒" value={stats.closed} label="Closed" color="#6B7280" onClick={() => setStatusFilter(statusFilter === 'Closed' ? '' : 'Closed')} />
-        <DevStatCard icon="❌" value={stats.rejected} label="Rejected" color="#DC2626" onClick={() => setStatusFilter(statusFilter === 'Rejected' ? '' : 'Rejected')} />
+        <DevStatCard icon="📥" value={stats.newCount} label={t('common.new')} color="#3B82F6" onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')} />
+        <DevStatCard icon="📋" value={stats.assigned} label={t('common.newlyAssigned')} color="#8B5CF6" onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')} />
+        <DevStatCard icon="⚡" value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')} />
+        <DevStatCard icon="⏰" value={stats.waiting} label={t('common.awaitingClient')} color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
+        <DevStatCard icon="🚨" value={stats.escalated} label={t('common.escalated')} color="#EF4444" onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')} />
+        <DevStatCard icon="✅" value={stats.resolved} label={t('common.resolved')} color="#10B981" onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')} />
+        <DevStatCard icon="🔒" value={stats.closed} label={t('common.closed')} color="#6B7280" onClick={() => setStatusFilter(statusFilter === 'Closed' ? '' : 'Closed')} />
+        <DevStatCard icon="❌" value={stats.rejected} label={t('common.rejected')} color="#DC2626" onClick={() => setStatusFilter(statusFilter === 'Rejected' ? '' : 'Rejected')} />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
-          <span style={{ fontSize: '16px', fontWeight: 700 }}>All Requests ({filteredRequests.length})</span>
+          <span style={{ fontSize: '16px', fontWeight: 700 }}>{t('common.allRequestsCount', { count: filteredRequests.length })}</span>
           <div className="table-header-actions">
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
-              <span>Show My Tasks</span>
+              <span>{t('common.showMyTasks')}</span>
               <div
                 onClick={() => { setShowAssignedOnly(!showAssignedOnly); setPage(1); }}
                 style={{
@@ -311,19 +313,19 @@ export default function EscalationDashboard() {
               </div>
             </label>
             <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-              <option value="">All Statuses</option>
+              <option value="">{t('common.allStatuses')}</option>
               {statuses.filter(s => s.name !== 'Closed' && s.name !== 'Reopened').map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
             <select className="filter-select" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}>
-              <option value="">All Priorities</option>
-              <option value="Critical">Critical</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
+              <option value="">{t('common.allPriorities')}</option>
+              <option value="Critical">{t('priority.Critical')}</option>
+              <option value="High">{t('priority.High')}</option>
+              <option value="Medium">{t('priority.Medium')}</option>
+              <option value="Low">{t('priority.Low')}</option>
             </select>
             <div className="table-search-box">
               <span className="search-icon"></span>
-              <input type="text" placeholder="Search requests..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+              <input type="text" placeholder={t('common.searchRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
             </div>
           </div>
         </div>
@@ -332,23 +334,23 @@ export default function EscalationDashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>ID</span> {getSortIcon('id')}</th>
-                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>Request Title</span> {getSortIcon('subject')}</th>
-                <th>Assigned To</th>
-                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>Client</span> {getSortIcon('client')}</th>
-                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned Group</span> {getSortIcon('groups')}</th>
-                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>Category</span> {getSortIcon('category')}</th>
-                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>Priority</span> {getSortIcon('priority')}</th>
-                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>Status</span> {getSortIcon('status')}</th>
-                <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>Updated</span> {getSortIcon('updatedAt')}</th>
-                <th>Actions</th>
+                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')}</span> {getSortIcon('id')}</th>
+                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')}</span> {getSortIcon('subject')}</th>
+                <th>{t('common.assignedTo')}</th>
+                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')}</span> {getSortIcon('client')}</th>
+                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')}</span> {getSortIcon('groups')}</th>
+                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')}</span> {getSortIcon('category')}</th>
+                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')}</span> {getSortIcon('priority')}</th>
+                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')}</span> {getSortIcon('status')}</th>
+                <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.updated')}</span> {getSortIcon('updatedAt')}</th>
+                <th>{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {paginatedRequests.map(r => (
                 <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row" style={isReadOnly(r) ? { opacity: 0.75 } : {}}>
-                  <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
-                  <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>(read-only)</span>}</td>
+                  <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
+                  <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>({t('common.readOnly')})</span>}</td>
                   <td>
                     {r.assignee && r.status?.name !== 'New' ? (
                       <div className="assigned-user-cell">
@@ -428,7 +430,7 @@ export default function EscalationDashboard() {
               ))}
               {paginatedRequests.length === 0 && (
                 <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
-                  {displayRequests.length === 0 ? (showAssignedOnly ? 'No requests assigned to you.' : 'No requests yet.') : 'No requests match your filters.'}
+                  {displayRequests.length === 0 ? (showAssignedOnly ? t('common.noAssignedRequests') : t('common.noRequestsYet')) : t('common.noMatchFilters')}
                 </td></tr>
               )}
             </tbody>
@@ -436,13 +438,13 @@ export default function EscalationDashboard() {
         </div>
         <div className="table-footer">
           <div className="table-footer-info">
-            <span>Show</span>
+            <span>{t('common.show')}</span>
             <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
               <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={25}>25</option>
             </select>
-            <span>of {filteredRequests.length} requests</span>
+            <span>{t('common.ofRequests', { count: filteredRequests.length })}</span>
           </div>
           <div className="table-pagination">
             <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
@@ -459,13 +461,13 @@ export default function EscalationDashboard() {
       {showAssignModal && (
         <div className="modal-overlay" onClick={() => setShowAssignModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '360px' }}>
-            <h3>Assign Developer</h3>
+            <h3>{t('common.assignDeveloper')}</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '12px' }}>
               <button
                 onClick={(e) => handleAssign(e, showAssignModal, null)}
                 style={{ textAlign: 'left', padding: '8px 12px', border: 'none', background: '#FEF3C7', color: '#D97706', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
               >
-                Unassign
+                {t('common.unassign')}
               </button>
               {developers.map(dev => (
                 <button

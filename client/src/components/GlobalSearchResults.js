@@ -3,8 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { saveSearchQuery } from '../utils/searchStore';
-
-const ROLE_LABELS = { admin: 'Admin', support: 'Escalation Team', developer: 'Developer', client: 'Client' };
+import { useTranslation } from '../i18n/useTranslation';
 
 function getRoleColor(role) {
   return { admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981' }[role] || '#6B7280';
@@ -54,17 +53,18 @@ function RequestSection({ title, data, requestBase, onNavigate }) {
 }
 
 function UserSection({ data, onNavigate }) {
+  const { t } = useTranslation();
   if (!data || data.total === 0) return null;
   return (
     <div className="search-results-section">
-      <div className="search-results-section-header">Users ({data.total})</div>
+      <div className="search-results-section-header">{t('search.usersCount', { count: data.total })}</div>
       <div className="search-results-table">
         {data.items.map(u => (
           <button key={u.id} className="search-result-row" onClick={() => onNavigate('/users')}>
             <div className="search-result-row-main">
               <span className="global-search-avatar" style={{ background: getRoleColor(u.role) }}>{(u.name || '?').charAt(0)}</span>
               <span className="search-result-title">{u.name}</span>
-              <span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>{ROLE_LABELS[u.role] || u.role}</span>
+              <span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>{t('role.' + u.role)}</span>
             </div>
             <div className="search-result-row-meta">
               <span>{u.email}</span>
@@ -78,10 +78,11 @@ function UserSection({ data, onNavigate }) {
 }
 
 function GroupSection({ data, onNavigate }) {
+  const { t } = useTranslation();
   if (!data || data.total === 0) return null;
   return (
     <div className="search-results-section">
-      <div className="search-results-section-header">Groups ({data.total})</div>
+      <div className="search-results-section-header">{t('search.groupsCount', { count: data.total })}</div>
       <div className="search-results-table">
         {data.items.map(g => (
           <button key={g.id} className="search-result-row" onClick={() => onNavigate('/groups')}>
@@ -91,7 +92,7 @@ function GroupSection({ data, onNavigate }) {
             </div>
             <div className="search-result-row-meta">
               <span>{g.company_name || '—'}</span>
-              <span>{g.memberCount || 0} member(s)</span>
+              <span>{t('search.memberCount', { count: g.memberCount || 0 })}</span>
             </div>
           </button>
         ))}
@@ -104,6 +105,7 @@ export default function GlobalSearchResults({ clientMode = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const q = searchParams.get('q') || '';
   const type = searchParams.get('type') || 'all';
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
@@ -126,16 +128,16 @@ export default function GlobalSearchResults({ clientMode = false }) {
     const effectivePage = type === 'all' ? 1 : page;
     api.get(`/api/search?q=${encodeURIComponent(q)}&type=${type}&page=${effectivePage}&limit=10`)
       .then(setData)
-      .catch(err => setError('Failed to search: ' + err.message))
+      .catch(err => setError(t('search.failedSearch') + ': ' + err.message))
       .finally(() => setLoading(false));
   }, [q, type, page]);
 
   const availableTypes = [
-    { key: 'all', label: 'All Results' },
-    { key: 'requests', label: 'Requests' },
+    { key: 'all', label: t('search.allResults') },
+    { key: 'requests', label: t('search.requests') },
     ...(isAdmin ? [
-      { key: 'users', label: 'Users' },
-      { key: 'groups', label: 'Groups' }
+      { key: 'users', label: t('search.users') },
+      { key: 'groups', label: t('search.groups') }
     ] : [])
   ];
 
@@ -154,12 +156,12 @@ export default function GlobalSearchResults({ clientMode = false }) {
       <div className="page-container">
         <div className="page-header">
           <div>
-            <h1>Search</h1>
-            <p>Search across requests, users, and groups</p>
+            <h1>{t('search.title')}</h1>
+            <p>{t('search.subtitle')}</p>
           </div>
         </div>
         <div className="chart-card">
-          <div className="empty-state">Type a keyword in the search bar above to find records.</div>
+          <div className="empty-state">{t('search.emptyPrompt')}</div>
         </div>
       </div>
     );
@@ -184,8 +186,8 @@ export default function GlobalSearchResults({ clientMode = false }) {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1>Search Results</h1>
-          <p>Results for "{q}"</p>
+          <h1>{t('search.resultsTitle')}</h1>
+          <p>{t('search.resultsFor', { query: q })}</p>
         </div>
       </div>
 
@@ -208,12 +210,12 @@ export default function GlobalSearchResults({ clientMode = false }) {
       ) : (
         <div className="chart-card">
           {!hasAnyResults ? (
-            <div className="empty-state">No matching records found</div>
+            <div className="empty-state">{t('search.noResults')}</div>
           ) : (
             <>
               {type === 'all' ? (
                 <>
-                  <RequestSection title="Requests" data={requestsSection} requestBase={requestBase} onNavigate={onNavigate} />
+                  <RequestSection title={t('search.requests')} data={requestsSection} requestBase={requestBase} onNavigate={onNavigate} />
                   <UserSection data={usersSection} onNavigate={onNavigate} />
                   <GroupSection data={groupsSection} onNavigate={onNavigate} />
                 </>
@@ -222,7 +224,7 @@ export default function GlobalSearchResults({ clientMode = false }) {
               ) : type === 'groups' ? (
                 <GroupSection data={groupsSection} onNavigate={onNavigate} />
               ) : (
-                <RequestSection title={`Requests (${sectionTotal})`} data={requestsSection} requestBase={requestBase} onNavigate={onNavigate} />
+                <RequestSection title={t('search.requests')} data={requestsSection} requestBase={requestBase} onNavigate={onNavigate} />
               )}
               {type !== 'all' && (
                 <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />

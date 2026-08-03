@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { api, API_BASE } from './api';
+import { useLanguage } from './i18n/LanguageContext';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const { changeLanguage } = useLanguage();
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('rhms_token'));
   const [loading, setLoading] = useState(true);
@@ -85,6 +87,7 @@ export function AuthProvider({ children }) {
       if (!res.ok) throw new Error();
       const data = await res.json();
       setUser(data);
+      if (data.language) changeLanguage(data.language);
       setLoading(false);
     } catch {
       localStorage.removeItem('rhms_token');
@@ -92,7 +95,7 @@ export function AuthProvider({ children }) {
       setUser(null);
       setLoading(false);
     }
-  }, []);
+  }, [changeLanguage]);
 
   useEffect(() => {
     if (token) {
@@ -119,6 +122,7 @@ export function AuthProvider({ children }) {
     if (data.user?.sessionTimeout) {
       localStorage.setItem('rhms_sessionTimeout', String(data.user.sessionTimeout));
     }
+    if (data.user?.language) changeLanguage(data.user.language);
     setUser(data.user);
     setToken(data.token);
     setLoading(false);

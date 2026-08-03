@@ -2,16 +2,18 @@ import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRe
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
 
 const RequestsTable = forwardRef(function RequestsTable({
   user,
-  title = 'All Requests',
+  title,
   basePath = '',
   emptyMessage,
   initialFilter = {},
   onDataChange
 }, ref) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const isClient = user?.role === 'client';
   const isDeveloper = user?.role === 'developer';
   const isSupport = user?.role === 'support';
@@ -49,7 +51,7 @@ const RequestsTable = forwardRef(function RequestsTable({
       setError('');
       setLoading(false);
     }).catch(err => {
-      setError('Failed to load requests: ' + err.message);
+      setError(t('common.failedToLoadRequests') + ' ' + err.message);
       setLoading(false);
     });
   }, []);
@@ -107,10 +109,10 @@ const RequestsTable = forwardRef(function RequestsTable({
     try {
       await api.delete(`/api/requests/${id}`);
       setRequests(prev => prev.filter(r => r.id !== id));
-      showStatusToast(`Request #${id} deleted`, 'request_deleted', id);
+      showStatusToast(t('common.requestDeletedWithId', { id }), 'request_deleted', id);
       setDeleteTarget(null);
     } catch (err) {
-      showStatusToast('Failed to delete request: ' + err.message, 'error');
+      showStatusToast(t('common.failedToDeleteRequest') + ': ' + err.message, 'error');
       setDeleteTarget(null);
     }
   };
@@ -127,9 +129,9 @@ const RequestsTable = forwardRef(function RequestsTable({
       await api.put(`/api/requests/${requestId}/claim`);
       const assignedStatus = statuses.find(s => s.name === 'Assigned');
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: user.id, assignee: { id: user.id, name: user.name }, status: assignedStatus || r.status, statusId: '2' } : r));
-      showStatusToast('Request claimed successfully', 'assignment', requestId);
+      showStatusToast(t('common.requestClaimed'), 'assignment', requestId);
     } catch (err) {
-      showStatusToast('Failed to claim: ' + err.message, 'error');
+      showStatusToast(t('common.failedToClaim') + ': ' + err.message, 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -143,9 +145,9 @@ const RequestsTable = forwardRef(function RequestsTable({
     try {
       await api.put(`/api/requests/${requestId}`, { statusId: status.id });
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status, statusId: status.id, assignedTo: statusName === 'New' ? null : r.assignedTo, assignee: statusName === 'New' ? null : r.assignee } : r));
-      showStatusToast(`Request #${requestId} marked as ${statusName}`, 'status', requestId);
+      showStatusToast(t('common.requestMarkedStatus', { id: requestId, status: statusName }), 'status', requestId);
     } catch (err) {
-      showStatusToast('Failed to update status: ' + err.message, 'error');
+      showStatusToast(t('common.failedToUpdateStatus') + ': ' + err.message, 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -156,14 +158,14 @@ const RequestsTable = forwardRef(function RequestsTable({
     const statusName = r.status?.name;
     const actions = [];
     if (statusName === 'New') {
-      actions.push({ label: 'Claim', status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'claim' });
+      actions.push({ label: t('common.claim'), status: 'Assigned', color: '#8B5CF6', icon: '👤', type: 'claim' });
     }
     if (statusName === 'Assigned') {
-      actions.push({ label: 'Start Work', status: 'In Progress', color: '#F59E0B', icon: '▶' });
+      actions.push({ label: t('common.startWork'), status: 'In Progress', color: '#F59E0B', icon: '▶' });
     }
     if (statusName === 'In Progress') {
-      actions.push({ label: 'Resolve', status: 'Resolved', color: '#10B981', icon: '✓' });
-      actions.push({ label: 'Waiting for Client', status: 'Waiting for Client', color: '#F97316', icon: '❓' });
+      actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: '✓' });
+      actions.push({ label: t('common.waitingForClient'), status: 'Waiting for Client', color: '#F97316', icon: '❓' });
     }
     return actions;
   };
@@ -238,7 +240,7 @@ const RequestsTable = forwardRef(function RequestsTable({
       {error && (
         <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', margin: '16px', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>{error}</span>
-          <button onClick={() => { setError(''); loadData(); }} style={{ background: '#DC2626', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 12px', cursor: 'pointer' }}>Retry</button>
+          <button onClick={() => { setError(''); loadData(); }} style={{ background: '#DC2626', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 12px', cursor: 'pointer' }}>{t('common.retry')}</button>
         </div>
       )}
       {loading ? (
@@ -246,11 +248,11 @@ const RequestsTable = forwardRef(function RequestsTable({
       ) : (
         <>
           <div className="table-header-bar">
-            <h3>{showMyTasks ? 'My Requests' : title} ({filteredRequests.length})</h3>
+            <h3>{showMyTasks ? t('common.myRequests') : (title || t('common.allRequests'))} ({filteredRequests.length})</h3>
             <div className="table-header-actions">
               {(isDeveloper || isSupport) && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
-                  <span>Show My Tasks</span>
+                  <span>{t('common.showMyTasks')}</span>
                   <div
                     onClick={() => { setShowMyTasks(!showMyTasks); setPage(1); }}
                     style={{
@@ -270,20 +272,20 @@ const RequestsTable = forwardRef(function RequestsTable({
                 </label>
               )}
               <select className="filter-select" value={filter.priority} onChange={(e) => { setFilter(f => ({ ...f, priority: e.target.value })); setPage(1); }}>
-                <option value="">All Priorities</option>
+                <option value="">{t('common.allPriorities')}</option>
                 {priorities.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
               </select>
               <select className="filter-select" value={filter.category} onChange={(e) => { setFilter(f => ({ ...f, category: e.target.value })); setPage(1); }}>
-                <option value="">All Categories</option>
+                <option value="">{t('common.allCategories')}</option>
                 {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
               <select className="filter-select" value={filter.status} onChange={(e) => { setFilter(f => ({ ...f, status: e.target.value })); setPage(1); }}>
-                <option value="">All Statuses</option>
+                <option value="">{t('common.allStatuses')}</option>
                 {statuses.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
               </select>
               <div className="table-search-box">
                 <span className="search-icon">🔍</span>
-                <input type="text" placeholder="Search requests..." value={filter.search} onChange={(e) => { setFilter(f => ({ ...f, search: e.target.value })); setPage(1); }} />
+                <input type="text" placeholder={t('common.searchRequests')} value={filter.search} onChange={(e) => { setFilter(f => ({ ...f, search: e.target.value })); setPage(1); }} />
               </div>
             </div>
           </div>
@@ -292,28 +294,28 @@ const RequestsTable = forwardRef(function RequestsTable({
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>ID</span> {getSortIcon('id')}</th>
-                  <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>Request Title</span> {getSortIcon('subject')}</th>
-                  {!isClient && <th className="sortable"><span onClick={() => handleSort('assignee')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned To</span> {getSortIcon('assignee')}</th>}
-                  {!isClient && <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>Client</span> {getSortIcon('client')}</th>}
-                  {!isClient && <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned Group</span> {getSortIcon('groups')}</th>}
-                  <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>Category</span> {getSortIcon('category')}</th>
-                  <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>Priority</span> {getSortIcon('priority')}</th>
-                  <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>Status</span> {getSortIcon('status')}</th>
-                  <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>Updated</span> {getSortIcon('updatedAt')}</th>
-                  <th>Actions</th>
+                  <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')}</span> {getSortIcon('id')}</th>
+                  <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')}</span> {getSortIcon('subject')}</th>
+                  {!isClient && <th className="sortable"><span onClick={() => handleSort('assignee')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedTo')}</span> {getSortIcon('assignee')}</th>}
+                  {!isClient && <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')}</span> {getSortIcon('client')}</th>}
+                  {!isClient && <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')}</span> {getSortIcon('groups')}</th>}
+                  <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')}</span> {getSortIcon('category')}</th>
+                  <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')}</span> {getSortIcon('priority')}</th>
+                  <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')}</span> {getSortIcon('status')}</th>
+                  <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.updated')}</span> {getSortIcon('updatedAt')}</th>
+                  <th>{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {paginated.length === 0 && (
                   <tr><td colSpan={colSpan} style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
-                    {displayRequests.length === 0 ? (showMyTasks ? 'No requests assigned to you.' : (emptyMessage || 'No requests yet.')) : 'No requests match your filters.'}
+                    {displayRequests.length === 0 ? (showMyTasks ? t('common.noAssignedRequests') : (emptyMessage || t('common.noRequestsYet'))) : t('common.noMatchFilters')}
                   </td></tr>
                 )}
                 {paginated.map(r => (
                   <tr key={r.id} onClick={() => navigate(`${basePath}/requests/${r.id}`)} className="clickable-row" style={isReadOnly(r) ? { opacity: 0.75 } : {}}>
-                    <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
-                    <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>(read-only)</span>}</td>
+                    <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
+                    <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>({t('common.readOnly')})</span>}</td>
                     {!isClient && (
                       <td>
                         {r.assignee && r.status?.name !== 'New' ? (
@@ -343,7 +345,7 @@ const RequestsTable = forwardRef(function RequestsTable({
                     <td>
                       <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                         {isReadOnly(r) ? (
-                          <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>Read only</span>
+                          <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>{t('common.readOnly')}</span>
                         ) : isDeveloper ? (
                           quickActions(r).map((action, i) =>
                             action.type === 'claim' ? (
@@ -358,13 +360,13 @@ const RequestsTable = forwardRef(function RequestsTable({
                           )
                         ) : user?.role === 'admin' && (r.statusId === '1' || r.statusId === '2') ? (
                           <>
-                            <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
-                            <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>Delete</button>
+                            <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>{t('common.edit')}</button>
+                            <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>{t('common.delete')}</button>
                           </>
                         ) : isClient && r.statusId === '1' ? (
                           <>
-                            <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
-                            <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>Delete</button>
+                            <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>{t('common.edit')}</button>
+                            <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>{t('common.delete')}</button>
                           </>
                         ) : (
                           <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>—</span>
@@ -379,13 +381,13 @@ const RequestsTable = forwardRef(function RequestsTable({
 
           <div className="table-footer">
             <div className="table-footer-info">
-              <span>Show</span>
+              <span>{t('common.show')}</span>
               <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={25}>25</option>
               </select>
-              <span>of {filteredRequests.length} requests</span>
+              <span>{t('common.ofRequests', { count: filteredRequests.length })}</span>
             </div>
             <div className="table-pagination">
               <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
@@ -403,10 +405,10 @@ const RequestsTable = forwardRef(function RequestsTable({
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this request?</p>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>{t('common.deleteRequestConfirm')}</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
-              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.delete')}</button>
             </div>
           </div>
         </div>

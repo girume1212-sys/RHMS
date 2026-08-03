@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
 
 const roleColors = {
   admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981'
@@ -17,6 +18,8 @@ export default function Feedback() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sort, setSort] = useState({ key: 'created_at', dir: 'desc' });
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const { t } = useTranslation();
 
   const addToast = useCallback((message, type = 'success') => {
     setToasts(prev => [...prev, { id: Date.now(), message, type }]);
@@ -34,19 +37,19 @@ export default function Feedback() {
     api.get('/api/feedback').then(data => {
       setFeedback(data);
       setLoading(false);
-    }).catch(err => { setError('Failed to load feedback: ' + err.message); setLoading(false); });
+    }).catch(err => { setError(t('feedback.loadFailed') + ': ' + err.message); setLoading(false); });
   };
 
   const handleDelete = async (id) => {
     try {
       await api.delete(`/api/feedback/${id}`);
       loadFeedback();
-      addToast('Feedback deleted successfully!');
-      showStatusToast('Feedback deleted', 'request_deleted');
+      addToast(t('feedback.deletedSuccess'));
+      showStatusToast(t('feedback.deleted'), 'request_deleted');
       setDeleteTarget(null);
     } catch (err) {
-      setError('Failed to delete feedback: ' + err.message);
-      addToast('Failed to delete feedback: ' + err.message, 'error');
+      setError(t('feedback.deleteFailed') + ': ' + err.message);
+      addToast(t('feedback.deleteFailed') + ': ' + err.message, 'error');
       setDeleteTarget(null);
     }
   };
@@ -121,9 +124,9 @@ export default function Feedback() {
 
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← Back</button>
-          <h1>Feedback</h1>
-          <p>View all user ratings and feedback on resolved requests</p>
+          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <h1>{t('feedback.title')}</h1>
+          <p>{t('feedback.subtitle')}</p>
         </div>
       </div>
 
@@ -140,8 +143,8 @@ export default function Feedback() {
           textAlign: 'center', padding: '60px 24px', color: '#94a3b8'
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>⭐</div>
-          <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px', color: '#64748b' }}>No Feedback Yet</h3>
-          <p style={{ fontSize: '14px' }}>Feedback will appear here once users rate resolved requests.</p>
+          <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px', color: '#64748b' }}>{t('feedback.noFeedbackYet')}</h3>
+          <p style={{ fontSize: '14px' }}>{t('feedback.noFeedbackDesc')}</p>
         </div>
       ) : (
         <>
@@ -150,23 +153,23 @@ export default function Feedback() {
             gap: '16px', marginBottom: '24px'
           }}>
             <div className="chart-card" style={{ textAlign: 'center', padding: '24px' }}>
-              <div className="feedback-label">Average Rating</div>
+              <div className="feedback-label">{t('feedback.averageRating')}</div>
               <div style={{ fontSize: '36px', fontWeight: 700, color: '#F59E0B', lineHeight: 1 }}>
                 {avgRating}
               </div>
               <div style={{ marginTop: '6px' }}>{renderStars(Math.round(parseFloat(avgRating)))}</div>
             </div>
             <div className="chart-card" style={{ textAlign: 'center', padding: '24px' }}>
-              <div className="feedback-label">Total Feedback</div>
+              <div className="feedback-label">{t('feedback.totalFeedback')}</div>
               <div style={{ fontSize: '36px', fontWeight: 700, color: '#3B82F6', lineHeight: 1 }}>
                 {feedback.length}
               </div>
               <div className="feedback-label" style={{ marginTop: '6px' }}>
-                {feedback.filter(f => f.comment).length} with comments
+                {t('feedback.withComments', { count: feedback.filter(f => f.comment).length })}
               </div>
             </div>
             <div className="chart-card" style={{ padding: '24px' }}>
-              <div className="feedback-label" style={{ marginBottom: '12px' }}>Rating Distribution</div>
+              <div className="feedback-label" style={{ marginBottom: '12px' }}>{t('feedback.ratingDistribution')}</div>
               {[5, 4, 3, 2, 1].map(star => {
                 const count = distribution[star - 1];
                 const pct = (count / maxDist) * 100;
@@ -193,11 +196,11 @@ export default function Feedback() {
 
           <div className="chart-card">
             <div className="table-header-bar">
-              <h3>Feedback ({filtered.length})</h3>
+              <h3>{t('feedback.listCount', { count: filtered.length })}</h3>
               <div className="table-header-actions">
                 <div className="table-search-box">
                   <span className="search-icon"></span>
-                  <input type="text" placeholder="Search feedback..." value={searchQuery}
+                  <input type="text" placeholder={t('feedback.searchPlaceholder')} value={searchQuery}
                     onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
                 </div>
               </div>
@@ -209,17 +212,17 @@ export default function Feedback() {
                   <tr>
                     <th style={{ width: '40px' }}>#</th>
                     <th onClick={() => handleSort('rating')} style={{ cursor: 'pointer' }}>
-                      Rating {getSortIcon('rating')}
+                      {t('feedback.rating')} {getSortIcon('rating')}
                     </th>
-                    <th>Comment</th>
+                    <th>{t('feedback.comment')}</th>
                     <th onClick={() => handleSort('user_name')} style={{ cursor: 'pointer' }}>
-                      User {getSortIcon('user_name')}
+                      {t('common.user')} {getSortIcon('user_name')}
                     </th>
-                    <th>Request</th>
+                    <th>{t('common.request')}</th>
                     <th onClick={() => handleSort('created_at')} style={{ cursor: 'pointer' }}>
-                      Date {getSortIcon('created_at')}
+                      {t('common.date')} {getSortIcon('created_at')}
                     </th>
-                    <th style={{ width: '80px' }}>Actions</th>
+                    <th style={{ width: '80px' }}>{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -235,7 +238,7 @@ export default function Feedback() {
                             "{f.comment}"
                           </span>
                         ) : (
-                          <span className="feedback-no-comment">No comment</span>
+                          <span className="feedback-no-comment">{t('feedback.noComment')}</span>
                         )}
                       </td>
                       <td>
@@ -249,7 +252,7 @@ export default function Feedback() {
                             {f.user_name ? f.user_name.charAt(0).toUpperCase() : '?'}
                           </div>
                           <span className="feedback-cell-muted" style={{ fontWeight: 500 }}>
-                            {f.user_name || <span className="feedback-no-comment">Anonymous</span>}
+                            {f.user_name || <span className="feedback-no-comment">{t('feedback.anonymous')}</span>}
                           </span>
                         </div>
                       </td>
@@ -281,7 +284,7 @@ export default function Feedback() {
                         <button className="action-btn-text delete"
                           onClick={() => setDeleteTarget(f)}
                           style={{ fontSize: '12px' }}>
-                          Delete
+                          {t('common.delete')}
                         </button>
                       </td>
                     </tr>
@@ -289,7 +292,7 @@ export default function Feedback() {
                   {paginated.length === 0 && (
                     <tr>
                       <td colSpan="7" style={{ textAlign: 'center', padding: '32px' }}>
-                        <span className="feedback-no-comment">No feedback matching "{searchQuery}"</span>
+                        <span className="feedback-no-comment">{t('feedback.noMatch', { query: searchQuery })}</span>
                       </td>
                     </tr>
                   )}
@@ -299,14 +302,14 @@ export default function Feedback() {
 
             <div className="table-footer">
               <div className="table-footer-info">
-                <span>Show</span>
+                <span>{t('common.show')}</span>
                 <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
                   <option value={5}>5</option>
                   <option value={10}>10</option>
                   <option value={25}>25</option>
                   <option value={50}>50</option>
                 </select>
-                <span>of {filtered.length} feedback</span>
+                <span>{t('feedback.ofCount', { count: filtered.length })}</span>
               </div>
               <div className="table-pagination">
                 <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
@@ -333,14 +336,14 @@ export default function Feedback() {
           <div className="modal" onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: '400px', textAlign: 'center' }}>
             <p style={{ color: '#fff', fontSize: '17px', lineHeight: 1.6, margin: '28px 24px 24px' }}>
-              Are you sure you want to delete this feedback?
+              {t('feedback.deleteConfirm')}
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 28px' }}>
               <button className="btn btn-outline" onClick={() => setDeleteTarget(null)}
-                style={{ padding: '10px 24px' }}>Cancel</button>
+                style={{ padding: '10px 24px' }}>{t('common.cancel')}</button>
               <button className="btn btn-danger" onClick={() => handleDelete(deleteTarget.id)}
                 style={{ padding: '10px 24px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>
-                Delete
+                {t('common.delete')}
               </button>
             </div>
           </div>

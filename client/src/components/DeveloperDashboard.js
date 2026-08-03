@@ -1,10 +1,12 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
+import { useTranslation } from '../i18n/useTranslation';
 import RequestsTable from './RequestsTable';
 import RequestCalendar from './RequestCalendar';
 
 export default function DeveloperDashboard() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const tableRef = useRef();
   const [shared, setShared] = useState({ requests: [], statuses: [], showMyTasks: false, filter: { status: '' } });
 
@@ -58,9 +60,9 @@ export default function DeveloperDashboard() {
     <div className="dashboard">
       <div className="page-header">
         <div>
-          <h1>Developer Workspace</h1>
-          <p>Welcome back, {user?.name?.split(' ')[0]}! View and manage all group requests.</p>
-          <h3 style={{ marginTop: '8px', marginBottom: 0 }}>All Requests</h3>
+          <h1>{t('dashboard.developerWorkspace')}</h1>
+          <p>{t('dashboard.developerWelcome', { name: user?.name?.split(' ')[0] })}</p>
+          <h3 style={{ marginTop: '8px', marginBottom: 0 }}>{t('common.allRequests')}</h3>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start' }}>
           <RequestCalendar />
@@ -68,18 +70,18 @@ export default function DeveloperDashboard() {
       </div>
 
       <div className="stats-grid">
-        <DevStatCard icon="📥" value={stats.newCount} label="New" color="#3B82F6" onClick={() => toggleStatusFilter('New')} />
-        <DevStatCard icon="📋" value={stats.assigned} label="Newly Assigned" color="#8B5CF6" onClick={() => toggleStatusFilter('Assigned')} />
-        <DevStatCard icon="⚡" value={stats.inProgress} label="In Progress" color="#F59E0B" onClick={() => toggleStatusFilter('In Progress')} />
-        <DevStatCard icon="⏰" value={stats.waiting} label="Awaiting Client" color="#F97316" onClick={() => toggleStatusFilter('Waiting for Client')} />
-        <DevStatCard icon="🚨" value={stats.escalated} label="Escalated" color="#EF4444" onClick={() => toggleStatusFilter('Escalated')} />
-        <DevStatCard icon="✅" value={stats.resolved} label="Resolved" color="#10B981" onClick={() => toggleStatusFilter('Resolved')} />
-        <DevStatCard icon="🔒" value={stats.closed} label="Closed" color="#6B7280" onClick={() => toggleStatusFilter('Closed')} />
-        <DevStatCard icon="❌" value={stats.rejected} label="Rejected" color="#DC2626" onClick={() => toggleStatusFilter('Rejected')} />
+        <DevStatCard icon="📥" value={stats.newCount} label={t('common.new')} color="#3B82F6" onClick={() => toggleStatusFilter('New')} />
+        <DevStatCard icon="📋" value={stats.assigned} label={t('common.newlyAssigned')} color="#8B5CF6" onClick={() => toggleStatusFilter('Assigned')} />
+        <DevStatCard icon="⚡" value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => toggleStatusFilter('In Progress')} />
+        <DevStatCard icon="⏰" value={stats.waiting} label={t('common.awaitingClient')} color="#F97316" onClick={() => toggleStatusFilter('Waiting for Client')} />
+        <DevStatCard icon="🚨" value={stats.escalated} label={t('common.escalated')} color="#EF4444" onClick={() => toggleStatusFilter('Escalated')} />
+        <DevStatCard icon="✅" value={stats.resolved} label={t('common.resolved')} color="#10B981" onClick={() => toggleStatusFilter('Resolved')} />
+        <DevStatCard icon="🔒" value={stats.closed} label={t('common.closed')} color="#6B7280" onClick={() => toggleStatusFilter('Closed')} />
+        <DevStatCard icon="❌" value={stats.rejected} label={t('common.rejected')} color="#DC2626" onClick={() => toggleStatusFilter('Rejected')} />
       </div>
 
       <div style={{ marginTop: '24px' }}>
-        <RequestsTable ref={tableRef} user={user} title="All Requests" onDataChange={handleDataChange} />
+        <RequestsTable ref={tableRef} user={user} title={t('common.allRequests')} onDataChange={handleDataChange} />
       </div>
     </div>
   );

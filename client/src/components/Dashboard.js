@@ -4,21 +4,22 @@ import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { PieChart, Pie, Cell, LineChart, Line, BarChart, Bar, Rectangle, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
 import RequestCalendar from './RequestCalendar';
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
 const STATUS_CONFIG = [
-  { key: 'New', label: 'New', color: '#3B82F6' },
-  { key: 'Assigned', label: 'Assigned', color: '#8B5CF6' },
-  { key: 'In Progress', label: 'In Progress', color: '#F59E0B' },
-  { key: 'Waiting for Client', label: 'Waiting', color: '#F97316' },
-  { key: 'Resolved', label: 'Resolved', color: '#10B981' },
-  { key: 'Closed', label: 'Closed', color: '#6B7280' },
-  { key: 'Escalated', label: 'Escalated', color: '#EF4444' },
+  { key: 'New', color: '#3B82F6' },
+  { key: 'Assigned', color: '#8B5CF6' },
+  { key: 'In Progress', color: '#F59E0B' },
+  { key: 'Waiting for Client', color: '#F97316' },
+  { key: 'Resolved', color: '#10B981' },
+  { key: 'Closed', color: '#6B7280' },
+  { key: 'Escalated', color: '#EF4444' },
 ];
 
-function StatCard({ icon, value, label, change, changeType, color, onClick }) {
+function StatCard({ icon, value, label, change, changeType, color, onClick, changeLabel }) {
   const [hover, setHover] = useState(false);
   return (
     <div className="stat-card"
@@ -38,7 +39,7 @@ function StatCard({ icon, value, label, change, changeType, color, onClick }) {
         <h3>{value}</h3>
         <p>{label}</p>
         <span className={`stat-change ${changeType}`}>
-          {changeType === 'up' ? '↑' : '↓'} {change} from last week
+          {changeType === 'up' ? '↑' : '↓'} {change} {changeLabel}
         </span>
       </div>
     </div>
@@ -48,6 +49,7 @@ function StatCard({ icon, value, label, change, changeType, color, onClick }) {
 const PERF_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16'];
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const [stats, setStats] = useState(null);
   const [recentRequests, setRecentRequests] = useState([]);
   const [error, setError] = useState('');
@@ -61,23 +63,24 @@ export default function Dashboard() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const changeLabel = t('common.fromLastWeek');
 
   useEffect(() => {
-    api.get('/api/dashboard/stats').then(setStats).catch(err => setError('Failed to load dashboard stats: ' + err.message));
+    api.get('/api/dashboard/stats').then(setStats).catch(err => setError(t('common.failedToLoadDashboard') + ' ' + err.message));
     api.get('/api/requests').then(data => {
       let filtered = data;
       if (user?.role === 'developer' || user?.role === 'support') {
         filtered = data.filter(r => r.assignedTo === user.id || !r.assignedTo);
       }
       setRecentRequests(filtered);
-    }).catch(err => setError('Failed to load requests: ' + err.message));
+    }).catch(err => setError(t('common.failedToLoadRequests') + ' ' + err.message));
     api.get('/api/dashboard/performance?days=30').then(setPerfData).catch(err => console.error('Perf fetch error:', err));
   }, [user]);
 
   if (!stats && !error) return <div className="loading-screen"><div className="spinner"></div></div>;
   if (error && !stats) return (
     <div className="dashboard">
-      <div className="page-header"><div><h1>{user?.role === 'developer' ? 'My Tasks' : user?.role === 'support' ? 'My Tasks' : 'Dashboard'}</h1><p>Welcome back, {user?.name?.split(' ')[0]}!</p></div><div style={{ display: 'flex', alignItems: 'flex-start' }}><RequestCalendar /></div></div>
+      <div className="page-header"><div><h1>{user?.role === 'developer' || user?.role === 'support' ? t('common.myTasks') : t('common.dashboard')}</h1><p>{t('common.welcomeBack', { name: user?.name?.split(' ')[0] })}</p></div><div style={{ display: 'flex', alignItems: 'flex-start' }}><RequestCalendar /></div></div>
       <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '16px 20px', borderRadius: '8px', fontSize: '14px' }}>{error}</div>
     </div>
   );
@@ -102,10 +105,10 @@ export default function Dashboard() {
     try {
       await api.delete(`/api/requests/${id}`);
       setRecentRequests(prev => prev.filter(r => r.id !== id));
-      showStatusToast('Request deleted successfully', 'success');
+      showStatusToast(t('common.requestDeleted'), 'success');
       setDeleteTarget(null);
     } catch (err) {
-      showStatusToast('Failed to delete request', 'error');
+      showStatusToast(t('common.failedToDeleteRequest'), 'error');
       setDeleteTarget(null);
     }
   };
@@ -171,8 +174,8 @@ export default function Dashboard() {
     <div className="dashboard">
       <div className="page-header">
         <div>
-          <h1>{user?.role === 'developer' || user?.role === 'support' ? 'My Tasks' : 'Dashboard'}</h1>
-          <p>Welcome back, {user?.name?.split(' ')[0]}!</p>
+          <h1>{user?.role === 'developer' || user?.role === 'support' ? t('common.myTasks') : t('common.dashboard')}</h1>
+          <p>{t('common.welcomeBack', { name: user?.name?.split(' ')[0] })}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start' }}>
           <RequestCalendar />
@@ -180,19 +183,19 @@ export default function Dashboard() {
       </div>
 
       <div className="stats-grid">
-        <StatCard icon="📋" value={stats.total} label="Total Requests" change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} color="#3B82F6" onClick={() => navigate('/requests')} />
-        <StatCard icon="📂" value={stats.open} label="New Requests" change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} color="#10B981" onClick={() => navigate('/requests?status=1')} />
-        <StatCard icon="⏳" value={stats.inProgress} label="In Progress" change={getChangePercent(stats.inProgress, stats.inProgressLastWeek).text} changeType={getChangePercent(stats.inProgress, stats.inProgressLastWeek).type} color="#F59E0B" onClick={() => navigate('/requests?status=3')} />
-        <StatCard icon="⏰" value={stats.waiting} label="Waiting for Client" change={getChangePercent(stats.waiting, stats.waitingLastWeek).text} changeType={getChangePercent(stats.waiting, stats.waitingLastWeek).type} color="#F97316" onClick={() => navigate('/requests?status=4')} />
-        <StatCard icon="✅" value={stats.resolved} label="Resolved" change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} color="#8B5CF6" onClick={() => navigate('/requests?status=5')} />
-        <StatCard icon="🚨" value={stats.escalated} label="Escalated" change={getChangePercent(stats.escalated, stats.escalatedLastWeek).text} changeType={getChangePercent(stats.escalated, stats.escalatedLastWeek).type} color="#EF4444" onClick={() => navigate('/requests?status=9')} />
-        <StatCard icon="📁" value={stats.closed} label="Closed" change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} color="#6B7280" onClick={() => navigate('/requests?status=6')} />
-        <StatCard icon="❌" value={stats.rejected} label="Rejected" change={getChangePercent(stats.rejected, stats.rejectedLastWeek).text} changeType={getChangePercent(stats.rejected, stats.rejectedLastWeek).type} color="#DC2626" onClick={() => navigate('/requests?status=8')} />
+        <StatCard icon="📋" value={stats.total} label={t('common.totalRequests')} change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} changeLabel={changeLabel} color="#3B82F6" onClick={() => navigate('/requests')} />
+        <StatCard icon="📂" value={stats.open} label={t('common.newRequests')} change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} changeLabel={changeLabel} color="#10B981" onClick={() => navigate('/requests?status=1')} />
+        <StatCard icon="⏳" value={stats.inProgress} label={t('common.inProgress')} change={getChangePercent(stats.inProgress, stats.inProgressLastWeek).text} changeType={getChangePercent(stats.inProgress, stats.inProgressLastWeek).type} changeLabel={changeLabel} color="#F59E0B" onClick={() => navigate('/requests?status=3')} />
+        <StatCard icon="⏰" value={stats.waiting} label={t('common.waitingForClient')} change={getChangePercent(stats.waiting, stats.waitingLastWeek).text} changeType={getChangePercent(stats.waiting, stats.waitingLastWeek).type} changeLabel={changeLabel} color="#F97316" onClick={() => navigate('/requests?status=4')} />
+        <StatCard icon="✅" value={stats.resolved} label={t('common.resolved')} change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} changeLabel={changeLabel} color="#8B5CF6" onClick={() => navigate('/requests?status=5')} />
+        <StatCard icon="🚨" value={stats.escalated} label={t('common.escalated')} change={getChangePercent(stats.escalated, stats.escalatedLastWeek).text} changeType={getChangePercent(stats.escalated, stats.escalatedLastWeek).type} changeLabel={changeLabel} color="#EF4444" onClick={() => navigate('/requests?status=9')} />
+        <StatCard icon="📁" value={stats.closed} label={t('common.closed')} change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} changeLabel={changeLabel} color="#6B7280" onClick={() => navigate('/requests?status=6')} />
+        <StatCard icon="❌" value={stats.rejected} label={t('common.rejected')} change={getChangePercent(stats.rejected, stats.rejectedLastWeek).text} changeType={getChangePercent(stats.rejected, stats.rejectedLastWeek).type} changeLabel={changeLabel} color="#DC2626" onClick={() => navigate('/requests?status=8')} />
       </div>
 
       <div className="charts-row">
         <div className="chart-card" style={{ flex: 1 }}>
-          <h3>Requests by Status</h3>
+          <h3>{t('dashboard.requestsByStatus')}</h3>
           <div className="chart-container">
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
@@ -206,7 +209,7 @@ export default function Dashboard() {
                   {stats.byStatus.filter(s => s.count > 0).reduce((sum, s) => sum + s.count, 0)}
                 </text>
                 <text x="50%" y="63%" textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="#9ca3af">
-                  Total
+                  {t('common.total')}
                 </text>
               </PieChart>
             </ResponsiveContainer>
@@ -223,7 +226,7 @@ export default function Dashboard() {
         </div>
 
         <div className="chart-card" style={{ flex: 1 }}>
-          <h3>Requests by Priority</h3>
+          <h3>{t('dashboard.requestsByPriority')}</h3>
           <div className="chart-container">
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
@@ -248,7 +251,7 @@ export default function Dashboard() {
         </div>
 
         <div className="chart-card" style={{ flex: 1 }}>
-          <h3>Requests Overview (This Week)</h3>
+          <h3>{t('dashboard.requestsOverviewWeek')}</h3>
           <div className="chart-container">
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={stats.dailyData}>
@@ -268,7 +271,7 @@ export default function Dashboard() {
 
       <div className="charts-row">
         <div className="chart-card" style={{ flex: 3 }}>
-          <h3>Requests by Company</h3>
+          <h3>{t('dashboard.requestsByCompany')}</h3>
           <div className="chart-container">
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
@@ -292,7 +295,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="chart-card" style={{ gridColumn: '2 / -1' }}>
-          <h3>Requests by Category</h3>
+          <h3>{t('dashboard.requestsByCategory')}</h3>
           <div className="chart-container">
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={(stats.byCategory || []).filter(c => c.count > 0)}>
@@ -313,13 +316,13 @@ export default function Dashboard() {
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
-          <h3>Latest Requests</h3>
+          <h3>{t('dashboard.latestRequests')}</h3>
           <div className="table-header-actions">
             <div className="table-search-box">
               <span className="search-icon"></span>
               <input
                 type="text"
-                placeholder="Search requests..."
+                placeholder={t('common.searchRequests')}
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
               />
@@ -330,22 +333,22 @@ export default function Dashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>ID</span> {getSortIcon('id')}</th>
-                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>Request Title</span> {getSortIcon('subject')}</th>
-                <th className="sortable"><span onClick={() => handleSort('assignedTo')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned To</span> {getSortIcon('assignedTo')}</th>
-                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>Client</span> {getSortIcon('client')}</th>
-                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>Assigned Group</span> {getSortIcon('groups')}</th>
-                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>Category</span> {getSortIcon('category')}</th>
-                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>Priority</span> {getSortIcon('priority')}</th>
-                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>Status</span> {getSortIcon('status')}</th>
-                <th className="sortable"><span onClick={() => handleSort('createdAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>Created</span> {getSortIcon('createdAt')}</th>
-                <th>Actions</th>
+                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')}</span> {getSortIcon('id')}</th>
+                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')}</span> {getSortIcon('subject')}</th>
+                <th className="sortable"><span onClick={() => handleSort('assignedTo')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedTo')}</span> {getSortIcon('assignedTo')}</th>
+                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')}</span> {getSortIcon('client')}</th>
+                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')}</span> {getSortIcon('groups')}</th>
+                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')}</span> {getSortIcon('category')}</th>
+                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')}</span> {getSortIcon('priority')}</th>
+                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')}</span> {getSortIcon('status')}</th>
+                <th className="sortable"><span onClick={() => handleSort('createdAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.created')}</span> {getSortIcon('createdAt')}</th>
+                <th>{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {paginatedRequests.map(r => (
                 <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row">
-                  <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
+                  <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}</td>
                   <td>
                     {r.assignee && r.status?.name !== 'New' ? (
@@ -383,8 +386,8 @@ export default function Dashboard() {
                     <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                       {r.status?.name === 'New' || r.status?.name === 'Assigned' ? (
                         <>
-                          <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
-                          <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(r.id); }}>Delete</button>
+                          <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>{t('common.edit')}</button>
+                          <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(r.id); }}>{t('common.delete')}</button>
                         </>
                       ) : (
                         <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>—</span>
@@ -394,20 +397,20 @@ export default function Dashboard() {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No requests found</td></tr>
+                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noRequestsFound')}</td></tr>
               )}
             </tbody>
           </table>
         </div>
         <div className="table-footer">
           <div className="table-footer-info">
-            <span>Show</span>
+            <span>{t('common.show')}</span>
             <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
               <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={25}>25</option>
             </select>
-            <span>of {filteredRequests.length} requests</span>
+            <span>{t('common.ofRequests', { count: filteredRequests.length })}</span>
           </div>
           <div className="table-pagination">
             <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
@@ -441,14 +444,14 @@ export default function Dashboard() {
               onClick={() => setPerfView('company')}
             >
               <span className="perf-toggle-icon">🏢</span>
-              Company Performance
+              {t('dashboard.companyPerformance')}
             </button>
             <button
               className={`perf-toggle-btn ${perfView === 'developer' ? 'active' : ''}`}
               onClick={() => setPerfView('developer')}
             >
               <span className="perf-toggle-icon">👨‍💻</span>
-              Developer Performance
+              {t('dashboard.developerPerformance')}
             </button>
           </div>
 
@@ -456,8 +459,8 @@ export default function Dashboard() {
             <div className="charts-row">
               <div className="chart-card wide">
                 <div className="perf-header">
-                  <h3>Company Performance (Last 30 Days)</h3>
-                  <p className="perf-subtitle">Request status breakdown by company</p>
+                  <h3>{t('dashboard.companyPerformance30')}</h3>
+                  <p className="perf-subtitle">{t('dashboard.companyPerfSubtitle')}</p>
                 </div>
                 <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
                   <div className="perf-chart-section">
@@ -482,7 +485,7 @@ export default function Dashboard() {
                           <Bar
                             key={s.key}
                             dataKey={s.key}
-                            name={s.label}
+                            name={t('status.' + s.key)}
                             fill={s.color}
                             radius={[3, 3, 0, 0]}
                             maxBarSize={24}
@@ -505,8 +508,8 @@ export default function Dashboard() {
             <div className="charts-row">
               <div className="chart-card wide">
                 <div className="perf-header">
-                  <h3>Developer Performance (Last 30 Days)</h3>
-                  <p className="perf-subtitle">Request status breakdown by developer</p>
+                  <h3>{t('dashboard.developerPerformance30')}</h3>
+                  <p className="perf-subtitle">{t('dashboard.developerPerfSubtitle')}</p>
                 </div>
                 <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
                   <div className="perf-chart-section">
@@ -531,7 +534,7 @@ export default function Dashboard() {
                           <Bar
                             key={s.key}
                             dataKey={s.key}
-                            name={s.label}
+                            name={t('status.' + s.key)}
                             fill={s.color}
                             radius={[3, 3, 0, 0]}
                             maxBarSize={24}
@@ -558,8 +561,8 @@ export default function Dashboard() {
             <div className="modal-header">
               <div className="modal-header-content">
                 <div>
-                  <h2>{selectedDetail.data.name} — Daily Breakdown</h2>
-                  <p className="modal-subtitle">Last 30 days activity</p>
+                  <h2>{selectedDetail.data.name} — {t('dashboard.dailyBreakdown')}</h2>
+                  <p className="modal-subtitle">{t('dashboard.last30Days')}</p>
                 </div>
               </div>
               <button className="modal-close" onClick={() => setSelectedDetail(null)}>&times;</button>
@@ -570,13 +573,13 @@ export default function Dashboard() {
                   <div style={{ fontSize: 28, fontWeight: 700, color: '#3B82F6' }}>
                     {selectedDetail.data.data.reduce((s, d) => s + d.created, 0)}
                   </div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Total Created</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('dashboard.totalCreated')}</div>
                 </div>
                 <div className="stat-card" style={{ padding: 16, textAlign: 'center' }}>
                   <div style={{ fontSize: 28, fontWeight: 700, color: '#10B981' }}>
                     {selectedDetail.data.data.reduce((s, d) => s + d.resolved, 0)}
                   </div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Total Resolved</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('dashboard.totalResolved')}</div>
                 </div>
                 <div className="stat-card" style={{ padding: 16, textAlign: 'center' }}>
                   <div style={{ fontSize: 28, fontWeight: 700, color: '#8B5CF6' }}>
@@ -586,7 +589,7 @@ export default function Dashboard() {
                       return created ? Math.round((resolved / created) * 100) + '%' : '0%';
                     })()}
                   </div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Resolution Rate</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('dashboard.resolutionRate')}</div>
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={300}>
@@ -596,13 +599,13 @@ export default function Dashboard() {
                   <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="created" name="Created" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="resolved" name="Resolved" fill="#10B981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="created" name={t('common.created')} fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="resolved" name={t('common.resolved')} fill="#10B981" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
             <div className="modal-actions">
-              <button className="btn btn-outline" onClick={() => setSelectedDetail(null)}>Close</button>
+              <button className="btn btn-outline" onClick={() => setSelectedDetail(null)}>{t('common.close')}</button>
             </div>
           </div>
         </div>
@@ -611,10 +614,10 @@ export default function Dashboard() {
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this request?</p>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>{t('common.deleteRequestConfirm')}</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
-              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.delete')}</button>
             </div>
           </div>
         </div>

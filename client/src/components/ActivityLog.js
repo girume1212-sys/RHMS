@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import { useTranslation } from '../i18n/useTranslation';
 
 export default function ActivityLog() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     api.get('/api/activity').then(data => { setActivities(data); setLoading(false); })
-      .catch(err => { setError('Failed to load activity log: ' + err.message); setLoading(false); });
+      .catch(err => { setError(t('common.failedToLoadActivity') + ' ' + err.message); setLoading(false); });
   }, []);
 
   const getActivityIcon = (type) => {
@@ -27,9 +29,9 @@ export default function ActivityLog() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← Back</button>
-          <h1>Activity Log</h1>
-          <p>Track all system activities and changes</p>
+          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <h1>{t('common.activityLog')}</h1>
+          <p>{t('common.activityLogSubtitle')}</p>
         </div>
       </div>
       {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{error}</div>}
@@ -40,8 +42,8 @@ export default function ActivityLog() {
           {activities.filter(a => a.user?.id !== user?.id).length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af' }}>
               <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
-              <h3 style={{ margin: '0 0 8px 0', color: '#374151' }}>No activity yet</h3>
-              <p style={{ margin: 0, fontSize: '14px' }}>Activity will appear here when requests are created, updated, or commented on.</p>
+              <h3 style={{ margin: '0 0 8px 0', color: '#374151' }}>{t('common.noActivityYet')}</h3>
+              <p style={{ margin: 0, fontSize: '14px' }}>{t('common.activityEmptyDesc')}</p>
             </div>
           ) : (
             activities.filter(a => a.user?.id !== user?.id).map(a => (
@@ -55,7 +57,7 @@ export default function ActivityLog() {
                     <span className="timeline-request">#{a.requestId}</span>
                   </div>
                   <div className="timeline-meta">
-                    by <strong>{a.user?.name || 'Unknown'}</strong> · {new Date(a.createdAt).toLocaleString()}
+                    {t('common.by')} <strong>{a.user?.name || t('common.unknown')}</strong> · {new Date(a.createdAt).toLocaleString()}
                   </div>
                 </div>
               </div>

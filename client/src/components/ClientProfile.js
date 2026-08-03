@@ -4,9 +4,10 @@ import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { API_BASE } from '../api';
+import LanguageSelector from './LanguageSelector';
 
 export default function ClientProfile() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { user, token, updateUser } = useAuth();
   const fileInputRef = useRef(null);
   const [editing, setEditing] = useState(false);
@@ -16,6 +17,7 @@ export default function ClientProfile() {
     companyName: user?.companyName || '',
     password: '',
     confirmPassword: '',
+    language: user?.language || language || 'en',
   });
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(null);
@@ -47,11 +49,11 @@ export default function ClientProfile() {
     const file = e.target.files[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setError('Please select an image file');
+      setError(t('common.imageOnly'));
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError('Image must be less than 5MB');
+      setError(t('common.imageTooLarge'));
       return;
     }
     setAvatarFile(file);
@@ -85,6 +87,7 @@ export default function ClientProfile() {
       formData.append('name', form.name);
       formData.append('email', form.email);
       formData.append('companyName', form.companyName);
+      formData.append('language', form.language);
       if (form.password) {
         formData.append('password', form.password);
       }
@@ -106,7 +109,7 @@ export default function ClientProfile() {
       setAvatarPreview(null);
       setForm({ ...form, password: '', confirmPassword: '' });
       addToast(t('common.profileUpdated'));
-      showStatusToast('Profile updated', 'status');
+      showStatusToast(t('common.profileUpdated'), 'status');
     } catch (err) {
       setError(err.message || t('common.failedToSave').replace('{item}', t('common.profile')));
       addToast(err.message || t('common.failedToSave').replace('{item}', t('common.profile')), 'error');
@@ -510,6 +513,21 @@ export default function ClientProfile() {
             </div>
           )}
         </div>
+      </div>
+
+      <div style={{
+        maxWidth: '900px', marginTop: '24px', background: '#fff',
+        borderRadius: '20px', padding: '24px 32px',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #e5e7eb',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px'
+      }}>
+        <div>
+          <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>
+            🌐 {t('settings.language')}
+          </h3>
+          <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>{t('settings.languageDescription')}</p>
+        </div>
+        <LanguageSelector variant="inline" />
       </div>
     </div>
   );

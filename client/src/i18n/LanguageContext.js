@@ -1,10 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import translations from './translations';
+import en from './en.json';
+import am from './am.json';
+
+const translations = { en, am };
+const SUPPORTED = ['en', 'am'];
 
 const LanguageContext = createContext(null);
 
 export function LanguageProvider({ children }) {
-  const [language, setLanguage] = useState(() => localStorage.getItem('rhms_language') || 'en');
+  const [language, setLanguage] = useState(() => {
+    const saved = localStorage.getItem('rhms_language');
+    return saved && translations[saved] ? saved : 'en';
+  });
 
   useEffect(() => {
     localStorage.setItem('rhms_language', language);
@@ -12,12 +19,14 @@ export function LanguageProvider({ children }) {
   }, [language]);
 
   const changeLanguage = (langCode) => {
-    setLanguage(langCode);
+    if (SUPPORTED.includes(langCode)) {
+      setLanguage(langCode);
+    }
   };
 
-  const t = (key) => {
+  const t = (key, params) => {
     const keys = key.split('.');
-    let value = translations[language];
+    let value = translations[language] || translations.en;
     for (const k of keys) {
       if (value && typeof value === 'object') {
         value = value[k];
@@ -25,7 +34,13 @@ export function LanguageProvider({ children }) {
         return key;
       }
     }
-    return value || key;
+    let str = typeof value === 'string' ? value : key;
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        str = str.replace(new RegExp('\\{' + k + '\\}', 'g'), String(v));
+      }
+    }
+    return str;
   };
 
   return (

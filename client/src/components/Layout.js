@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
 import { api, API_BASE, isTokenExpired } from '../api';
 import GlobalSearch from './GlobalSearch';
+import LanguageSelector from './LanguageSelector';
 
 export default function Layout() {
   const { user, logout, darkMode, toggleDarkMode, systemName, systemLogo } = useAuth();
@@ -106,14 +107,14 @@ export default function Layout() {
   const menuItems = [
     { section: null, items: [
       { path: '/', label: t('sidebar.dashboard'), icon: '🏠' },
-      { path: '/requests', label: 'All Requests', icon: '📄' },
+      { path: '/requests', label: t('sidebar.requests'), icon: '📄' },
     ]},
     { section: t('sidebar.management'), items: [
       { path: '/users', label: t('sidebar.users'), icon: '👥', roles: ['admin'] },
       { path: '/categories', label: t('sidebar.categories'), icon: '📁', roles: ['admin'] },
-      { path: '/company', label: 'Company', icon: '🏢', roles: ['admin'] },
-      { path: '/groups', label: 'Groups', icon: '👤', roles: ['admin'] },
-      { path: '/feedback', label: 'Feedback', icon: '⭐', roles: ['admin'] },
+      { path: '/company', label: t('sidebar.company'), icon: '🏢', roles: ['admin'] },
+      { path: '/groups', label: t('sidebar.groups'), icon: '👤', roles: ['admin'] },
+      { path: '/feedback', label: t('sidebar.feedback'), icon: '⭐', roles: ['admin'] },
     ]},
     { section: t('sidebar.reports'), items: [
       { path: '/reports', label: t('sidebar.reportsAnalytics'), icon: '📊', roles: ['admin'] },
@@ -279,13 +280,13 @@ export default function Layout() {
 
   const getNotifTitle = (type) => {
     const titles = {
-      request_created: 'New Request',
-      status_change: 'Status Change',
-      assigned: 'Assignment',
-      claimed: 'Request Claimed',
-      comment: 'New Comment',
-      request_deleted: 'Request Deleted',
-      default: 'Notification'
+      request_created: t('common.newRequest'),
+      status_change: t('common.statusChange'),
+      assigned: t('common.assignment'),
+      claimed: t('common.requestClaimed'),
+      comment: t('common.newComment'),
+      request_deleted: t('common.requestDeletedTitle'),
+      default: t('common.notification')
     };
     return titles[type] || titles.default;
   };
@@ -360,7 +361,7 @@ export default function Layout() {
               {getNotificationIcon(n.type || getNotificationType(n.message))}
             </div>
             <div className="bubble-pill-body">
-              <div className="bubble-pill-title">{n.requestId ? `Request #${n.requestId}` : 'Notification'}</div>
+              <div className="bubble-pill-title">{n.requestId ? `${t('common.requestShort')} #${n.requestId}` : t('common.notification')}</div>
               <div className="bubble-pill-text">{n.message}</div>
               <div className="bubble-pill-time">{n.timestamp ? new Date(n.timestamp).toLocaleTimeString() : ''}</div>
             </div>
@@ -377,7 +378,7 @@ export default function Layout() {
         <div className="refresh-overlay">
           <div className="refresh-overlay-card">
             <div className="spinner"></div>
-            <p>Refreshing entire system...</p>
+            <p>{t('common.refreshingSystem')}</p>
           </div>
         </div>
       )}
@@ -388,6 +389,7 @@ export default function Layout() {
             <GlobalSearch placeholder={t('topbar.searchPlaceholder')} />
           </div>
           <div className="topbar-right">
+            <LanguageSelector variant="topbar" />
             <button className="theme-toggle" onClick={toggleDarkMode} title={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}>
               {darkMode ? <><span className="toggle-icon">☀️</span><span>{t('topbar.bright')}</span></> : <><span className="toggle-icon">🌙</span><span>{t('topbar.dark')}</span></>}
             </button>
@@ -400,7 +402,7 @@ export default function Layout() {
                 <div className="dropdown-panel notification-panel">
                   <div className="dropdown-panel-header">
                     {t('topbar.notifications')}
-                    {panelNotifications.length > 0 && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>Mark all read</span>}
+                    {panelNotifications.length > 0 && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>{t('common.markAllRead')}</span>}
                   </div>
                   <div className="dropdown-panel-list">
                     {panelNotifications.length === 0 && <div className="dropdown-panel-empty">{t('topbar.noNotifications')}</div>}
@@ -412,7 +414,7 @@ export default function Layout() {
                         <div className="dropdown-panel-content">
                           <div className="dropdown-panel-title">
                             {getNotifTitle(n.type)}
-                            {n.requestId && <span className="dropdown-panel-request">REQ-{String(n.requestId).padStart(4, '0')}</span>}
+                            {n.requestId && <span className="dropdown-panel-request">{t('common.requestPrefixLabel')}-{String(n.requestId).padStart(4, '0')}</span>}
                           </div>
                           <p className="dropdown-panel-message">{n.message}</p>
                           <div className="dropdown-panel-meta">
@@ -440,7 +442,7 @@ export default function Layout() {
                       <div key={i} className="dropdown-panel-item" onClick={() => { navigate(`/requests/${m.requestId}`); setShowMessages(false); }}>
                         <div className="dropdown-panel-avatar">{m.user?.name?.charAt(0) || 'U'}</div>
                         <div className="dropdown-panel-content">
-                          <p><strong>{m.user?.name || 'Unknown'}</strong> commented on <strong>#{m.requestId}</strong></p>
+                          <p><strong>{m.user?.name || t('common.unknown')}</strong> {t('common.commentedOn')} <strong>#{m.requestId}</strong></p>
                           <p className="dropdown-panel-message">{m.content}</p>
                           <span className="dropdown-panel-time">{new Date(m.createdAt).toLocaleString()}</span>
                         </div>
@@ -468,7 +470,7 @@ export default function Layout() {
                   <div className="dropdown-divider"></div>
                   <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/profile'); }}><span className="dropdown-item-icon">👤</span> {t('topbar.myProfile')}</button>
                   <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/settings'); }}><span className="dropdown-item-icon">⚙️</span> {t('topbar.settingsLabel')}</button>
-                  <button className="dropdown-item" onClick={handleRefreshSystem} title="Refresh and synchronize the entire RHMS"><span className="dropdown-item-icon">🔄</span> Refresh</button>
+                  <button className="dropdown-item" onClick={handleRefreshSystem} title={t('common.refreshTitle')}><span className="dropdown-item-icon">🔄</span> {t('common.refresh')}</button>
                   <div className="dropdown-divider"></div>
                   <button className="dropdown-item logout" onClick={() => { logout(); navigate('/login'); }}>
                     <span className="dropdown-item-icon">🚪</span> {t('topbar.signOut')}

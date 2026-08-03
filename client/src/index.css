@@ -6620,3 +6620,81 @@ body.dark-mode .member-checkbox-email {
   text-align: right;
   min-width: 80px;
 }
+
+/* ===== Language Selector ===== */
+.lang-selector { position: relative; display: inline-flex; }
+.lang-selector-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 7px 12px;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.lang-selector-btn:hover { border-color: #3B82F6; color: #3B82F6; background: #eff6ff; }
+.lang-selector-icon { font-size: 15px; }
+.lang-selector-current { letter-spacing: 0.4px; }
+.lang-selector-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 170px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  z-index: 1100;
+  overflow: hidden;
+  padding: 4px;
+}
+.lang-selector-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  color: #1f2937;
+  font-size: 13px;
+  cursor: pointer;
+}
+.lang-selector-item:hover { background: #f3f4f6; }
+.lang-selector-item.active { background: #eff6ff; color: #2563eb; font-weight: 600; }
+body.dark-mode .lang-selector-btn { border-color: #334155; color: #e5e7eb; }
+body.dark-mode .lang-selector-btn:hover { border-color: #3b82f6; color: #93c5fd; background: #1e293b; }
+body.dark-mode .lang-selector-menu { background: #1e293b; border-color: #334155; }
+body.dark-mode .lang-selector-item { color: #e5e7eb; }
+body.dark-mode .lang-selector-item:hover { background: #334155; }
+body.dark-mode .lang-selector-item.active { background: #1d4ed8; color: #bfdbfe; }
+
+/* Topbar variant */
+.lang-selector-topbar .lang-selector-btn {
+  border: none;
+  background: transparent;
+  height: 40px;
+  border-radius: 10px;
+}
+.lang-selector-topbar .lang-selector-menu { right: 0; left: auto; }
+body.dark-mode .lang-selector-topbar .lang-selector-btn { color: #e5e7eb; }
+body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e293b; }
+
+/* Login variant */
+.lang-selector-login .lang-selector-btn {
+  border-color: rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.08);
+  color: #e2e8f0;
+  backdrop-filter: blur(6px);
+}
+.lang-selector-login .lang-selector-btn:hover { border-color: #93c5fd; color: #ffffff; background: rgba(255,255,255,0.15); }
+.lang-selector-login { position: fixed; top: 20px; right: 24px; }
+.lang-selector-login .lang-selector-menu { right: 0; left: auto; }
+
+/* Settings / profile variant */
+.lang-selector-inline .lang-selector-menu { left: 0; }

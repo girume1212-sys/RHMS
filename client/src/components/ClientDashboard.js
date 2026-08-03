@@ -4,9 +4,11 @@ import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
 import RequestCalendar from './RequestCalendar';
 
 export default function ClientDashboard() {
+  const { t } = useTranslation();
   const [requests, setRequests] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [stats, setStats] = useState({ total: 0, open: 0, inProgress: 0, resolved: 0 });
@@ -47,7 +49,7 @@ export default function ClientDashboard() {
       const waitingClient = requestsData.filter(r => r.status?.name === 'Waiting for Client').length;
       const escalated = requestsData.filter(r => r.status?.name === 'Escalated').length;
       setStats({ total, open, inProgress, resolved, closed, rejected, waitingClient, escalated });
-    }).catch(err => setError('Failed to load data: ' + err.message));
+    }).catch(err => setError(t('common.failedToLoadData') + ' ' + err.message));
   }, []);
 
   const getStatusColor = (status) => {
@@ -97,10 +99,10 @@ export default function ClientDashboard() {
     try {
       await api.put(`/api/requests/${requestId}`, { statusId: status.id });
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status } : r));
-      addToast(`Request #${requestId} status changed to ${statusName}`);
-      showStatusToast(`Request #${requestId} → ${statusName}`, 'status', requestId);
+      addToast(t('common.statusChangedTo', { id: requestId, status: statusName }));
+      showStatusToast(t('common.statusChangedTo', { id: requestId, status: statusName }), 'status', requestId);
     } catch (err) {
-      addToast('Failed to update status: ' + err.message, 'error');
+      addToast(t('common.failedToUpdateStatus') + ': ' + err.message, 'error');
     } finally {
       setUpdatingStatus(null);
     }
@@ -110,12 +112,12 @@ export default function ClientDashboard() {
     try {
       await api.delete(`/api/requests/${id}`);
       setRequests(prev => prev.filter(r => r.id !== id));
-      addToast('Request deleted successfully!');
-      showStatusToast(`Request #${id} deleted`, 'request_deleted', id);
+      addToast(t('common.requestDeleted'));
+      showStatusToast(t('common.requestDeletedWithId', { id }), 'request_deleted', id);
       setDeleteTarget(null);
     } catch (err) {
-      setError('Failed to delete request: ' + err.message);
-      addToast('Failed to delete request: ' + err.message, 'error');
+      setError(t('common.failedToDeleteRequest') + ': ' + err.message);
+      addToast(t('common.failedToDeleteRequest') + ': ' + err.message, 'error');
       setDeleteTarget(null);
     }
   };
@@ -165,8 +167,8 @@ export default function ClientDashboard() {
       </div>
       <div className="page-header">
         <div>
-          <h1>My Dashboard</h1>
-          <p>Welcome back, {user?.name?.split(' ')[0]}! Here are your support requests.</p>
+          <h1>{t('common.myDashboard')}</h1>
+          <p>{t('common.welcomeBackRequests', { name: user?.name?.split(' ')[0] })}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start' }}>
           <RequestCalendar />
@@ -180,21 +182,21 @@ export default function ClientDashboard() {
       )}
 
       <div className="stats-grid">
-        <ClientStatCard icon="📋" value={stats.total} label="Total Requests" color="#3B82F6" />
-        <ClientStatCard icon="📂" value={stats.open} label="New" color="#10B981" />
-        <ClientStatCard icon="⏳" value={stats.inProgress} label="In Progress" color="#F59E0B" />
-        <ClientStatCard icon="✅" value={stats.resolved} label="Resolved" color="#8B5CF6" />
-        <ClientStatCard icon="🔒" value={stats.closed} label="Closed" color="#6B7280" />
-        <ClientStatCard icon="❌" value={stats.rejected} label="Rejected" color="#DC2626" />
-        <ClientStatCard icon="⏰" value={stats.waitingClient} label="Waiting for Client" color="#F97316" />
-        <ClientStatCard icon="🚨" value={stats.escalated} label="Escalated" color="#EF4444" />
+        <ClientStatCard icon="📋" value={stats.total} label={t('common.totalRequests')} color="#3B82F6" />
+        <ClientStatCard icon="📂" value={stats.open} label={t('common.new')} color="#10B981" />
+        <ClientStatCard icon="⏳" value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" />
+        <ClientStatCard icon="✅" value={stats.resolved} label={t('common.resolved')} color="#8B5CF6" />
+        <ClientStatCard icon="🔒" value={stats.closed} label={t('common.closed')} color="#6B7280" />
+        <ClientStatCard icon="❌" value={stats.rejected} label={t('common.rejected')} color="#DC2626" />
+        <ClientStatCard icon="⏰" value={stats.waitingClient} label={t('common.waitingForClient')} color="#F97316" />
+        <ClientStatCard icon="🚨" value={stats.escalated} label={t('common.escalated')} color="#EF4444" />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
-          <h3>My Requests ({filteredRequests.length})</h3>
+          <h3>{t('common.myRequestsCount', { count: filteredRequests.length })}</h3>
           <div className="table-header-actions">
-            <input type="text" className="filter-search" placeholder="Search my requests..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+            <input type="text" className="filter-search" placeholder={t('common.searchMyRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
           </div>
         </div>
 
@@ -202,22 +204,22 @@ export default function ClientDashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>ID</span> {getSortIcon('id')}</th>
-                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>Request Title</span> {getSortIcon('subject')}</th>
-                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>Category</span> {getSortIcon('category')}</th>
-                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>Priority</span> {getSortIcon('priority')}</th>
-                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>Status</span> {getSortIcon('status')}</th>
-                <th className="sortable"><span onClick={() => handleSort('createdAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>Created</span> {getSortIcon('createdAt')}</th>
-                <th>Actions</th>
+                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')}</span> {getSortIcon('id')}</th>
+                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')}</span> {getSortIcon('subject')}</th>
+                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')}</span> {getSortIcon('category')}</th>
+                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')}</span> {getSortIcon('priority')}</th>
+                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')}</span> {getSortIcon('status')}</th>
+                <th className="sortable"><span onClick={() => handleSort('createdAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.created')}</span> {getSortIcon('createdAt')}</th>
+                <th>{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {paginatedRequests.length === 0 && !error && (
-                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No requests found</td></tr>
+                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noRequestsFound')}</td></tr>
               )}
               {paginatedRequests.map((r) => (
                 <tr key={r.id} onClick={() => navigate(`/client/requests/${r.id}`)} className="clickable-row">
-                  <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
+                  <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
                   <td>{r.subject}</td>
                   <td><span className="category-tag">{r.category?.name || '-'}</span></td>
                   <td><span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>{r.priority?.name || '-'}</span></td>
@@ -227,8 +229,8 @@ export default function ClientDashboard() {
                     <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                       {r.status?.name === 'New' && (
                         <>
-                          <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>Edit</button>
-                          <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>Delete</button>
+                          <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>{t('common.edit')}</button>
+                          <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>{t('common.delete')}</button>
                         </>
                       )}
                     </div>
@@ -241,13 +243,13 @@ export default function ClientDashboard() {
 
         <div className="table-footer">
           <div className="table-footer-info">
-            <span>Show</span>
+            <span>{t('common.show')}</span>
             <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
               <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={25}>25</option>
             </select>
-            <span>of {filteredRequests.length} requests</span>
+            <span>{t('common.ofRequests', { count: filteredRequests.length })}</span>
           </div>
           <div className="table-pagination">
             <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
@@ -264,10 +266,10 @@ export default function ClientDashboard() {
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this request?</p>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>{t('common.deleteRequestConfirm')}</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
-              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.delete')}</button>
             </div>
           </div>
         </div>

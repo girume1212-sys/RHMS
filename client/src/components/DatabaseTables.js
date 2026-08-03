@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
+import { useTranslation } from '../i18n/useTranslation';
 
 export default function DatabaseTables() {
+  const { t } = useTranslation();
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [tableData, setTableData] = useState(null);
@@ -76,16 +78,16 @@ export default function DatabaseTables() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← Back</button>
-          <h1>Database Tables</h1>
-          <p>View and explore PostgreSQL database tables</p>
+          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <h1>{t('system.databaseTables')}</h1>
+          <p>{t('system.databaseTablesSubtitle')}</p>
         </div>
       </div>
 
       <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
         <div className="table-card" style={{ width: '240px', flexShrink: 0, padding: '12px' }}>
           <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', padding: '8px 12px', margin: 0, borderBottom: '1px solid #e5e7eb' }}>
-            Tables ({tables.length})
+            {t('system.tablesCount', { count: tables.length })}
           </h3>
           {loading ? (
             <div className="loading-screen" style={{ padding: '40px 0' }}><div className="spinner"></div></div>
@@ -125,8 +127,8 @@ export default function DatabaseTables() {
           {!selectedTable ? (
             <div className="empty-state">
               <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗄️</div>
-              <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#374151', margin: '0 0 8px' }}>Select a table to view</h3>
-              <p>Click on a table name from the left panel to view its data</p>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#374151', margin: '0 0 8px' }}>{t('system.selectTableToView')}</h3>
+              <p>{t('system.selectTableHint')}</p>
             </div>
           ) : loadingTable ? (
             <div className="loading-screen"><div className="spinner"></div></div>
@@ -136,11 +138,11 @@ export default function DatabaseTables() {
                 <div>
                   <h3 style={{ margin: 0 }}>{selectedTable}</h3>
                   <p style={{ fontSize: '12px', color: '#6b7280', margin: '4px 0 0' }}>
-                    {tableData.count} rows · {tableData.columns.length} columns
+                    {t('system.rowsColumns', { rows: tableData.count, columns: tableData.columns.length })}
                   </p>
                 </div>
                 <span style={{ padding: '4px 12px', background: '#f0fdf4', color: '#16a34a', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>
-                  Connected
+                  {t('system.connected')}
                 </span>
               </div>
 
@@ -169,7 +171,7 @@ export default function DatabaseTables() {
                         </tr>
                       ))}
                       {paginated.length === 0 && (
-                        <tr><td colSpan={tableData.columns.length} style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No data</td></tr>
+                        <tr><td colSpan={tableData.columns.length} style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noData')}</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -178,13 +180,13 @@ export default function DatabaseTables() {
 
               <div className="table-footer">
                 <div className="table-footer-info">
-                  <span>Show</span>
+                  <span>{t('common.show')}</span>
                   <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
                     <option value={10}>10</option>
                     <option value={20}>20</option>
                     <option value={50}>50</option>
                   </select>
-                  <span>of {sortedRows.length} rows</span>
+                  <span>{t('common.ofRows', { count: sortedRows.length })}</span>
                 </div>
                 <div className="table-pagination">
                   <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
@@ -199,7 +201,7 @@ export default function DatabaseTables() {
               </div>
             </div>
           ) : (
-            <div className="empty-state">Failed to load table data</div>
+            <div className="empty-state">{t('system.failedToLoadTableData')}</div>
           )}
         </div>
       </div>

@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
 
 export default function Users() {
+  const { t } = useTranslation();
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +52,7 @@ export default function Users() {
     setError('');
     setLoading(true);
     api.get('/api/users').then(data => { setUsers(data); setLoading(false); })
-      .catch(err => { setError('Failed to load users: ' + err.message); setLoading(false); });
+      .catch(err => { setError(t('common.failedToLoadUsers') + ': ' + err.message); setLoading(false); });
   };
 
   const handleSort = (key) => {
@@ -115,19 +117,19 @@ export default function Users() {
     e.preventDefault();
     try {
       if (form.password !== form.confirmPassword) {
-        setError('Passwords do not match');
-        addToast('Passwords do not match', 'error');
+        setError(t('validation.passwordMismatch'));
+        addToast(t('validation.passwordMismatch'), 'error');
         return;
       }
       await api.post('/api/users', form);
       setShowModal(false);
       setForm({ name: '', email: '', password: '', confirmPassword: '', companyName: '', role: 'client', groupIds: [] });
       loadUsers();
-      addToast('User created successfully!');
-      showStatusToast(`User "${form.name}" created`, 'request_created');
+      addToast(t('common.createdSuccess', { item: t('common.user') }));
+      showStatusToast(t('common.userCreatedWithName', { name: form.name }), 'request_created');
     } catch (err) {
-      setError('Failed to create user: ' + err.message);
-      addToast('Failed to create user: ' + err.message, 'error');
+      setError(t('common.failedToCreateUser') + ': ' + err.message);
+      addToast(t('common.failedToCreateUser') + ': ' + err.message, 'error');
     }
   };
 
@@ -140,11 +142,11 @@ export default function Users() {
       setEditingUser(null);
       setForm({ name: '', email: '', password: '', confirmPassword: '', companyName: '', role: 'client', groupIds: [] });
       loadUsers();
-      addToast('User updated successfully!');
-      showStatusToast(`User "${form.name}" updated`, 'status');
+      addToast(t('common.updatedSuccess', { item: t('common.user') }));
+      showStatusToast(t('common.userUpdatedWithName', { name: form.name }), 'status');
     } catch (err) {
-      setError('Failed to update user: ' + err.message);
-      addToast('Failed to update user: ' + err.message, 'error');
+      setError(t('common.failedToUpdateUser') + ': ' + err.message);
+      addToast(t('common.failedToUpdateUser') + ': ' + err.message, 'error');
     }
   };
 
@@ -158,27 +160,26 @@ export default function Users() {
     try {
       await api.delete(`/api/users/${id}`);
       loadUsers();
-      addToast(`User "${name}" deleted successfully!`);
-      showStatusToast(`User "${name}" deleted`, 'request_deleted');
+      addToast(t('common.userDeletedWithName', { name }));
+      showStatusToast(t('common.userDeleted', { name }), 'request_deleted');
       setDeleteTarget(null);
     } catch (err) {
-      setError('Failed to delete user: ' + err.message);
-      addToast('Failed to delete user: ' + err.message, 'error');
+      setError(t('common.failedToDeleteUser') + ': ' + err.message);
+      addToast(t('common.failedToDeleteUser') + ': ' + err.message, 'error');
       setDeleteTarget(null);
     }
   };
 
   const handleApprove = async (id, name, approved) => {
-    const action = approved ? 'approve' : 'unapprove';
-    if (!window.confirm(`Are you sure you want to ${action} this user?`)) return;
+    if (!window.confirm(approved ? t('common.confirmApproveUser') : t('common.confirmUnapproveUser'))) return;
     try {
       await api.patch(`/api/users/${id}/approve`, { approved });
       loadUsers();
-      addToast(`User "${name}" ${action}d successfully!`);
-      showStatusToast(`User "${name}" ${action}d`, 'status');
+      addToast(approved ? t('common.userApproved', { name }) : t('common.userUnapproved', { name }));
+      showStatusToast(approved ? t('common.userApprovedShort', { name }) : t('common.userUnapprovedShort', { name }), 'status');
     } catch (err) {
-      setError(`Failed to ${action} user: ` + err.message);
-      addToast(`Failed to ${action} user: ` + err.message, 'error');
+      setError((approved ? t('common.failedToApproveUser') : t('common.failedToUnapproveUser')) + ': ' + err.message);
+      addToast((approved ? t('common.failedToApproveUser') : t('common.failedToUnapproveUser')) + ': ' + err.message, 'error');
     }
   };
 
@@ -213,11 +214,11 @@ export default function Users() {
 
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← Back</button>
-          <h1>Users</h1>
-          <p>Manage system users and roles</p>
+          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <h1>{t('sidebar.users')}</h1>
+          <p>{t('common.manageUsers')}</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ Add User</button>
+        <button className="btn btn-primary" onClick={openCreate}>+ {t('common.addUser')}</button>
       </div>
 
       {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{error}</div>}
@@ -225,20 +226,20 @@ export default function Users() {
       <div className="filters-bar">
         <input
           type="text"
-          placeholder="Search users..."
+          placeholder={t('common.searchUsers')}
           className="filter-search"
           value={searchQuery}
           onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
         />
         <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}>
-          <option value="">All Roles</option>
-          <option value="admin">Admin</option>
-          <option value="support">Escalation Team</option>
-          <option value="developer">Developer</option>
-          <option value="client">Client</option>
+          <option value="">{t('common.allRoles')}</option>
+          <option value="admin">{t('role.admin')}</option>
+          <option value="support">{t('role.escalationTeam')}</option>
+          <option value="developer">{t('role.developer')}</option>
+          <option value="client">{t('role.client')}</option>
         </select>
         <select value={groupFilter} onChange={(e) => { setGroupFilter(e.target.value); setPage(1); }}>
-          <option value="">All Groups</option>
+          <option value="">{t('common.allGroups')}</option>
           {groups.map(g => (
             <option key={g.id} value={g.id}>{g.name}</option>
           ))}
@@ -250,7 +251,7 @@ export default function Users() {
       ) : (
         <div className="chart-card">
           <div className="table-header-bar">
-            <h3>Users ({filteredUsers.length})</h3>
+            <h3>{t('sidebar.users')} ({filteredUsers.length})</h3>
             <div className="table-header-actions">
                 </div>
           </div>
@@ -259,13 +260,13 @@ export default function Users() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sortable">User {getSortIcon('name')}</th>
-                  <th className="sortable">Email {getSortIcon('email')}</th>
-                  <th className="sortable">Role {getSortIcon('role')}</th>
-                  <th className="sortable">Group {getSortIcon('group')}</th>
-                  <th className="sortable">Company {getSortIcon('company')}</th>
-                  <th className="sortable">Created {getSortIcon('createdAt')}</th>
-                  <th>Actions</th>
+                  <th className="sortable">{t('common.user')} {getSortIcon('name')}</th>
+                  <th className="sortable">{t('common.email')} {getSortIcon('email')}</th>
+                  <th className="sortable">{t('common.role')} {getSortIcon('role')}</th>
+                  <th className="sortable">{t('common.group')} {getSortIcon('group')}</th>
+                  <th className="sortable">{t('common.company')} {getSortIcon('company')}</th>
+                  <th className="sortable">{t('common.created')} {getSortIcon('createdAt')}</th>
+                  <th>{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -278,7 +279,7 @@ export default function Users() {
                       </div>
                     </td>
                     <td>{u.email}</td>
-                    <td><span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>{u.role === 'support' ? 'Escalation Team' : u.role}</span></td>
+                    <td><span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>{t('role.' + u.role)}</span></td>
                     <td>
                       {u.groupNames && u.groupNames.length > 0 ? (
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
@@ -301,7 +302,7 @@ export default function Users() {
                   </tr>
                 ))}
                 {paginated.length === 0 && (
-                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No users found</td></tr>
+                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noUsersFound')}</td></tr>
                 )}
               </tbody>
             </table>
@@ -309,13 +310,13 @@ export default function Users() {
 
           <div className="table-footer">
             <div className="table-footer-info">
-              <span>Show</span>
+              <span>{t('common.show')}</span>
               <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={25}>25</option>
               </select>
-              <span>of {filteredUsers.length} users</span>
+              <span>{t('common.of')} {filteredUsers.length} {t('sidebar.users')}</span>
             </div>
             <div className="table-pagination">
               <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
@@ -333,10 +334,10 @@ export default function Users() {
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this user?</p>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>{t('common.confirmDeleteUser')}</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
-              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => handleDelete(deleteTarget.id, deleteTarget.name)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={() => handleDelete(deleteTarget.id, deleteTarget.name)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.delete')}</button>
             </div>
           </div>
         </div>
@@ -345,46 +346,46 @@ export default function Users() {
       {(showModal || editingUser) && (
         <div className="modal-overlay" onClick={() => { setShowModal(false); setEditingUser(null); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{editingUser ? 'Edit User' : 'Add New User'}</h2>
+            <h2>{editingUser ? t('common.editUser') : t('common.addNewUser')}</h2>
             <form onSubmit={editingUser ? handleEdit : handleCreate}>
               <div className="form-group">
-                <label>User Name</label>
+                <label>{t('common.userName')}</label>
                 <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div className="form-group">
-                <label>Email</label>
+                <label>{t('common.email')}</label>
                 <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
               </div>
               <div className="form-group">
-                <label>Company Name</label>
+                <label>{t('common.companyName')}</label>
                 <input type="text" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} />
               </div>
               <div className="form-group">
-                <label>{editingUser ? 'New Password (leave blank to keep)' : 'Password'}</label>
+                <label>{editingUser ? t('common.newPassword') + ' (' + t('common.leaveBlank') + ')' : t('common.password')}</label>
                 <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editingUser} />
               </div>
               {!editingUser && (
                 <div className="form-group">
-                  <label>Confirm Password</label>
+                  <label>{t('common.confirmPassword')}</label>
                   <input type="password" value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} required />
                 </div>
               )}
               <div className="form-group">
-                <label>Role</label>
+                <label>{t('common.role')}</label>
                 <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                  <option value="client">Client</option>
-                  <option value="support">Escalation Team</option>
-                  <option value="developer">Developer</option>
-                  <option value="admin">Admin</option>
+                  <option value="client">{t('role.client')}</option>
+                  <option value="support">{t('role.escalationTeam')}</option>
+                  <option value="developer">{t('role.developer')}</option>
+                  <option value="admin">{t('role.admin')}</option>
                 </select>
               </div>
               <div className="form-group">
-                <label>Group</label>
+                <label>{t('common.group')}</label>
                 <div className="multi-select-dropdown" ref={groupDropdownRef}>
                   <div className="multi-select-trigger" onClick={() => setGroupDropdownOpen(!groupDropdownOpen)}>
                     <span className={`multi-select-value ${form.groupIds.length === 0 ? 'placeholder' : ''}`}>
                       {form.groupIds.length === 0
-                        ? 'Select groups...'
+                        ? t('common.selectGroups')
                         : form.groupIds.map(id => groups.find(g => g.id === id)?.name || id).join(', ')}
                     </span>
                     <span className="multi-select-arrow">&#9662;</span>
@@ -411,8 +412,8 @@ export default function Users() {
                 </div>
               </div>
               <div className="form-actions">
-                <button type="button" className="btn btn-outline" onClick={() => { setShowModal(false); setEditingUser(null); }}>Cancel</button>
-                <button type="submit" className="btn btn-primary">{editingUser ? 'Save Changes' : 'Create User'}</button>
+                <button type="button" className="btn btn-outline" onClick={() => { setShowModal(false); setEditingUser(null); }}>{t('common.cancel')}</button>
+                <button type="submit" className="btn btn-primary">{editingUser ? t('common.saveChanges') : t('common.createUser')}</button>
               </div>
             </form>
           </div>

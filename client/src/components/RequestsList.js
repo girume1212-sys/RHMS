@@ -1,10 +1,12 @@
 import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import { useTranslation } from '../i18n/useTranslation';
 import RequestsTable from './RequestsTable';
 
 export default function RequestsList() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isClient = user?.role === 'client';
@@ -21,13 +23,13 @@ export default function RequestsList() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => navigate(basePath || '/')}>← Back</button>
-          <h1>Requests</h1>
-          <p>{isClient ? 'View your support requests' : 'Manage all support requests'}</p>
+          <button className="back-link" onClick={() => navigate(basePath || '/')}>← {t('common.back')}</button>
+          <h1>{t('common.requests')}</h1>
+          <p>{isClient ? t('common.viewYourRequests') : t('common.manageAllRequests')}</p>
         </div>
         {(isClient || user?.role === 'admin') && (
           <button className="btn btn-primary" onClick={() => navigate(`${basePath}/requests/create`)}>
-            + Create Request
+            + {t('common.createRequest')}
           </button>
         )}
       </div>

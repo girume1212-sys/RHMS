@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
 
 export default function Reports() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [report, setReport] = useState(null);
   const [tasksPage, setTasksPage] = useState(1);
   const [tasksPerPage, setTasksPerPage] = useState(10);
@@ -99,10 +101,10 @@ export default function Reports() {
         ...prev,
         newTasks: prev.newTasks.filter(r => r.id !== id)
       }));
-      showStatusToast(`Request #${id} deleted`, 'request_deleted', id);
+      showStatusToast(t('common.requestDeletedWithId', { id }), 'request_deleted', id);
       setDeleteTarget(null);
     } catch (err) {
-      showStatusToast('Failed to delete request', 'error');
+      showStatusToast(t('common.failedToDelete', { item: t('common.request') }), 'error');
       setDeleteTarget(null);
     }
   };
@@ -111,24 +113,24 @@ export default function Reports() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← Back</button>
-          <h1>Reports & Analytics</h1>
-          <p>System performance and analytics overview</p>
+          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <h1>{t('sidebar.reportsAnalytics')}</h1>
+          <p>{t('dashboard.reportsSubtitle')}</p>
         </div>
       </div>
 
       <div className="stats-grid">
-        <div className="stat-card-simple"><h3>{report.total}</h3><p>Total Requests</p></div>
-        <div className="stat-card-simple"><h3>{report.totalUsers}</h3><p>Total Users</p></div>
-        <div className="stat-card-simple"><h3>{report.avgResolutionTime}</h3><p>Avg Resolution Time</p></div>
-        <div className="stat-card-simple"><h3>{report.clientSatisfaction}</h3><p>Client Satisfaction</p></div>
+        <div className="stat-card-simple"><h3>{report.total}</h3><p>{t('common.totalRequests')}</p></div>
+        <div className="stat-card-simple"><h3>{report.totalUsers}</h3><p>{t('dashboard.totalUsers')}</p></div>
+        <div className="stat-card-simple"><h3>{report.avgResolutionTime}</h3><p>{t('dashboard.avgResolutionTime')}</p></div>
+        <div className="stat-card-simple"><h3>{report.clientSatisfaction}</h3><p>{t('dashboard.clientSatisfaction')}</p></div>
       </div>
 
       <div className="charts-row">
         <div className="chart-card">
-          <h3>Requests by Status</h3>
+          <h3>{t('dashboard.requestsByStatus')}</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={(report.byStatus || []).map(s => ({ ...s, count: Number(s.count) }))}>
+            <BarChart data={(report.byStatus || []).map(s => ({ ...s, name: t('status.' + s.name), count: Number(s.count) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
               <YAxis stroke="#9ca3af" fontSize={12} />
@@ -138,9 +140,9 @@ export default function Reports() {
           </ResponsiveContainer>
         </div>
         <div className="chart-card">
-          <h3>Requests by Priority</h3>
+          <h3>{t('dashboard.requestsByPriority')}</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={(report.byPriority || []).map(p => ({ ...p, count: Number(p.count) }))}>
+            <BarChart data={(report.byPriority || []).map(p => ({ ...p, name: t('priority.' + p.name), count: Number(p.count) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
               <YAxis stroke="#9ca3af" fontSize={12} />
@@ -150,9 +152,9 @@ export default function Reports() {
           </ResponsiveContainer>
         </div>
         <div className="chart-card">
-          <h3>Requests by Category</h3>
+          <h3>{t('dashboard.requestsByCategory')}</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={(report.byCategory || []).map(c => ({ ...c, count: Number(c.count) }))}>
+            <BarChart data={(report.byCategory || []).map(c => ({ ...c, name: t('category.' + c.name), count: Number(c.count) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
               <YAxis stroke="#9ca3af" fontSize={12} />
@@ -162,7 +164,7 @@ export default function Reports() {
           </ResponsiveContainer>
         </div>
         <div className="chart-card">
-          <h3>Requests by Company</h3>
+          <h3>{t('dashboard.requestsByCompany')}</h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={(report.byCompany || []).map(c => ({ ...c, count: Number(c.count) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -177,18 +179,18 @@ export default function Reports() {
 
       <div className="charts-row">
         <div className="chart-card wide">
-          <h3>New Tasks (Latest 10)</h3>
+          <h3>{t('dashboard.newTasksLatest')}</h3>
           <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sortable">ID {getTasksSortIcon('id')}</th>
-                  <th className="sortable">Request Title {getTasksSortIcon('subject')}</th>
-                  <th className="sortable">Client {getTasksSortIcon('client')}</th>
-                  <th className="sortable">Category {getTasksSortIcon('category')}</th>
-                  <th className="sortable">Priority {getTasksSortIcon('priority')}</th>
-                  <th className="sortable">Created {getTasksSortIcon('created')}</th>
-                  <th>Actions</th>
+                  <th className="sortable">{t('common.id')} {getTasksSortIcon('id')}</th>
+                  <th className="sortable">{t('common.requestTitle')} {getTasksSortIcon('subject')}</th>
+                  <th className="sortable">{t('common.client')} {getTasksSortIcon('client')}</th>
+                  <th className="sortable">{t('common.category')} {getTasksSortIcon('category')}</th>
+                  <th className="sortable">{t('common.priority')} {getTasksSortIcon('priority')}</th>
+                  <th className="sortable">{t('common.created')} {getTasksSortIcon('created')}</th>
+                  <th>{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -204,8 +206,8 @@ export default function Reports() {
                       <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                       {r.status_name === 'New' ? (
                         <>
-                          <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>Edit</button>
-                          <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>Delete</button>
+                          <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>{t('common.edit')}</button>
+                          <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>{t('common.delete')}</button>
                         </>
                       ) : (
                         <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>—</span>
@@ -215,20 +217,20 @@ export default function Reports() {
                   </tr>
                 ))}
                 {paginatedTasks.length === 0 && (
-                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No tasks found</td></tr>
+                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noTasksFound')}</td></tr>
                 )}
               </tbody>
             </table>
           </div>
           <div className="table-footer">
             <div className="table-footer-info">
-              <span>Show</span>
+              <span>{t('common.show')}</span>
               <select value={tasksPerPage} onChange={(e) => { setTasksPerPage(Number(e.target.value)); setTasksPage(1); }}>
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={25}>25</option>
               </select>
-              <span>of {sortedTasks.length} tasks</span>
+              <span>{t('common.ofTasks', { count: sortedTasks.length })}</span>
             </div>
             <div className="table-pagination">
               <button className="page-btn" disabled={tasksPage === 1} onClick={() => setTasksPage(1)}>«</button>
@@ -245,18 +247,18 @@ export default function Reports() {
 
       <div className="charts-row">
         <div className="chart-card wide">
-          <h3>User Performance</h3>
+          <h3>{t('dashboard.userPerformance')}</h3>
           <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sortable">User {getPerfSortIcon('name')}</th>
-                  <th className="sortable">Role {getPerfSortIcon('role')}</th>
-                  <th className="sortable">Total Assigned {getPerfSortIcon('total')}</th>
-                  <th className="sortable">Resolved {getPerfSortIcon('resolved')}</th>
-                  <th className="sortable">In Progress {getPerfSortIcon('inProgress')}</th>
-                  <th className="sortable">Pending {getPerfSortIcon('pending')}</th>
-                  <th className="sortable">Resolution Rate {getPerfSortIcon('rate')}</th>
+                  <th className="sortable">{t('common.user')} {getPerfSortIcon('name')}</th>
+                  <th className="sortable">{t('common.role')} {getPerfSortIcon('role')}</th>
+                  <th className="sortable">{t('dashboard.totalAssigned')} {getPerfSortIcon('total')}</th>
+                  <th className="sortable">{t('common.resolved')} {getPerfSortIcon('resolved')}</th>
+                  <th className="sortable">{t('common.inProgress')} {getPerfSortIcon('inProgress')}</th>
+                  <th className="sortable">{t('common.pending')} {getPerfSortIcon('pending')}</th>
+                  <th className="sortable">{t('dashboard.resolutionRate')} {getPerfSortIcon('rate')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -268,7 +270,7 @@ export default function Reports() {
                         <span>{u.name}</span>
                       </div>
                     </td>
-                    <td><span className="role-badge" style={{ background: u.role === 'developer' ? '#8B5CF620' : '#3B82F620', color: u.role === 'developer' ? '#8B5CF6' : '#3B82F6' }}>{u.role === 'developer' ? 'Developer' : 'Escalation Team'}</span></td>
+                    <td><span className="role-badge" style={{ background: u.role === 'developer' ? '#8B5CF620' : '#3B82F620', color: u.role === 'developer' ? '#8B5CF6' : '#3B82F6' }}>{u.role === 'developer' ? t('role.developer') : t('role.escalationTeam')}</span></td>
                     <td>{u.total_assigned}</td>
                     <td style={{ color: '#10B981' }}>{u.resolved}</td>
                     <td style={{ color: '#F59E0B' }}>{u.in_progress}</td>
@@ -277,20 +279,20 @@ export default function Reports() {
                   </tr>
                 ))}
                 {paginatedPerf.length === 0 && (
-                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>No performance data</td></tr>
+                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('dashboard.noPerformanceData')}</td></tr>
                 )}
               </tbody>
             </table>
           </div>
           <div className="table-footer">
             <div className="table-footer-info">
-              <span>Show</span>
+              <span>{t('common.show')}</span>
               <select value={perfPerPage} onChange={(e) => { setPerfPerPage(Number(e.target.value)); setPerfPage(1); }}>
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={25}>25</option>
               </select>
-              <span>of {sortedPerf.length} users</span>
+              <span>{t('common.ofUsers', { count: sortedPerf.length })}</span>
             </div>
             <div className="table-pagination">
               <button className="page-btn" disabled={perfPage === 1} onClick={() => setPerfPage(1)}>«</button>
@@ -308,10 +310,10 @@ export default function Reports() {
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete this request?</p>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>{t('common.confirmDeleteRequest')}</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
-              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.delete')}</button>
             </div>
           </div>
         </div>

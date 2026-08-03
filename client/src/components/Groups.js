@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
 
 export default function Groups() {
+  const { t } = useTranslation();
   const [groups, setGroups] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -51,12 +53,12 @@ export default function Groups() {
       setCompanies(companiesData);
       setAllUsers(usersData);
       setLoading(false);
-    }).catch(err => { setError('Failed to load data: ' + err.message); setLoading(false); });
+    }).catch(err => { setError(t('common.failedToLoadData') + ': ' + err.message); setLoading(false); });
   };
 
   const loadGroups = () => {
     api.get('/api/groups').then(data => { setGroups(data.map((g, i) => ({ ...g, numId: i + 1 }))); })
-      .catch(err => { setError('Failed to load groups: ' + err.message); });
+      .catch(err => { setError(t('common.failedToLoadGroups') + ': ' + err.message); });
   };
 
   const handleCreate = async (e) => {
@@ -68,11 +70,11 @@ export default function Groups() {
       setShowModal(false);
       setForm({ name: '', description: '', color: '#3B82F6', company_id: '' });
       loadGroups();
-      addToast('Group created successfully!');
-      showStatusToast(`Group "${form.name}" created`, 'request_created');
+      addToast(t('common.createdSuccess', { item: t('common.group') }));
+      showStatusToast(t('common.groupCreatedWithName', { name: form.name }), 'request_created');
     } catch (err) {
-      setError('Failed to create group: ' + err.message);
-      addToast('Failed to create group: ' + err.message, 'error');
+      setError(t('common.failedToCreateGroup') + ': ' + err.message);
+      addToast(t('common.failedToCreateGroup') + ': ' + err.message, 'error');
     }
   };
 
@@ -84,11 +86,11 @@ export default function Groups() {
       setEditingGroup(null);
       setForm({ name: '', description: '', color: '#3B82F6', company_id: '' });
       loadGroups();
-      addToast('Group updated successfully!');
-      showStatusToast(`Group "${form.name}" updated`, 'status');
+      addToast(t('common.updatedSuccess', { item: t('common.group') }));
+      showStatusToast(t('common.groupUpdatedWithName', { name: form.name }), 'status');
     } catch (err) {
-      setError('Failed to update group: ' + err.message);
-      addToast('Failed to update group: ' + err.message, 'error');
+      setError(t('common.failedToUpdateGroup') + ': ' + err.message);
+      addToast(t('common.failedToUpdateGroup') + ': ' + err.message, 'error');
     }
   };
 
@@ -96,12 +98,12 @@ export default function Groups() {
     try {
       await api.delete(`/api/groups/${id}`);
       loadGroups();
-      addToast(`Group "${name}" deleted successfully!`);
-      showStatusToast(`Group "${name}" deleted`, 'request_deleted');
+      addToast(t('common.groupDeletedWithName', { name }));
+      showStatusToast(t('common.groupDeleted', { name }), 'request_deleted');
       setDeleteTarget(null);
     } catch (err) {
-      setError('Failed to delete group: ' + err.message);
-      addToast('Failed to delete group: ' + err.message, 'error');
+      setError(t('common.failedToDeleteGroup') + ': ' + err.message);
+      addToast(t('common.failedToDeleteGroup') + ': ' + err.message, 'error');
       setDeleteTarget(null);
     }
   };
@@ -134,7 +136,7 @@ export default function Groups() {
       const data = await api.get(`/api/groups/${group.id}/members`);
       setMembers(data);
     } catch (err) {
-      addToast('Failed to load members: ' + err.message, 'error');
+      addToast(t('common.failedToLoadMembers') + ': ' + err.message, 'error');
     }
     setMembersLoading(false);
   };
@@ -346,15 +348,6 @@ export default function Groups() {
               <div className="form-group">
                 <label>Group Name</label>
                 <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label>Company</label>
-                <select value={form.company_id} onChange={(e) => setForm({ ...form, company_id: e.target.value })}>
-                  <option value="">— No Company —</option>
-                  {companies.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
               </div>
               <div className="form-group">
                 <label>Description</label>

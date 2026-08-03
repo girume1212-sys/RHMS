@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
+import { useTranslation } from '../i18n/useTranslation';
 
 const pad = (n) => String(n).padStart(2, '0');
 const toKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -10,10 +11,12 @@ const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 
 const addMonths = (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1);
 const startOfWeek = (d) => addDays(d, -d.getDay());
 
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const MONTH_KEYS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 
 export default function RequestCalendar() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState('month');
@@ -94,35 +97,38 @@ export default function RequestCalendar() {
 
   const goToday = () => setCursor(startOfDay(new Date()));
 
+  const monthName = (d) => t('months.' + MONTH_KEYS[d.getMonth()]);
+  const dayName = (d) => t('days.' + DAY_KEYS[d.getDay()]);
+
   const rangeLabel = () => {
-    if (view === 'month') return cursor.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    if (view === 'month') return `${monthName(cursor)} ${cursor.getFullYear()}`;
     if (view === 'week') {
       const s = startOfWeek(cursor);
       const e = addDays(s, 6);
-      const sL = s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const sL = `${monthName(s)} ${s.getDate()}`;
       const eL = s.getFullYear() === e.getFullYear()
-        ? e.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        : e.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        ? `${monthName(e)} ${e.getDate()}`
+        : `${monthName(e)} ${e.getDate()}, ${e.getFullYear()}`;
       return `${sL} – ${eL}`;
     }
-    return cursor.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${monthName(cursor)} ${cursor.getDate()}, ${cursor.getFullYear()}`;
   };
 
   const viewLabel = () => {
-    if (view === 'month') return cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    if (view === 'month') return `${monthName(cursor)} ${cursor.getFullYear()}`;
     if (view === 'week') {
       const s = startOfWeek(cursor);
       const e = addDays(s, 6);
-      return `${s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${e.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      return `${monthName(s)} ${s.getDate()} – ${monthName(e)} ${e.getDate()}, ${e.getFullYear()}`;
     }
-    return cursor.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    return `${dayName(cursor)} ${monthName(cursor)} ${cursor.getDate()}, ${cursor.getFullYear()}`;
   };
 
   const chip = (r, type, showSubject) => (
     <span
       key={`${r.id}-${type}`}
       className={`req-cal-chip req-cal-chip-${type}`}
-      title={`#${r.id} ${r.subject}` + (type === 'updated' ? ' (updated)' : '')}
+      title={`#${r.id} ${r.subject}` + (type === 'updated' ? ' (' + t('calendar.updated') + ')' : '')}
       onClick={(e) => { e.stopPropagation(); openRequest(r.id); }}
     >
       <span className="req-cal-chip-dot"></span>

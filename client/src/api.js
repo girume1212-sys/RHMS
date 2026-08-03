@@ -1,3 +1,5 @@
+import { translate } from './i18n/translate';
+
 export const API_BASE = process.env.REACT_APP_API_URL || '';
 
 export function isTokenExpired(token) {
@@ -18,7 +20,7 @@ async function apiFetch(url, options = {}) {
   try {
     res = await fetch(`${API_BASE}${url}`, { ...options, headers });
   } catch (err) {
-    throw new Error('Cannot connect to server. Is the backend running?');
+    throw new Error(translate('common.cannotConnectServer'));
   }
   if (res.status === 401) {
     localStorage.removeItem('rhms_token');
@@ -26,16 +28,16 @@ async function apiFetch(url, options = {}) {
     if (window.location.pathname !== '/login') {
       window.location.href = '/login?expired=1';
     }
-    throw new Error('Session expired. Please login again.');
+    throw new Error(translate('common.sessionExpired'));
   }
   const contentType = res.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
+    if (!res.ok) throw new Error(data.error || translate('common.requestFailed'));
     return data;
   }
-  if (!res.ok) throw new Error('Request failed with status ' + res.status);
-  throw new Error('Unexpected response from server');
+  if (!res.ok) throw new Error(translate('common.requestFailedWithStatus') + ' ' + res.status);
+  throw new Error(translate('common.unexpectedResponse'));
 }
 
 export const api = {
@@ -52,10 +54,10 @@ export const api = {
     if (res.status === 401) {
       localStorage.removeItem('rhms_token');
       window.location.href = '/login?expired=1';
-      throw new Error('Session expired');
+      throw new Error(translate('common.sessionExpired'));
     }
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    if (!res.ok) throw new Error(data.error || translate('common.uploadFailed'));
     return data;
   },
 };

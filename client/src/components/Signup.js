@@ -3,8 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { validateName, validateEmail } from '../utils/validation';
 import ValidationError from './ValidationError';
+import { useTranslation } from '../i18n/useTranslation';
+import LanguageSelector from './LanguageSelector';
 
 export default function Signup() {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
@@ -21,8 +24,8 @@ export default function Signup() {
 
   const validateField = (name, value) => {
     let err = '';
-    if (name === 'name') err = validateName(value, 'Name');
-    else if (name === 'companyName') err = validateName(value, 'Company name');
+    if (name === 'name') err = validateName(value, t('common.fullName'));
+    else if (name === 'companyName') err = validateName(value, t('common.companyName'));
     else if (name === 'email') err = validateEmail(value);
     setErrors(prev => ({ ...prev, [name]: err }));
     return err;
@@ -36,7 +39,7 @@ export default function Signup() {
     const emailErr = validateField('email', email);
     if (nameErr || companyErr || emailErr) return;
     if (!accepted) {
-      setError('You must accept the terms and conditions');
+      setError(t('common.mustAcceptTerms'));
       return;
     }
 
@@ -59,12 +62,14 @@ export default function Signup() {
         <div className="login-orb login-orb-2"></div>
       </div>
 
+      <LanguageSelector variant="login" />
+
       <div className="login-card">
-        <h2 className="login-title">Create Account</h2>
-        <p className="login-subtitle">Fill in the details to get started</p>
+        <h2 className="login-title">{t('common.createAccount')}</h2>
+        <p className="login-subtitle">{t('common.fillDetails')}</p>
 
         {error && <div className="login-error">{error}</div>}
-        {success && <div className="signup-success">Account created successfully! Redirecting to login...</div>}
+        {success && <div className="signup-success">{t('common.accountCreated')}</div>}
 
         <form onSubmit={handleSubmit}>
           <div className="login-field">
@@ -77,7 +82,7 @@ export default function Signup() {
                 type="text"
                 value={name}
                 onChange={(e) => { setName(e.target.value); validateField('name', e.target.value); }}
-                placeholder="Enter your name"
+                placeholder={t('common.enterYourName')}
                 className={errors.name ? 'input-error' : ''}
                 required
               />
@@ -95,7 +100,7 @@ export default function Signup() {
                 type="text"
                 value={companyName}
                 onChange={(e) => { setCompanyName(e.target.value); validateField('companyName', e.target.value); }}
-                placeholder="Enter company name"
+                placeholder={t('common.enterCompanyName')}
                 className={errors.companyName ? 'input-error' : ''}
                 required
               />
@@ -113,7 +118,7 @@ export default function Signup() {
                 type="email"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); validateField('email', e.target.value); }}
-                placeholder="Enter your email"
+                placeholder={t('common.enterEmail')}
                 className={errors.email ? 'input-error' : ''}
                 required
               />
@@ -131,7 +136,7 @@ export default function Signup() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
+                placeholder={t('common.enterPassword')}
                 required
                 minLength={6}
               />
@@ -140,7 +145,7 @@ export default function Signup() {
                 className="show-password-btn"
                 onClick={() => setShowPassword(!showPassword)}
               >
-                {showPassword ? 'HIDE' : 'SHOW'}
+                {showPassword ? t('common.hide').toUpperCase() : t('common.show').toUpperCase()}
               </button>
             </div>
           </div>
@@ -155,7 +160,7 @@ export default function Signup() {
                 type={showConfirm ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Enter confirm password"
+                placeholder={t('common.enterConfirmPassword')}
                 required
                 minLength={6}
               />
@@ -164,7 +169,7 @@ export default function Signup() {
                 className="show-password-btn"
                 onClick={() => setShowConfirm(!showConfirm)}
               >
-                {showConfirm ? 'HIDE' : 'SHOW'}
+                {showConfirm ? t('common.hide').toUpperCase() : t('common.show').toUpperCase()}
               </button>
             </div>
           </div>
@@ -176,17 +181,17 @@ export default function Signup() {
                 checked={accepted}
                 onChange={(e) => setAccepted(e.target.checked)}
               />
-              <span>I accept the <span className="terms-link">terms and conditions</span></span>
+              <span>{t('common.acceptTerms')} <span className="terms-link">{t('common.termsAndConditions')}</span></span>
             </label>
           </div>
 
           <button type="submit" className="login-btn" disabled={loading || success}>
-            {loading ? 'Creating account...' : 'Create Account'}
+            {loading ? t('common.creatingAccount') : t('common.createAccount')}
           </button>
         </form>
 
         <p className="signup-link">
-          Already have an account? <button type="button" className="signup-btn" onClick={() => navigate('/login')}>Sign In</button>
+          {t('common.alreadyHaveAccount')} <button type="button" className="signup-btn" onClick={() => navigate('/login')}>{t('common.signIn')}</button>
         </p>
       </div>
     </div>

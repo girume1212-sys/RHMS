@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
 import { API_BASE, isTokenExpired } from '../api';
 import GlobalSearch from './GlobalSearch';
+import LanguageSelector from './LanguageSelector';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -221,13 +222,13 @@ export default function ClientLayout() {
 
   const getNotifTitle = (type) => {
     const titles = {
-      request_created: 'New Request',
-      status_change: 'Status Change',
-      assigned: 'Assignment',
-      claimed: 'Request Claimed',
-      comment: 'New Comment',
-      request_deleted: 'Request Deleted',
-      default: 'Notification'
+      request_created: t('common.newRequest'),
+      status_change: t('common.statusChange'),
+      assigned: t('common.assignment'),
+      claimed: t('common.requestClaimed'),
+      comment: t('common.newComment'),
+      request_deleted: t('common.requestDeletedTitle'),
+      default: t('common.notification')
     };
     return titles[type] || titles.default;
   };
@@ -302,8 +303,8 @@ export default function ClientLayout() {
             <div className="bubble-pill-icon">
               {getNotificationIcon(n.type)}
             </div>
-            <div className="bubble-pill-body">
-              <div className="bubble-pill-title">{n.requestId ? `Request #${n.requestId}` : t('common.notifications')}</div>
+              <div className="bubble-pill-body">
+              <div className="bubble-pill-title">{n.requestId ? `${t('common.requestShort')} #${n.requestId}` : t('common.notifications')}</div>
               <div className="bubble-pill-text">{n.message}</div>
               <div className="bubble-pill-time">{n.timestamp ? new Date(n.timestamp).toLocaleTimeString() : ''}</div>
             </div>
@@ -321,14 +322,15 @@ export default function ClientLayout() {
         <header className="topbar">
           <div className="topbar-left">
             <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-            <GlobalSearch clientMode placeholder="Search requests..." />
+            <GlobalSearch clientMode placeholder={t('common.searchRequests')} />
           </div>
           <div className="topbar-right">
-            <button className="theme-toggle" onClick={toggleDarkMode} title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+            <LanguageSelector variant="topbar" />
+            <button className="theme-toggle" onClick={toggleDarkMode} title={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}>
               {darkMode ? <><span className="toggle-icon">☀️</span><span>{t('common.brightMode')}</span></> : <><span className="toggle-icon">🌙</span><span>{t('common.darkMode')}</span></>}
             </button>
             <div className="notification-container" style={{ position: 'relative' }}>
-              <button className="theme-toggle" onClick={openNotifications} title="Notifications" style={{ position: 'relative' }}>
+              <button className="theme-toggle" onClick={openNotifications} title={t('common.notifications')} style={{ position: 'relative' }}>
                 <span className="toggle-icon">🔔</span>
                 {unreadNotifications.length > 0 && (
                   <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
@@ -340,7 +342,7 @@ export default function ClientLayout() {
                 <div className="dropdown-panel notification-panel" style={{ width: 420, border: darkMode ? '1px solid #334155' : '1px solid #e5e7eb', background: darkMode ? '#1e293b' : '#fff' }}>
                   <div className="dropdown-panel-header" style={{ color: darkMode ? '#e2e8f0' : 'inherit' }}>
                     <span>{t('common.notifications')}</span>
-                    {panelNotifications.length > 0 && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>Mark all read</span>}
+                    {panelNotifications.length > 0 && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>{t('common.markAllRead')}</span>}
                   </div>
                   {panelNotifications.length === 0 ? (
                     <div className="dropdown-panel-empty">{t('common.noNotifications')}</div>
@@ -352,7 +354,7 @@ export default function ClientLayout() {
                           <div className="dropdown-panel-content">
                             <div className="dropdown-panel-title">
                               {getNotifTitle(n.type)}
-                              {n.requestId && <span className="dropdown-panel-request">REQ-{String(n.requestId).padStart(4, '0')}</span>}
+                              {n.requestId && <span className="dropdown-panel-request">{t('common.requestPrefixLabel')}-{String(n.requestId).padStart(4, '0')}</span>}
                             </div>
                             <p className="dropdown-panel-message">{n.message}</p>
                             <div className="dropdown-panel-meta">

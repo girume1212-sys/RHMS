@@ -4,9 +4,22 @@ import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
+
+const CATEGORY_TEMPLATES = [
+  { id: '1', name: 'Hardware', icon: '🖥️', color: '#3B82F6' },
+  { id: '2', name: 'Software', icon: '💿', color: '#10B981' },
+  { id: '3', name: 'Network', icon: '🌐', color: '#F59E0B' },
+  { id: '4', name: 'Security', icon: '🔒', color: '#EF4444' },
+  { id: '5', name: 'Email', icon: '📧', color: '#8B5CF6' },
+  { id: '6', name: 'Account', icon: '👤', color: '#06B6D4' },
+  { id: '7', name: 'Data', icon: '💾', color: '#EC4899' },
+  { id: '8', name: 'Other', icon: '📋', color: '#6B7280' },
+];
 
 export default function CreateRequest() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const [form, setForm] = useState({ subject: '', description: '', categoryId: '', priorityId: '2' });
@@ -20,6 +33,12 @@ export default function CreateRequest() {
 
   const isClient = user?.role === 'client';
   const basePath = isClient ? '/client' : '';
+
+  const categoryTemplates = CATEGORY_TEMPLATES.map(c => ({
+    ...c,
+    name: t('category.' + c.name),
+    description: t('category.' + c.name + 'Desc')
+  }));
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -64,7 +83,7 @@ export default function CreateRequest() {
         if (data.path) uploaded.push(data.path);
       } catch (err) {
         console.error('Upload failed:', err);
-        addToast('File upload failed: ' + err.message, 'error');
+        addToast(t('common.uploadFailed') + ': ' + err.message, 'error');
       }
     }
     return uploaded;
@@ -73,8 +92,8 @@ export default function CreateRequest() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.subject.trim() || !form.description.trim() || !form.categoryId) {
-      setError('Please fill all required fields');
-      addToast('Please fill all required fields', 'error');
+      setError(t('common.fillRequiredFields'));
+      addToast(t('common.fillRequiredFields'), 'error');
       return;
     }
     setLoading(true);
@@ -87,12 +106,12 @@ export default function CreateRequest() {
         setUploading(false);
       }
       await api.post('/api/requests', { ...form, attachments });
-      addToast('Request created successfully!');
-      showStatusToast(`New request "${form.subject}" created`, 'request_created');
+      addToast(t('common.requestCreatedSuccess'));
+      showStatusToast(t('common.newRequestCreated', { subject: form.subject }), 'request_created');
       navigate(`${basePath}/requests`);
     } catch (err) {
       setError(err.message);
-      addToast('Failed to create request: ' + err.message, 'error');
+      addToast(t('common.failedToCreateRequest') + ': ' + err.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -107,9 +126,9 @@ export default function CreateRequest() {
       </div>
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← Back to Requests</button>
-          <h1>Create Request</h1>
-          <p>Submit a new support request</p>
+          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← {t('common.backToRequests')}</button>
+          <h1>{t('common.createRequest')}</h1>
+          <p>{t('common.submitNewRequest')}</p>
         </div>
       </div>
 
@@ -117,23 +136,14 @@ export default function CreateRequest() {
         <form onSubmit={handleSubmit}>
           {error && <div className="form-error">{error}</div>}
           <div className="form-group">
-            <label>Request Title *</label>
-            <input type="text" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Brief description of the issue" required />
+            <label>{t('common.requestTitle')} *</label>
+            <input type="text" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder={t('common.briefDescription')} required />
           </div>
           <div className="form-row">
           <div className="form-group">
-            <label>Category *</label>
+            <label>{t('common.category')} *</label>
             <div className="category-cards">
-              {[
-                { id: '1', name: 'Hardware', icon: '🖥️', color: '#3B82F6', description: 'Computer, printer, peripherals' },
-                { id: '2', name: 'Software', icon: '💿', color: '#10B981', description: 'Applications, OS, licensing' },
-                { id: '3', name: 'Network', icon: '🌐', color: '#F59E0B', description: 'WiFi, internet, connectivity' },
-                { id: '4', name: 'Security', icon: '🔒', color: '#EF4444', description: 'Viruses, malware, access issues' },
-                { id: '5', name: 'Email', icon: '📧', color: '#8B5CF6', description: 'Email setup, calendar, Outlook' },
-                { id: '6', name: 'Account', icon: '👤', color: '#06B6D4', description: 'Login, password, permissions' },
-                { id: '7', name: 'Data', icon: '💾', color: '#EC4899', description: 'Backup, recovery, storage' },
-                { id: '8', name: 'Other', icon: '📋', color: '#6B7280', description: 'General inquiries, other issues' },
-              ].map(c => (
+              {categoryTemplates.map(c => (
                 <div
                   key={c.id}
                   className={`category-card-select ${form.categoryId === c.id ? 'selected' : ''}`}
@@ -151,18 +161,18 @@ export default function CreateRequest() {
             )}
           </div>
             <div className="form-group">
-              <label>Priority</label>
+              <label>{t('common.priority')}</label>
               <select value={form.priorityId} onChange={(e) => setForm({ ...form, priorityId: e.target.value })}>
                 {prioritiesList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           </div>
           <div className="form-group">
-            <label>Description *</label>
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Provide detailed information about the issue..." rows={8} required />
+            <label>{t('common.description')} *</label>
+            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={t('common.provideDetails')} rows={8} required />
           </div>
           <div className="form-group">
-            <label>Attachments</label>
+            <label>{t('common.attachments')}</label>
             <div className="file-upload" onClick={() => fileInputRef.current.click()}>
               <input
                 type="file"
@@ -173,8 +183,8 @@ export default function CreateRequest() {
                 onChange={handleFileChange}
               />
               <div className="file-upload-icon">📤</div>
-              <div className="file-upload-text">Click to upload files or drag and drop</div>
-              <div className="file-upload-hint">Images, PDF, DOCX, XLSX (Max 10MB each)</div>
+              <div className="file-upload-text">{t('common.clickToUpload')}</div>
+              <div className="file-upload-hint">{t('common.uploadHint')}</div>
             </div>
             {files.length > 0 && (
               <div className="file-preview-list">
@@ -194,9 +204,9 @@ export default function CreateRequest() {
             )}
           </div>
           <div className="form-actions">
-            <button type="button" className="btn btn-outline" onClick={() => navigate(`${basePath}/requests`)}>Cancel</button>
+            <button type="button" className="btn btn-outline" onClick={() => navigate(`${basePath}/requests`)}>{t('common.cancel')}</button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Submitting...' : 'Submit Request'}
+              {loading ? t('common.submitting') : t('common.submitRequest')}
             </button>
           </div>
         </form>

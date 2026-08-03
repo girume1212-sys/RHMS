@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from '../i18n/useTranslation';
 
 export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -20,10 +22,10 @@ export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
   const label = dateFrom && dateTo
     ? `${formatDate(dateFrom)} - ${formatDate(dateTo)}`
     : dateFrom
-    ? `${formatDate(dateFrom)} - End`
+    ? `${formatDate(dateFrom)} - ${t('common.end')}`
     : dateTo
-    ? `Start - ${formatDate(dateTo)}`
-    : 'Select date range';
+    ? `${t('common.start')} - ${formatDate(dateTo)}`
+    : t('common.selectDateRange');
 
   const handleClear = (e) => {
     e.stopPropagation();
@@ -41,18 +43,18 @@ export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
         <div className="drp-dropdown">
           <div className="drp-row">
             <div className="drp-field">
-              <label>From</label>
+              <label>{t('common.from')}</label>
               <input type="date" value={dateFrom || ''} onChange={e => onChange({ dateFrom: e.target.value, dateTo })} />
             </div>
             <span className="drp-separator">→</span>
             <div className="drp-field">
-              <label>To</label>
+              <label>{t('common.to')}</label>
               <input type="date" value={dateTo || ''} onChange={e => onChange({ dateFrom, dateTo: e.target.value })} />
             </div>
           </div>
           <div className="drp-actions">
-            <button className="drp-clear" onClick={handleClear}>Clear</button>
-            <button className="drp-apply" onClick={() => setOpen(false)}>Apply</button>
+            <button className="drp-clear" onClick={handleClear}>{t('common.clear')}</button>
+            <button className="drp-apply" onClick={() => setOpen(false)}>{t('common.apply')}</button>
           </div>
         </div>
       )}

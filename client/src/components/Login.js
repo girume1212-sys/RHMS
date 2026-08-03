@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { validateEmail } from '../utils/validation';
 import ValidationError from './ValidationError';
 import { useTranslation } from '../i18n/useTranslation';
+import LanguageSelector from './LanguageSelector';
 import { API_BASE } from '../api';
 
 export default function Login() {
@@ -108,7 +109,16 @@ export default function Login() {
         navigate('/');
       }
     } catch (err) {
-      setError(err.message === 'Invalid username, email or password' ? t('common.invalidCredentials') : err.message);
+      const msg = err.message || '';
+      if (msg.includes('Invalid username') || msg.includes('invalidCredentials')) {
+        setError(t('common.invalidCredentials'));
+      } else if (msg.includes('Cannot connect to server')) {
+        setError(t('common.cannotConnectServer'));
+      } else if (msg.includes('Account locked')) {
+        setError(t('common.accountLocked'));
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -129,6 +139,8 @@ export default function Login() {
         <div className="login-orb login-orb-2"></div>
       </div>
 
+      <LanguageSelector variant="login" />
+
       <div className="login-card">
         <h2 className="login-title">{t('common.login')}</h2>
         <p className="login-subtitle">{t('common.welcomeSubtitle')}</p>
@@ -147,7 +159,7 @@ export default function Login() {
                 value={usernameOrEmail}
                 onChange={(e) => setUsernameOrEmail(e.target.value.replace(/\s/g, ''))}
                 onKeyDown={(e) => e.key === ' ' && e.preventDefault()}
-                placeholder="Username or Email"
+                placeholder={t('common.userNameOrEmail')}
                 required
               />
             </div>

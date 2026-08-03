@@ -4,10 +4,12 @@ import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
 
 export default function RequestDetail() {
   const { id } = useParams();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
@@ -85,11 +87,11 @@ export default function RequestDetail() {
     try {
       await api.post(`/api/requests/${id}/feedback`, { rating: feedbackRating, comment: feedbackComment });
       setFeedbackSubmitted(true);
-      addToast('Feedback submitted successfully! Thank you!');
-      showStatusToast('Feedback submitted', 'success');
+      addToast(t('common.feedbackSubmitted'));
+      showStatusToast(t('common.feedbackSubmittedShort'), 'success');
       loadFeedback();
     } catch (err) {
-      addToast('Failed to submit feedback: ' + err.message, 'error');
+      addToast(t('common.failedSubmitFeedback') + ': ' + err.message, 'error');
     } finally {
       setFeedbackSubmitting(false);
     }
@@ -119,17 +121,17 @@ export default function RequestDetail() {
 
   const handleStatusChange = async (statusId) => {
     if (isClient && (statusId === '6' || statusId === '8') && request.statusId !== '5') {
-      addToast('You can only close or reject a request that is in Resolved status.', 'error');
+      addToast(t('common.closeRejectResolvedOnly'), 'error');
       return;
     }
     try {
       await api.put(`/api/requests/${id}`, { statusId });
       loadRequest();
       loadActivity();
-      addToast('Status updated successfully!');
-      showStatusToast(`Request #${id} status updated`, 'status', id);
+      addToast(t('common.statusUpdated'));
+      showStatusToast(t('common.requestStatusUpdated', { id }), 'status', id);
     } catch (err) {
-      addToast('Failed to update status: ' + err.message, 'error');
+      addToast(t('common.failedToUpdateStatus') + ': ' + err.message, 'error');
     }
   };
 
@@ -139,10 +141,10 @@ export default function RequestDetail() {
       await api.put(`/api/requests/${id}/claim`);
       loadRequest();
       loadActivity();
-      addToast('Request claimed successfully!');
-      showStatusToast(`Request #${id} claimed`, 'assignment', id);
+      addToast(t('common.requestClaimed'));
+      showStatusToast(t('common.requestClaimedWithId', { id }), 'assignment', id);
     } catch (err) {
-      addToast('Failed to claim: ' + err.message, 'error');
+      addToast(t('common.failedToClaim') + ': ' + err.message, 'error');
     } finally {
       setClaiming(false);
     }
@@ -159,11 +161,11 @@ export default function RequestDetail() {
       const serverAssignee = result.assignedTo ? users.find(u => u.id === result.assignedTo) : null;
       setRequest(v => ({ ...v, assignedTo: result.assignedTo, statusId: result.statusId, status: serverStatus || v.status, assignee: serverAssignee ? { id: serverAssignee.id, name: serverAssignee.name, avatar: serverAssignee.avatar } : null }));
       loadActivity();
-      addToast('Assignee updated successfully!');
-      showStatusToast(`Request #${id} assignee updated`, 'assignment', id);
+      addToast(t('common.assigneeUpdated'));
+      showStatusToast(t('common.assigneeUpdatedWithId', { id }), 'assignment', id);
     } catch (err) {
       setRequest(v => ({ ...v, assignedTo: prev.assignedTo, statusId: prev.statusId, status: prev.status, assignee: prev.assignee }));
-      addToast('Failed to update assignee: ' + err.message, 'error');
+      addToast(t('common.failedUpdateAssignee') + ': ' + err.message, 'error');
     }
   };
 
@@ -195,7 +197,7 @@ export default function RequestDetail() {
         if (data.path) uploaded.push(data.path);
       } catch (err) {
         console.error('Upload failed:', err);
-        addToast('File upload failed: ' + err.message, 'error');
+        addToast(t('common.uploadFailed') + ': ' + err.message, 'error');
       }
     }
     return uploaded;
@@ -214,11 +216,11 @@ export default function RequestDetail() {
       setNewFiles([]);
       loadRequest();
       loadActivity();
-      addToast('Request updated successfully!');
-      showStatusToast(`Request #${id} updated`, 'status', id);
+      addToast(t('common.requestUpdated'));
+      showStatusToast(t('common.requestUpdatedWithId', { id }), 'status', id);
     } catch (err) {
       console.error('Save failed:', err);
-      addToast('Failed to save changes: ' + err.message, 'error');
+      addToast(t('common.failedSaveChanges') + ': ' + err.message, 'error');
     } finally {
       setUploading(false);
     }
@@ -235,11 +237,11 @@ export default function RequestDetail() {
         setNewFiles([]);
         loadRequest();
         loadActivity();
-        addToast('Files uploaded successfully!');
-        showStatusToast(`Files uploaded to Request #${id}`, 'status', id);
+        addToast(t('common.filesUploaded'));
+        showStatusToast(t('common.filesUploadedToRequest', { id }), 'status', id);
       }
     } catch (err) {
-      addToast('Failed to upload files: ' + err.message, 'error');
+      addToast(t('common.failedUploadFiles') + ': ' + err.message, 'error');
     } finally {
       setUploading(false);
     }
@@ -262,12 +264,12 @@ export default function RequestDetail() {
       await api.post(`/api/requests/${id}/comments`, { content: comment, attachments });
       setComment('');
       setPendingFiles([]);
-      addToast('Comment added successfully!');
+      addToast(t('common.commentAdded'));
       loadRequest();
       loadActivity();
-      showStatusToast(`Comment added to Request #${id}`, 'comment', id);
+      showStatusToast(t('common.commentAddedToRequest', { id }), 'comment', id);
     } catch (err) {
-      addToast('Failed to add comment: ' + err.message, 'error');
+      addToast(t('common.failedAddComment') + ': ' + err.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -294,13 +296,13 @@ export default function RequestDetail() {
   };
 
   const roleLabel = (role) => {
-    const labels = { admin: 'Admin', developer: 'Developer', client: 'Client', support: 'Escalation Team', escalation: 'Escalation Team', system: 'System' };
-    return labels[role] || role || 'System';
+    const labels = { admin: t('role.admin'), developer: t('role.developer'), client: t('role.client'), support: t('role.escalation'), escalation: t('role.escalation'), system: t('role.system') };
+    return labels[role] || role || t('role.system');
   };
 
   const chatRoleLabel = (role) => {
-    const labels = { admin: 'Administrator', developer: 'Developer', client: 'Client', support: 'Escalation Team', escalation: 'Escalation Team', system: 'System' };
-    return labels[role] || role || 'System';
+    const labels = { admin: t('role.administrator'), developer: t('role.developer'), client: t('role.client'), support: t('role.escalationTeam'), escalation: t('role.escalationTeam'), system: t('role.system') };
+    return labels[role] || role || t('role.system');
   };
 
   const formatSize = (bytes) => {
@@ -317,21 +319,21 @@ export default function RequestDetail() {
     yesterday.setDate(yesterday.getDate() - 1);
     const day = new Date(d);
     day.setHours(0, 0, 0, 0);
-    if (day.getTime() === today.getTime()) return 'Today';
-    if (day.getTime() === yesterday.getTime()) return 'Yesterday';
+    if (day.getTime() === today.getTime()) return t('common.today');
+    if (day.getTime() === yesterday.getTime()) return t('common.yesterday');
     return day.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
   const systemMessageText = (a) => {
-    if (a.type === 'created') return 'Request created';
+    if (a.type === 'created') return t('system.requestCreated');
     if (a.type === 'status_update') {
       const match = a.message.match(/Changed status from (.+) to (.+)/i);
-      if (match) return `Status changed from ${match[1].trim()} to ${match[2].trim()}`;
+      if (match) return t('system.statusChangedFromTo', { from: match[1].trim(), to: match[2].trim() });
       return a.message;
     }
-    if (a.type === 'assigned') return a.message || 'Request assigned';
-    if (a.type === 'updated') return a.message || 'Request updated';
-    return a.message || 'Activity';
+    if (a.type === 'assigned') return a.message || t('system.requestAssigned');
+    if (a.type === 'updated') return a.message || t('system.requestUpdated');
+    return a.message || t('system.activity');
   };
 
   const renderInline = (text) => {
@@ -389,7 +391,6 @@ export default function RequestDetail() {
 
   const buildChatItems = () => {
     const comments = request?.comments || [];
-    const activities = activityLog.filter(a => a.type !== 'comment');
 
     let filteredComments = comments;
     if (commentSearch.trim()) {
@@ -404,24 +405,16 @@ export default function RequestDetail() {
       return commentSort === 'latest' ? -diff : diff;
     });
 
-    const all = [];
-    sortedComments.forEach(c => all.push({ kind: 'comment', ts: new Date(c.createdAt), comment: c }));
-    activities.forEach(a => all.push({ kind: 'system', ts: new Date(a.createdAt), activity: a }));
-    all.sort((a, b) => a.ts - b.ts);
-
     const items = [];
     let lastDay = null;
-    all.forEach(item => {
-      const day = item.ts.toDateString();
+    sortedComments.forEach(c => {
+      const ts = new Date(c.createdAt);
+      const day = ts.toDateString();
       if (day !== lastDay) {
-        items.push({ kind: 'separator', ts: item.ts });
+        items.push({ kind: 'separator', ts });
         lastDay = day;
       }
-      if (item.kind === 'comment') {
-        items.push({ kind: 'comment', comment: item.comment });
-      } else {
-        items.push({ kind: 'system', activity: item.activity });
-      }
+      items.push({ kind: 'comment', comment: c });
     });
     return items;
   };
@@ -466,17 +459,17 @@ export default function RequestDetail() {
         pushStep({
           name: 'New',
           time: a.createdAt,
-          user: a.user?.name || 'System',
+          user: a.user?.name || t('role.system'),
           role: a.user?.role || 'system',
-          description: 'Created'
+          description: t('system.created')
         });
       } else if (a.type === 'assigned') {
         pushStep({
           name: 'Assigned',
           time: a.createdAt,
-          user: a.user?.name || 'System',
+          user: a.user?.name || t('role.system'),
           role: a.user?.role || 'system',
-          description: a.message || 'Assigned'
+          description: a.message || t('system.assigned')
         });
       } else if (a.type === 'status_update') {
         const match = a.message.match(/Changed status from (.+) to (.+)/i);
@@ -486,7 +479,7 @@ export default function RequestDetail() {
           pushStep({
             name: toStatus,
             time: a.createdAt,
-            user: a.user?.name || 'System',
+            user: a.user?.name || t('role.system'),
             role: a.user?.role || 'system',
             description: fromStatus ? `${fromStatus} → ${toStatus}` : a.message
           });
@@ -498,9 +491,9 @@ export default function RequestDetail() {
       statusSequence.push({
         name: request.status.name,
         time: request.createdAt,
-        user: request.client?.name || 'System',
+        user: request.client?.name || t('role.system'),
         role: request.client?.role || 'client',
-        description: 'Created'
+        description: t('system.created')
       });
     }
 
@@ -510,9 +503,9 @@ export default function RequestDetail() {
       statusSequence.push({
         name: currentStatus,
         time: request.updatedAt || request.createdAt,
-        user: 'System',
+        user: t('role.system'),
         role: 'system',
-        description: 'Current status'
+        description: t('system.currentStatus')
       });
     }
 
@@ -536,14 +529,14 @@ export default function RequestDetail() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← Back to Requests</button>
-          <h1>REQ-{String(id).padStart(4, '0')}</h1>
+          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← {t('common.backToRequests')}</button>
+          <h1>{t('common.requestPrefixLabel')}{String(id).padStart(4, '0')}</h1>
         </div>
       </div>
       <div className="loading-screen"><div className="spinner"></div></div>
     </div>
   );
-  if (!request) return <div className="empty-state">Request not found</div>;
+  if (!request) return <div className="empty-state">{t('common.requestNotFound')}</div>;
 
   const developers = users.filter(u => u.role === 'developer' || u.role === 'support');
   const attachments = request.attachments || [];
@@ -557,8 +550,8 @@ export default function RequestDetail() {
       </div>
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← Back to Requests</button>
-          <h1>REQ-{String(request.id || '').padStart(4, '0')}</h1>
+          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← {t('common.backToRequests')}</button>
+          <h1>{t('common.requestPrefixLabel')}{String(request.id || '').padStart(4, '0')}</h1>
           <p>{request.subject}</p>
         </div>
       </div>
@@ -568,35 +561,35 @@ export default function RequestDetail() {
           {/* Request Details Card */}
           <div className="detail-card">
             <div className="detail-card-header">
-              <h3>Request Details</h3>
+              <h3>{t('common.requestDetails')}</h3>
 
             </div>
             {editing ? (
               <div className="edit-form">
                 <div className="form-group">
-                  <label>Request Title</label>
+                  <label>{t('common.requestTitle')}</label>
                   <input type="text" value={editForm.subject} onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label>Description</label>
+                  <label>{t('common.description')}</label>
                   <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={6} />
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Category</label>
+                    <label>{t('common.category')}</label>
                     <select value={editForm.categoryId} onChange={(e) => setEditForm({ ...editForm, categoryId: e.target.value })}>
                       {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>Priority</label>
+                    <label>{t('common.priority')}</label>
                     <select value={editForm.priorityId} onChange={(e) => setEditForm({ ...editForm, priorityId: e.target.value })}>
                       {prioritiesList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
                 </div>
                 <div className="form-group">
-                  <label>Attachments</label>
+                  <label>{t('common.attachments')}</label>
                   <div className="attachments-grid">
                     {editAttachments.map((path, i) => (
                       <div key={`existing-${i}`} className="attachment-item">
@@ -628,14 +621,14 @@ export default function RequestDetail() {
                   <div className="file-upload" onClick={() => fileInputRef.current.click()} style={{ marginTop: 12 }}>
                     <input type="file" ref={fileInputRef} multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style={{ display: 'none' }} onChange={handleFileChange} />
                     <div className="file-upload-icon">📤</div>
-                    <div className="file-upload-text">Click to upload files</div>
-                    <div className="file-upload-hint">Images, PDF, DOCX, XLSX (Max 10MB each)</div>
+                    <div className="file-upload-text">{t('common.clickToUpload')}</div>
+                    <div className="file-upload-hint">{t('common.uploadHint')}</div>
                   </div>
                 </div>
                 <div className="form-actions">
-                  <button className="btn btn-outline" onClick={() => { setEditing(false); setNewFiles([]); loadRequest(); }}>Cancel</button>
+                  <button className="btn btn-outline" onClick={() => { setEditing(false); setNewFiles([]); loadRequest(); }}>{t('common.cancel')}</button>
                   <button className="btn btn-primary" onClick={handleSave} disabled={uploading}>
-                    {uploading ? 'Saving...' : 'Save Changes'}
+                    {uploading ? t('common.saving') : t('common.saveChanges')}
                   </button>
                 </div>
               </div>
@@ -644,7 +637,7 @@ export default function RequestDetail() {
                 <p className="detail-description">{request.description}</p>
                 {attachments.length > 0 && (
                   <div style={{ marginTop: 16 }}>
-                    <h4 style={{ marginBottom: 8, fontSize: 14, color: '#6B7280' }}>Attachments ({attachments.length})</h4>
+                    <h4 style={{ marginBottom: 8, fontSize: 14, color: '#6B7280' }}>{t('common.attachmentsCount', { count: attachments.length })}</h4>
                     <div className="attachments-grid">
                       {attachments.map((path, i) => (
                         <div key={i} className="attachment-item">
@@ -668,12 +661,12 @@ export default function RequestDetail() {
           {/* Upload Additional Files (Client) */}
           {isClient && !editing && (
             <div className="detail-card">
-              <h3>📎 Upload Additional Files</h3>
+              <h3>📎 {t('common.uploadAdditionalFiles')}</h3>
               <div className="file-upload" onClick={() => fileInputRef.current.click()}>
                 <input type="file" ref={fileInputRef} multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style={{ display: 'none' }} onChange={handleFileChange} />
                 <div className="file-upload-icon">📤</div>
-                <div className="file-upload-text">Click to upload additional files</div>
-                <div className="file-upload-hint">Images, PDF, DOCX, XLSX (Max 10MB each)</div>
+                <div className="file-upload-text">{t('common.clickUploadAdditional')}</div>
+                <div className="file-upload-hint">{t('common.uploadHint')}</div>
               </div>
               {newFiles.length > 0 && (
                 <div style={{ marginTop: 12 }}>
@@ -693,7 +686,7 @@ export default function RequestDetail() {
                     ))}
                   </div>
                   <button className="btn btn-primary" onClick={handleUploadAdditional} disabled={uploading} style={{ marginTop: 12 }}>
-                    {uploading ? 'Uploading...' : 'Upload Files'}
+                    {uploading ? t('common.uploading') : t('common.uploadFiles')}
                   </button>
                 </div>
               )}
@@ -708,8 +701,8 @@ export default function RequestDetail() {
               {existingFeedback && feedbackSubmitted ? (
                 <div className="feedback-submitted">
                   <div className="feedback-checkmark">✓</div>
-                  <h4 className="feedback-thanks">Thank You for Your Feedback!</h4>
-                  <p className="feedback-subtitle">Your rating helps us improve our service.</p>
+                  <h4 className="feedback-thanks">{t('feedback.thanks')}</h4>
+                  <p className="feedback-subtitle">{t('feedback.helpUsImprove')}</p>
                   <div className="feedback-stars-display">
                     {[1, 2, 3, 4, 5].map(i => (
                       <svg key={i} className={`feedback-star ${i <= existingFeedback.rating ? 'filled' : ''}`} width="32" height="32" viewBox="0 0 20 20">
@@ -718,10 +711,10 @@ export default function RequestDetail() {
                     ))}
                   </div>
                   <div className="feedback-rating-label">
-                    {existingFeedback.rating === 1 ? 'Poor' :
-                     existingFeedback.rating === 2 ? 'Fair' :
-                     existingFeedback.rating === 3 ? 'Good' :
-                     existingFeedback.rating === 4 ? 'Very Good' : 'Excellent'}
+                    {existingFeedback.rating === 1 ? t('feedback.poor') :
+                     existingFeedback.rating === 2 ? t('feedback.fair') :
+                     existingFeedback.rating === 3 ? t('feedback.good') :
+                     existingFeedback.rating === 4 ? t('feedback.veryGood') : t('feedback.excellent')}
                     <span className="feedback-rating-num">({existingFeedback.rating}/5)</span>
                   </div>
                   {existingFeedback.comment && (
@@ -735,10 +728,10 @@ export default function RequestDetail() {
                 <div className="feedback-form">
                   <div className="feedback-form-header">
                     <span className="feedback-form-icon">⭐</span>
-                    <h3>Rate This Request</h3>
+                    <h3>{t('feedback.rateThisRequest')}</h3>
                   </div>
                   <p className="feedback-form-prompt">
-                    How would you rate the resolution of this request?
+                    {t('feedback.ratePrompt')}
                   </p>
                   <div className="feedback-stars-container">
                     <div className="feedback-stars-row">
@@ -763,28 +756,28 @@ export default function RequestDetail() {
                     </div>
                     <div className="feedback-rating-hint">
                       {(hoverRating || feedbackRating) === 0 ? (
-                        <span className="hint-default">Tap a star to rate</span>
+                        <span className="hint-default">{t('feedback.tapStar')}</span>
                       ) : (
                         <span className={`hint-active rating-${hoverRating || feedbackRating}`}>
-                          {(hoverRating || feedbackRating) === 1 && '😞 Poor'}
-                          {(hoverRating || feedbackRating) === 2 && '😐 Fair'}
-                          {(hoverRating || feedbackRating) === 3 && '🙂 Good'}
-                          {(hoverRating || feedbackRating) === 4 && '😊 Very Good'}
-                          {(hoverRating || feedbackRating) === 5 && '🤩 Excellent'}
+                          {(hoverRating || feedbackRating) === 1 && `😞 ${t('feedback.poor')}`}
+                          {(hoverRating || feedbackRating) === 2 && `😐 ${t('feedback.fair')}`}
+                          {(hoverRating || feedbackRating) === 3 && `🙂 ${t('feedback.good')}`}
+                          {(hoverRating || feedbackRating) === 4 && `😊 ${t('feedback.veryGood')}`}
+                          {(hoverRating || feedbackRating) === 5 && `🤩 ${t('feedback.excellent')}`}
                         </span>
                       )}
                     </div>
                   </div>
                   <div className="feedback-textarea-group">
                     <label className="feedback-textarea-label">
-                      Share more details <span>(optional)</span>
+                      {t('feedback.shareDetails')} <span>({t('common.optional')})</span>
                     </label>
                     <textarea
                       value={feedbackComment}
                       onChange={(e) => {
                         if (e.target.value.length <= 500) setFeedbackComment(e.target.value);
                       }}
-                      placeholder="What did you like or what could we improve?..."
+                      placeholder={t('feedback.likeImprove')}
                       rows={3}
                       className="feedback-textarea"
                     />
@@ -798,9 +791,9 @@ export default function RequestDetail() {
                     disabled={feedbackSubmitting || feedbackRating === 0}
                   >
                     {feedbackSubmitting ? (
-                      <><span className="feedback-spinner"></span> Submitting...</>
+                      <><span className="feedback-spinner"></span> {t('common.submitting')}...</>
                     ) : (
-                      'Submit Feedback'
+                      t('feedback.submitFeedback')
                     )}
                   </button>
                 </div>
@@ -813,7 +806,7 @@ export default function RequestDetail() {
             <div className="chat-header">
               <div className="chat-header-title">
                 <span className="chat-header-icon">💬</span>
-                <span className="chat-header-text">Comments</span>
+                <span className="chat-header-text">{t('common.comments')}</span>
                 <span className="chat-count">({request.comments?.length || 0})</span>
               </div>
               <div className="chat-header-actions">
@@ -821,22 +814,22 @@ export default function RequestDetail() {
                   <span className="chat-search-icon">🔍</span>
                   <input
                     type="text"
-                    placeholder="Search comments..."
+                    placeholder={t('common.searchComments')}
                     value={commentSearch}
                     onChange={(e) => setCommentSearch(e.target.value)}
                   />
                 </div>
                 <select className="chat-filter" value={commentFilter} onChange={(e) => setCommentFilter(e.target.value)}>
-                  <option value="all">All</option>
-                  <option value="client">From Client</option>
-                  <option value="staff">From Staff</option>
+                  <option value="all">{t('common.all')}</option>
+                  <option value="client">{t('common.fromClient')}</option>
+                  <option value="staff">{t('common.fromStaff')}</option>
                 </select>
                 <button
                   className="chat-sort-btn"
                   onClick={() => setCommentSort(commentSort === 'latest' ? 'oldest' : 'latest')}
-                  title="Toggle sort order"
+                  title={t('common.toggleSortOrder')}
                 >
-                  {commentSort === 'latest' ? 'Sort by Latest' : 'Sort by Oldest'}
+                  {commentSort === 'latest' ? t('common.sortLatest') : t('common.sortOldest')}
                 </button>
               </div>
             </div>
@@ -850,15 +843,6 @@ export default function RequestDetail() {
                     </div>
                   );
                 }
-                if (item.kind === 'system') {
-                  return (
-                    <div key={`sys-${idx}`} className="chat-system">
-                      <span className="chat-system-line"></span>
-                      <span className="chat-system-text">{systemMessageText(item.activity)}</span>
-                      <span className="chat-system-line"></span>
-                    </div>
-                  );
-                }
                 const c = item.comment;
                 const isClientRole = c.user?.role === 'client';
                 return (
@@ -866,7 +850,7 @@ export default function RequestDetail() {
                     <div className={`chat-avatar ${isClientRole ? 'client' : 'staff'}`}>{renderAvatar(c.user)}</div>
                     <div className="chat-column">
                       <div className="chat-meta">
-                        <span className="chat-name">{c.user?.name || 'Unknown'}</span>
+                        <span className="chat-name">{c.user?.name || t('common.unknown')}</span>
                         <span className={`chat-role-badge ${isClientRole ? 'client' : 'staff'}`}>{chatRoleLabel(c.user?.role)}</span>
                         <span className="chat-time">{new Date(c.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                       </div>
@@ -881,7 +865,7 @@ export default function RequestDetail() {
                                   <span className="msg-att-name">{att.name || getFileName(att.path)}</span>
                                   <span className="msg-att-size">{formatSize(att.size)}</span>
                                 </div>
-                                <a className="msg-att-download" href={`${API_BASE}${att.path}`} download target="_blank" rel="noopener noreferrer" title="Download">⬇</a>
+                                <a className="msg-att-download" href={`${API_BASE}${att.path}`} download target="_blank" rel="noopener noreferrer" title={t('common.download')}>⬇</a>
                               </div>
                             ))}
                           </div>
@@ -905,7 +889,7 @@ export default function RequestDetail() {
                 );
               })}
               {(request.comments || []).length === 0 && (
-                <div className="chat-empty">No messages yet. Start the conversation!</div>
+                <div className="chat-empty">{t('common.noMessagesYet')}</div>
               )}
             </div>
 
@@ -929,8 +913,8 @@ export default function RequestDetail() {
                 </div>
               )}
               <div className="composer-toolbar">
-                <button type="button" className="composer-btn" title="Attach file" onClick={() => commentFileInputRef.current?.click()}>📎</button>
-                <button type="button" className="composer-btn" title="Emoji" onClick={() => setShowEmojiPicker(v => !v)}>😊</button>
+                <button type="button" className="composer-btn" title={t('common.attachFile')} onClick={() => commentFileInputRef.current?.click()}>📎</button>
+                <button type="button" className="composer-btn" title={t('common.emoji')} onClick={() => setShowEmojiPicker(v => !v)}>😊</button>
                 <textarea
                   ref={commentTextareaRef}
                   className="composer-textarea"
@@ -942,13 +926,13 @@ export default function RequestDetail() {
                       handleComment();
                     }
                   }}
-                  placeholder="Type a comment..."
+                  placeholder={t('common.typeComment')}
                   rows={1}
                 />
                 <button
                   type="button"
                   className="composer-send"
-                  title="Send"
+                  title={t('common.send')}
                   disabled={submitting || (!comment.trim() && pendingFiles.length === 0)}
                   onClick={handleComment}
                 >
@@ -966,7 +950,7 @@ export default function RequestDetail() {
                   }}
                 />
               </div>
-              <div className="composer-hint">Press Enter to send • Shift + Enter for new line</div>
+              <div className="composer-hint">{t('common.composerHint')}</div>
             </div>
           </div>
         </div>
@@ -974,36 +958,36 @@ export default function RequestDetail() {
         {/* Sidebar */}
         <div className="detail-sidebar">
           <div className="detail-card">
-            <h3>Information</h3>
+            <h3>{t('common.information')}</h3>
             <div className="info-list">
               <div className="info-row">
-                <span className="info-label">Status</span>
+                <span className="info-label">{t('common.status')}</span>
                 <span className="status-badge" style={{ background: getStatusColor(request.status) + '20', color: getStatusColor(request.status) }}>{request.status?.name}</span>
               </div>
               <div className="info-row">
-                <span className="info-label">Priority</span>
+                <span className="info-label">{t('common.priority')}</span>
                 <span className="priority-badge" style={{ background: getPriorityColor(request.priority) + '20', color: getPriorityColor(request.priority) }}>{request.priority?.name}</span>
               </div>
               <div className="info-row">
-                <span className="info-label">Category</span>
+                <span className="info-label">{t('common.category')}</span>
                 <span>{request.category?.name}</span>
               </div>
               <div className="info-row">
-                <span className="info-label">Client</span>
+                <span className="info-label">{t('common.client')}</span>
                 <span>{request.client?.name}</span>
               </div>
               <div className="info-row">
-                <span className="info-label">Created</span>
+                <span className="info-label">{t('common.created')}</span>
                 <span>{new Date(request.createdAt).toLocaleDateString()}</span>
               </div>
               <div className="info-row">
-                <span className="info-label">Last Updated</span>
+                <span className="info-label">{t('common.lastUpdated')}</span>
                 <span>{new Date(request.updatedAt).toLocaleDateString()}</span>
               </div>
               {attachments.length > 0 && (
                 <div className="info-row">
-                  <span className="info-label">Attachments</span>
-                  <span>{attachments.length} file{attachments.length !== 1 ? 's' : ''}</span>
+                  <span className="info-label">{t('common.attachments')}</span>
+                  <span>{t('common.fileCount', { count: attachments.length })}</span>
                 </div>
               )}
             </div>
@@ -1012,10 +996,10 @@ export default function RequestDetail() {
           {/* Actions (Admin/Support only) */}
           {!isClient && (
             <div className="detail-card">
-              <h3>Actions</h3>
+              <h3>{t('common.actions')}</h3>
               <div className="action-list">
                 <div className="action-group">
-                  <label>Change Status</label>
+                  <label>{t('common.changeStatus')}</label>
                   {((user?.role === 'developer' && request.status?.name === 'New' && request.assignedTo !== user.id) ||
                     (user?.role === 'support' && request.status?.name === 'Escalated' && request.assignedTo !== user.id)) ? (
                     <button
@@ -1024,7 +1008,7 @@ export default function RequestDetail() {
                       disabled={claiming}
                       style={{ width: '100%' }}
                     >
-                      {claiming ? 'Claiming...' : '👤 Claim & Assign to Me'}
+                      {claiming ? t('common.claiming') : `👤 ${t('common.claimAssignMe')}`}
                     </button>
                   ) : (
                     <select value={request.statusId} onChange={(e) => handleStatusChange(e.target.value)}>
@@ -1037,15 +1021,15 @@ export default function RequestDetail() {
                 </div>
                 {user?.role === 'admin' && (
                 <div className="action-group">
-                  <label>Assign To</label>
+                  <label>{t('common.assignTo')}</label>
                   <select value={request.assignedTo || ''} onChange={(e) => handleAssign(e.target.value)}>
-                    <option value="">Unassigned</option>
-                    <optgroup label="Escalation Team">
+                    <option value="">{t('common.unassigned')}</option>
+                    <optgroup label={t('role.escalationTeam')}>
                       {users.filter(u => u.role === 'support').map(d => (
                         <option key={d.id} value={d.id}>{d.name}</option>
                       ))}
                     </optgroup>
-                    <optgroup label="Developers">
+                    <optgroup label={t('role.developers')}>
                       {users.filter(u => u.role === 'developer').map(d => (
                         <option key={d.id} value={d.id}>{d.name}</option>
                       ))}
@@ -1060,18 +1044,18 @@ export default function RequestDetail() {
           {/* Client Actions */}
           {isClient && (
             <div className="detail-card">
-              <h3>Actions</h3>
+              <h3>{t('common.actions')}</h3>
               <div className="action-list">
                 <div className="action-group">
-                  <label>Change Status</label>
+                  <label>{t('common.changeStatus')}</label>
                   <select
                     value=""
                     onChange={(e) => e.target.value && handleStatusChange(e.target.value)}
                     style={{ width: '100%' }}
                   >
-                    <option value="">Select status</option>
-                    <option value={statuses.find(s => s.name === 'Closed')?.id}>Closed</option>
-                    <option value={statuses.find(s => s.name === 'Rejected')?.id}>Rejected</option>
+                    <option value="">{t('common.selectStatus')}</option>
+                    <option value={statuses.find(s => s.name === 'Closed')?.id}>{t('common.closed')}</option>
+                    <option value={statuses.find(s => s.name === 'Rejected')?.id}>{t('common.rejected')}</option>
                   </select>
                 </div>
               </div>
@@ -1080,36 +1064,36 @@ export default function RequestDetail() {
 
           {/* Assignee */}
           <div className="detail-card">
-            <h3>ASSIGNED TO</h3>
+            <h3>{t('common.assignedTo')}</h3>
             {request.assignee ? (
               <div className="assignee-info">
                 <div className="assignee-avatar-lg" style={{ background: '#3B82F6' }}>{request.assignee.name.charAt(0)}</div>
                 <div>
                   <div className="assignee-name">{request.assignee.name}</div>
-                  <div className="assignee-role">{request.assignee.role === 'support' ? 'Support' : 'Developer'}</div>
+                  <div className="assignee-role">{request.assignee.role === 'support' ? t('role.support') : t('role.developer')}</div>
                 </div>
               </div>
             ) : (
-              <p className="unassigned">Not assigned yet</p>
+              <p className="unassigned">{t('common.notAssignedYet')}</p>
             )}
           </div>
 
           {/* Timeline / History */}
           <div className="detail-card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, border: 'none', padding: 0 }}>📜 History</h3>
+              <h3 style={{ margin: 0, border: 'none', padding: 0 }}>📜 {t('common.history')}</h3>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   className="action-btn-text edit"
                   onClick={() => setShowHistory(!showHistory)}
                 >
-                  {showHistory ? 'Hide History' : 'Show History'}
+                  {showHistory ? t('common.hideHistory') : t('common.showHistory')}
                 </button>
                 <button
                   className="action-btn-text delete"
                   onClick={() => setShowClearConfirm(true)}
                 >
-                  Clear History
+                  {t('common.clearHistory')}
                 </button>
               </div>
             </div>
@@ -1120,7 +1104,7 @@ export default function RequestDetail() {
                 <div className="status-lifecycle">
                   <div className="lifecycle-header">
                     <span className="lifecycle-icon">🔄</span>
-                    <span className="lifecycle-title">Status Flow</span>
+                    <span className="lifecycle-title">{t('common.statusFlow')}</span>
                   </div>
                   <div className="lifecycle-flow">
                     {(() => {
@@ -1168,7 +1152,7 @@ export default function RequestDetail() {
                   {loadingActivity ? (
                     <div className="loading-screen" style={{ minHeight: 'auto', padding: '20px' }}><div className="spinner"></div></div>
                   ) : activityLog.length === 0 ? (
-                    <div className="empty-state">No activity yet</div>
+                    <div className="empty-state">{t('common.noActivityYet')}</div>
                   ) : (
                     <div className="timeline-list">
                       {activityLog.map((activity) => (
@@ -1183,7 +1167,7 @@ export default function RequestDetail() {
                               <span className="timeline-message">{activity.message}</span>
                             </div>
                             <div className="timeline-meta">
-                              <span className="timeline-user">{activity.user?.name || 'System'}</span>
+                              <span className="timeline-user">{activity.user?.name || t('role.system')}</span>
                               <span className="timeline-dot">·</span>
                               <span className="timeline-time">{new Date(activity.createdAt).toLocaleString()}</span>
                             </div>
@@ -1202,16 +1186,16 @@ export default function RequestDetail() {
       {showClearConfirm && (
         <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to clear this history?</p>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>{t('common.clearHistoryConfirm')}</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
-              <button onClick={() => setShowClearConfirm(false)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => setShowClearConfirm(false)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
               <button onClick={() => {
                 api.delete('/api/requests/' + id + '/activity').then(() => {
                   setActivityLog([]);
-                  showStatusToast('History cleared', 'success');
+                  showStatusToast(t('common.historyCleared'), 'success');
                   setShowClearConfirm(false);
-                }).catch(() => { showStatusToast('Failed to clear history', 'error'); setShowClearConfirm(false); });
-              }} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Clear</button>
+                }).catch(() => { showStatusToast(t('common.failedClearHistory'), 'error'); setShowClearConfirm(false); });
+              }} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.clear')}</button>
             </div>
           </div>
         </div>
@@ -1219,7 +1203,7 @@ export default function RequestDetail() {
 
       {lightbox && (
         <div className="lightbox-overlay" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="Preview" style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: 8 }} />
+          <img src={lightbox} alt={t('common.preview')} style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: 8 }} />
           <button className="lightbox-close" onClick={() => setLightbox(null)} style={{ position: 'absolute', top: 20, right: 20, background: '#fff', border: 'none', borderRadius: '50%', width: 36, height: 36, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
       )}

@@ -3,13 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { getSavedSearchQuery, saveSearchQuery } from '../utils/searchStore';
+import { useTranslation } from '../i18n/useTranslation';
 
-const ROLE_LABELS = { admin: 'Admin', support: 'Escalation Team', developer: 'Developer', client: 'Client' };
-
-export default function GlobalSearch({ clientMode = false, placeholder = 'Search...' }) {
+export default function GlobalSearch({ clientMode = false, placeholder }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [query, setQuery] = useState(getSavedSearchQuery());
   const [results, setResults] = useState(null);
   const [open, setOpen] = useState(false);
@@ -103,27 +103,27 @@ export default function GlobalSearch({ clientMode = false, placeholder = 'Search
         <input
           ref={inputRef}
           type="text"
-          placeholder={placeholder}
+          placeholder={placeholder || t('search.placeholder')}
           value={query}
           onChange={handleChange}
           onFocus={() => { if (query.trim()) setOpen(true); }}
-          aria-label="Global search"
+          aria-label={t('search.ariaLabel')}
         />
         {query && (
-          <button type="button" className="global-search-clear" onClick={handleClear} title="Clear search">×</button>
+          <button type="button" className="global-search-clear" onClick={handleClear} title={t('search.clearTitle')}>×</button>
         )}
       </div>
 
       {showPanel && (
         <div className="global-search-dropdown">
-          {loading && <div className="global-search-message">Searching...</div>}
+          {loading && <div className="global-search-message">{t('search.searching')}</div>}
           {!loading && results && (
             <>
               {results.requests?.total > 0 && (
                 <div className="global-search-section">
                   <div className="global-search-section-header">
-                    <span>Requests ({results.requests.total})</span>
-                    <button type="button" className="global-search-see-all" onClick={() => goToResults('requests')}>See all</button>
+                    <span>{t('search.requestsCount', { count: results.requests.total })}</span>
+                    <button type="button" className="global-search-see-all" onClick={() => goToResults('requests')}>{t('search.seeAll')}</button>
                   </div>
                   <div className="global-search-section-list">
                     {results.requests.items.map(r => (
@@ -146,8 +146,8 @@ export default function GlobalSearch({ clientMode = false, placeholder = 'Search
               {isAdmin && results.users?.total > 0 && (
                 <div className="global-search-section">
                   <div className="global-search-section-header">
-                    <span>Users ({results.users.total})</span>
-                    <button type="button" className="global-search-see-all" onClick={() => goToResults('users')}>See all</button>
+                    <span>{t('search.usersCount', { count: results.users.total })}</span>
+                    <button type="button" className="global-search-see-all" onClick={() => goToResults('users')}>{t('search.seeAll')}</button>
                   </div>
                   <div className="global-search-section-list">
                     {results.users.items.map(u => (
@@ -161,7 +161,7 @@ export default function GlobalSearch({ clientMode = false, placeholder = 'Search
                         <span className="global-search-item-meta">
                           <span>{u.email}</span>
                           <span className="role-badge" style={{ background: (u.role === 'admin' ? '#EF4444' : u.role === 'support' ? '#3B82F6' : u.role === 'developer' ? '#8B5CF6' : '#10B981') + '20', color: u.role === 'admin' ? '#EF4444' : u.role === 'support' ? '#3B82F6' : u.role === 'developer' ? '#8B5CF6' : '#10B981' }}>
-                            {ROLE_LABELS[u.role] || u.role}
+                            {t('role.' + u.role)}
                           </span>
                         </span>
                       </button>
@@ -173,8 +173,8 @@ export default function GlobalSearch({ clientMode = false, placeholder = 'Search
               {isAdmin && results.groups?.total > 0 && (
                 <div className="global-search-section">
                   <div className="global-search-section-header">
-                    <span>Groups ({results.groups.total})</span>
-                    <button type="button" className="global-search-see-all" onClick={() => goToResults('groups')}>See all</button>
+                    <span>{t('search.groupsCount', { count: results.groups.total })}</span>
+                    <button type="button" className="global-search-see-all" onClick={() => goToResults('groups')}>{t('search.seeAll')}</button>
                   </div>
                   <div className="global-search-section-list">
                     {results.groups.items.map(g => (
@@ -185,7 +185,7 @@ export default function GlobalSearch({ clientMode = false, placeholder = 'Search
                         </span>
                         <span className="global-search-item-meta">
                           <span>{g.company_name || '—'}</span>
-                          <span>{g.memberCount || 0} member(s)</span>
+                          <span>{t('search.memberCount', { count: g.memberCount || 0 })}</span>
                         </span>
                       </button>
                     ))}
@@ -194,12 +194,12 @@ export default function GlobalSearch({ clientMode = false, placeholder = 'Search
               )}
 
               {showEmpty && (
-                <div className="global-search-empty">No matching records found</div>
+                <div className="global-search-empty">{t('search.noResults')}</div>
               )}
 
               {!showEmpty && totalResults > 0 && (
                 <div className="global-search-footer">
-                  <button type="button" onClick={() => goToResults('all')}>View all results</button>
+                  <button type="button" onClick={() => goToResults('all')}>{t('search.viewAllResults')}</button>
                 </div>
               )}
             </>

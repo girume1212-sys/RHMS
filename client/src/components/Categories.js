@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { useTranslation } from '../i18n/useTranslation';
 
 export default function Categories() {
+  const { t } = useTranslation();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,7 +29,7 @@ export default function Categories() {
     api.get('/api/requests').then(reqs => {
       setRequests(reqs);
       setLoading(false);
-    }).catch(err => { setError('Failed to load data: ' + err.message); setLoading(false); });
+    }).catch(err => { setError(t('common.failedToLoadData') + ': ' + err.message); setLoading(false); });
   };
 
   const handleViewDetails = (categoryId) => {
@@ -38,9 +40,9 @@ export default function Categories() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← Back</button>
-          <h1>Categories</h1>
-          <p>Manage request categories</p>
+          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <h1>{t('sidebar.categories')}</h1>
+          <p>{t('category.manageSubtitle')}</p>
         </div>
       </div>
       {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{error}</div>}
@@ -48,7 +50,7 @@ export default function Categories() {
         <div className="loading-screen"><div className="spinner"></div></div>
       ) : (
         <div className="requests-by-category-card">
-          <h3>Requests by Category</h3>
+          <h3>{t('dashboard.requestsByCategory')}</h3>
           <div className="category-cards-grid">
             {categoryMeta.map(c => {
               const count = requests.filter(r => r.categoryId === c.id).length;
@@ -56,12 +58,12 @@ export default function Categories() {
                 <div key={c.id} className="category-manage-card" style={{ '--cat-color': c.color }}>
                   <div className="category-manage-card-top">
                     <div className="category-manage-icon">{c.icon}</div>
-                    <span className="category-manage-count">{count} requests</span>
+                    <span className="category-manage-count">{t('category.requestsCount', { count })}</span>
                   </div>
-                  <div className="category-manage-name">{c.name}</div>
-                  <div className="category-manage-desc">{c.description}</div>
+                  <div className="category-manage-name">{t('category.' + c.name)}</div>
+                  <div className="category-manage-desc">{t('category.' + c.name + 'Desc')}</div>
                   <div className="category-manage-actions">
-                    <button className="category-view-btn" onClick={() => handleViewDetails(c.id)}>View Details</button>
+                    <button className="category-view-btn" onClick={() => handleViewDetails(c.id)}>{t('category.viewDetails')}</button>
                   </div>
                 </div>
               );

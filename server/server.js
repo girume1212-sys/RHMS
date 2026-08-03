@@ -119,6 +119,8 @@ const pool = require('./db');
     console.log('requests columns ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255) DEFAULT ''`);
     console.log('company_name column ready');
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'en'`);
+    console.log('language column ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN DEFAULT false`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS login_attempts INTEGER DEFAULT 0`);
     console.log('approved column ready');
@@ -435,6 +437,7 @@ const mapUser = (u) => ({
   role: u.role,
   avatar: u.avatar,
   companyName: u.company_name || '',
+  language: u.language || 'en',
   approved: u.approved || false,
   createdAt: u.created_at
 });
@@ -513,7 +516,7 @@ app.get('/api/notifications/stream', async (req, res) => {
 // Auth Routes
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { name, email, password, companyName } = req.body;
+    const { name, email, password, companyName, language } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
     }
@@ -529,8 +532,8 @@ app.post('/api/auth/signup', async (req, res) => {
     const id = uuidv4();
     const hashedPassword = bcrypt.hashSync(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (id, name, email, password, role, company_name) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, avatar, created_at, company_name',
-      [id, name, email, hashedPassword, 'client', companyName || '']
+      'INSERT INTO users (id, name, email, password, role, company_name, language) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, avatar, created_at, company_name, language',
+      [id, name, email, hashedPassword, 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en']
     );
 
     // Auto-assign to default group
@@ -631,7 +634,7 @@ app.post('/api/auth/google', async (req, res) => {
 app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.approved, u.created_at
+      SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.language, u.approved, u.created_at
       FROM users u
       ORDER BY u.created_at DESC
     `);
@@ -670,7 +673,7 @@ app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support', 'develo
 
 app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const { name, email, password, role, groupIds, companyName } = req.body;
+    const { name, email, password, role, groupIds, companyName, language } = req.body;
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email already exists' });
@@ -678,8 +681,8 @@ app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res)
     const id = uuidv4();
     const hashedPassword = bcrypt.hashSync(password, 10);
     await pool.query(
-      'INSERT INTO users (id, name, email, password, role, company_name) VALUES ($1, $2, $3, $4, $5, $6)',
-      [id, name, email, hashedPassword, role || 'client', companyName || '']
+      'INSERT INTO users (id, name, email, password, role, company_name, language) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, name, email, hashedPassword, role || 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en']
     );
     try {
       if (groupIds && groupIds.length > 0) {
@@ -719,15 +722,16 @@ app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res)
 
 app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const { name, email, role, groupIds, password, companyName } = req.body;
+    const { name, email, role, groupIds, password, companyName, language } = req.body;
+    const lang = ['en', 'am'].includes(language) ? language : undefined;
     let query, params;
     if (password) {
       const hashedPassword = bcrypt.hashSync(password, 10);
-      query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role), password = $4, company_name = COALESCE($5, company_name) WHERE id = $6 RETURNING *';
-      params = [name, email, role, hashedPassword, companyName, req.params.id];
+      query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role), password = $4, company_name = COALESCE($5, company_name), language = COALESCE($6, language) WHERE id = $7 RETURNING *';
+      params = [name, email, role, hashedPassword, companyName, lang, req.params.id];
     } else {
-      query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role), company_name = COALESCE($4, company_name) WHERE id = $5 RETURNING *';
-      params = [name, email, role, companyName, req.params.id];
+      query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role), company_name = COALESCE($4, company_name), language = COALESCE($5, language) WHERE id = $6 RETURNING *';
+      params = [name, email, role, companyName, lang, req.params.id];
     }
     const result = await pool.query(query, params);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -817,29 +821,30 @@ app.patch('/api/users/:id/approve', authMiddleware, roleMiddleware('admin'), asy
 // Profile update endpoint (any authenticated user can update their own profile)
 app.put('/api/profile', authMiddleware, upload.single('avatar'), async (req, res) => {
   try {
-    const { name, email, password, companyName } = req.body;
+    const { name, email, password, companyName, language } = req.body;
     const userId = req.user.id;
     let avatarPath = undefined;
     if (req.file) {
       avatarPath = `/uploads/${req.file.filename}`;
     }
+    const lang = ['en', 'am'].includes(language) ? language : undefined;
     let query, params;
     if (password) {
       const hashedPassword = bcrypt.hashSync(password, 10);
       if (avatarPath) {
-        query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), password = $3, company_name = COALESCE($4, company_name), avatar = $5 WHERE id = $6 RETURNING *';
-        params = [name, email, hashedPassword, companyName || '', avatarPath, userId];
+        query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), password = $3, company_name = COALESCE($4, company_name), language = COALESCE($5, language), avatar = $6 WHERE id = $7 RETURNING *';
+        params = [name, email, hashedPassword, companyName || '', lang, avatarPath, userId];
       } else {
-        query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), password = $3, company_name = COALESCE($4, company_name) WHERE id = $5 RETURNING *';
-        params = [name, email, hashedPassword, companyName || '', userId];
+        query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), password = $3, company_name = COALESCE($4, company_name), language = COALESCE($5, language) WHERE id = $6 RETURNING *';
+        params = [name, email, hashedPassword, companyName || '', lang, userId];
       }
     } else {
       if (avatarPath) {
-        query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), company_name = COALESCE($3, company_name), avatar = $4 WHERE id = $5 RETURNING *';
-        params = [name, email, companyName || '', avatarPath, userId];
+        query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), company_name = COALESCE($3, company_name), language = COALESCE($4, language), avatar = $5 WHERE id = $6 RETURNING *';
+        params = [name, email, companyName || '', lang, avatarPath, userId];
       } else {
-        query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), company_name = COALESCE($3, company_name) WHERE id = $4 RETURNING *';
-        params = [name, email, companyName || '', userId];
+        query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), company_name = COALESCE($3, company_name), language = COALESCE($4, language) WHERE id = $5 RETURNING *';
+        params = [name, email, companyName || '', lang, userId];
       }
     }
     const result = await pool.query(query, params);
