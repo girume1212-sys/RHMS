@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { saveSearchQuery } from '../utils/searchStore';
 import { useTranslation } from '../i18n/useTranslation';
+import PageNumbers from './PageNumbers';
 
 function getRoleColor(role) {
   return { admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981' }[role] || '#6B7280';
@@ -15,9 +16,7 @@ function Pagination({ page, totalPages, onPageChange }) {
     <div className="table-pagination" style={{ justifyContent: 'flex-end', marginTop: '16px' }}>
       <button className="page-btn" disabled={page === 1} onClick={() => onPageChange(1)}>«</button>
       <button className="page-btn" disabled={page === 1} onClick={() => onPageChange(page - 1)}>‹</button>
-      {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-        <button key={p} className={`page-btn ${page === p ? 'active' : ''}`} onClick={() => onPageChange(p)}>{p}</button>
-      ))}
+      <PageNumbers page={page} totalPages={totalPages} onPageChange={onPageChange} />
       <button className="page-btn" disabled={page === totalPages} onClick={() => onPageChange(page + 1)}>›</button>
       <button className="page-btn" disabled={page === totalPages} onClick={() => onPageChange(totalPages)}>»</button>
     </div>

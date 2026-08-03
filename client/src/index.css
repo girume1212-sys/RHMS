@@ -1372,6 +1372,13 @@ body.dark-mode .multi-select-option.selected {
 .page-btn.active { background: linear-gradient(135deg, #0077b6, #00b4d8); color: white; border-color: transparent; box-shadow: 0 2px 8px rgba(0, 119, 182, 0.3); }
 .page-btn:hover:not(.active) { background: #e0f7fa; border-color: #00b4d8; }
 .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.page-ellipsis {
+  padding: 0 4px;
+  color: #9ca3af;
+  font-size: 13px;
+  user-select: none;
+}
+body.dark-mode .page-ellipsis { color: #64748b; }
 
 /* ========== BUTTONS ========== */
 .btn {
@@ -3012,6 +3019,16 @@ body.dark-mode .composer-hint { color: #64748b; }
 body.dark-mode .modal {
   background: #1e293b;
   border-color: #334155;
+}
+
+/* Confirmation-dialog text: must stay readable on the modal panel in both
+   bright (white) and dark (slate) themes. !important overrides the legacy
+   inline `color: #fff` on the message <p>. */
+.modal > p {
+  color: #374151 !important;
+}
+body.dark-mode .modal > p {
+  color: #e2e8f0 !important;
 }
 body.dark-mode .modal h2 {
   color: #e2e8f0;

@@ -3,6 +3,7 @@ import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import PageNumbers from './PageNumbers';
 
 export default function Users() {
   const { t } = useTranslation();
@@ -321,9 +322,7 @@ export default function Users() {
             <div className="table-pagination">
               <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
               <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                <button key={p} className={`page-btn ${page === p ? 'active' : ''}`} onClick={() => setPage(p)}>{p}</button>
-              ))}
+              <PageNumbers page={page} totalPages={totalPages} onPageChange={setPage} />
               <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>›</button>
               <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>»</button>
             </div>

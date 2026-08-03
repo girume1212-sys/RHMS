@@ -3,6 +3,7 @@ import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import PageNumbers from './PageNumbers';
 
 const roleColors = {
   admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981'
@@ -314,13 +315,7 @@ export default function Feedback() {
               <div className="table-pagination">
                 <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
                 <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).slice(
-                  Math.max(0, Math.min(page - 3, totalPages - 5)),
-                  Math.max(5, Math.min(page + 2, totalPages))
-                ).map(p => (
-                  <button key={p} className={`page-btn ${page === p ? 'active' : ''}`}
-                    onClick={() => setPage(p)}>{p}</button>
-                ))}
+                <PageNumbers page={page} totalPages={totalPages} onPageChange={setPage} />
                 <button className="page-btn" disabled={page === totalPages || totalPages === 0}
                   onClick={() => setPage(page + 1)}>›</button>
                 <button className="page-btn" disabled={page === totalPages || totalPages === 0}

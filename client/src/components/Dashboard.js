@@ -7,6 +7,7 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
+import PageNumbers from './PageNumbers';
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
@@ -416,21 +417,7 @@ export default function Dashboard() {
           <div className="table-pagination">
             <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
             <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
-            {(() => {
-              const pages = [];
-              const maxVisible = 5;
-              let start = Math.max(1, page - Math.floor(maxVisible / 2));
-              let end = Math.min(totalPages, start + maxVisible - 1);
-              if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
-              if (start > 1) { pages.push(1); if (start > 2) pages.push('...'); }
-              for (let i = start; i <= end; i++) pages.push(i);
-              if (end < totalPages) { if (end < totalPages - 1) pages.push('...'); pages.push(totalPages); }
-              return pages.map((p, i) =>
-                p === '...'
-                  ? <span key={`ellipsis-${i}`} className="page-ellipsis">…</span>
-                  : <button key={p} className={`page-btn ${page === p ? 'active' : ''}`} onClick={() => setPage(p)}>{p}</button>
-              );
-            })()}
+            <PageNumbers page={page} totalPages={totalPages} onPageChange={setPage} />
             <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>›</button>
             <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>»</button>
           </div>

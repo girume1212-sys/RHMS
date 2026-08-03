@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
+import PageNumbers from './PageNumbers';
 
 export default function Reports() {
   const navigate = useNavigate();
@@ -236,9 +237,7 @@ export default function Reports() {
             <div className="table-pagination">
               <button className="page-btn" disabled={tasksPage === 1} onClick={() => setTasksPage(1)}>«</button>
               <button className="page-btn" disabled={tasksPage === 1} onClick={() => setTasksPage(tasksPage - 1)}>‹</button>
-              {Array.from({ length: tasksTotalPages }, (_, i) => i + 1).map(p => (
-                <button key={p} className={`page-btn ${tasksPage === p ? 'active' : ''}`} onClick={() => setTasksPage(p)}>{p}</button>
-              ))}
+              <PageNumbers page={tasksPage} totalPages={tasksTotalPages} onPageChange={setTasksPage} />
               <button className="page-btn" disabled={tasksPage === tasksTotalPages || tasksTotalPages === 0} onClick={() => setTasksPage(tasksPage + 1)}>›</button>
               <button className="page-btn" disabled={tasksPage === tasksTotalPages || tasksTotalPages === 0} onClick={() => setTasksPage(tasksTotalPages)}>»</button>
             </div>
@@ -298,9 +297,7 @@ export default function Reports() {
             <div className="table-pagination">
               <button className="page-btn" disabled={perfPage === 1} onClick={() => setPerfPage(1)}>«</button>
               <button className="page-btn" disabled={perfPage === 1} onClick={() => setPerfPage(perfPage - 1)}>‹</button>
-              {Array.from({ length: perfTotalPages }, (_, i) => i + 1).map(p => (
-                <button key={p} className={`page-btn ${perfPage === p ? 'active' : ''}`} onClick={() => setPerfPage(p)}>{p}</button>
-              ))}
+              <PageNumbers page={perfPage} totalPages={perfTotalPages} onPageChange={setPerfPage} />
               <button className="page-btn" disabled={perfPage === perfTotalPages || perfTotalPages === 0} onClick={() => setPerfPage(perfPage + 1)}>›</button>
               <button className="page-btn" disabled={perfPage === perfTotalPages || perfTotalPages === 0} onClick={() => setPerfPage(perfTotalPages)}>»</button>
             </div>
