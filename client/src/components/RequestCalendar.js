@@ -224,7 +224,7 @@ export default function RequestCalendar() {
             <div className="req-cal-day-item-body">
               <div className="req-cal-day-item-title">{r.subject}</div>
               <div className="req-cal-day-item-meta">
-                <span className="status-badge" style={{ background: (r.status?.color || '#6B7280') + '20', color: r.status?.color || '#6B7280' }}>{r.status?.name || '—'}</span>
+                <span className="status-badge" style={{ background: (r.status?.color || '#6B7280') + '20', color: r.status?.color || '#6B7280' }}>{transSeeded(r.status?.name, 'status', t) || '—'}</span>
                 <span className="priority-badge" style={{ background: (r.priority?.color || '#6B7280') + '20', color: r.priority?.color || '#6B7280' }}>{transSeeded(r.priority?.name, 'priority', t) || '—'}</span>
               </div>
             </div>

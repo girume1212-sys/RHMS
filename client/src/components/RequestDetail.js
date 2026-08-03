@@ -579,7 +579,7 @@ export default function RequestDetail() {
                   <div className="form-group">
                     <label>{t('common.category')}</label>
                     <select value={editForm.categoryId} onChange={(e) => setEditForm({ ...editForm, categoryId: e.target.value })}>
-                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      {categories.map(c => <option key={c.id} value={c.id}>{transSeeded(c.name, 'category', t)}</option>)}
                     </select>
                   </div>
                   <div className="form-group">

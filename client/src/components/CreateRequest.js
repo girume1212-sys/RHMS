@@ -152,7 +152,7 @@ export default function CreateRequest() {
                   style={{ '--cat-color': c.color }}
                 >
                   <div className="category-card-icon">{c.icon}</div>
-                  <div className="category-card-name">{c.name}</div>
+                  <div className="category-card-name">{transSeeded(c.name, 'category', t)}</div>
                   <div className="category-card-desc">{c.description}</div>
                 </div>
               ))}

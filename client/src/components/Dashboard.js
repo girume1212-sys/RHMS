@@ -205,7 +205,7 @@ export default function Dashboard() {
                     <Cell key={entry.id || entry.name} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(value, name) => [value, transSeeded(String(name), 'status', t)]} />
                 <text x="50%" y="47%" textAnchor="middle" dominantBaseline="middle" fontSize={28} fontWeight={700} fill="currentColor">
                   {stats.byStatus.filter(s => s.count > 0).reduce((sum, s) => sum + s.count, 0)}
                 </text>
@@ -218,7 +218,7 @@ export default function Dashboard() {
               {stats.byStatus.filter(s => s.count > 0).map((s, i) => (
                 <div key={s.id} className="legend-item">
                   <span className="legend-dot" style={{ background: COLORS[i % COLORS.length] }}></span>
-                  <span className="legend-label">{s.name}</span>
+                  <span className="legend-label">{transSeeded(s.name, 'status', t)}</span>
                   <span className="legend-value">{s.count} ({s.percentage}%)</span>
                 </div>
               ))}
@@ -236,14 +236,14 @@ export default function Dashboard() {
                     <Cell key={i} fill={entry.color || COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(value, name) => [value, transSeeded(String(name), 'priority', t)]} />
               </PieChart>
             </ResponsiveContainer>
             <div className="chart-legend">
               {stats.byPriority.filter(p => p.count > 0).map((p, i) => (
                 <div key={p.id} className="legend-item">
                   <span className="legend-dot" style={{ background: p.color || COLORS[i % COLORS.length] }}></span>
-                  <span className="legend-label">{p.name}</span>
+                  <span className="legend-label">{transSeeded(p.name, 'priority', t)}</span>
                   <span className="legend-value">{p.count} ({p.percentage}%)</span>
                 </div>
               ))}
@@ -260,10 +260,10 @@ export default function Dashboard() {
                 <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} />
                 <YAxis stroke="#9ca3af" fontSize={12} />
                 <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="created" stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="resolved" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="closed" stroke="#8B5CF6" strokeWidth={2} dot={{ r: 4 }} />
+                <Legend formatter={(value) => ({ created: t('common.new'), resolved: t('common.resolved'), closed: t('common.closed') }[value] || value)} />
+                <Line type="monotone" dataKey="created" name={t('common.new')} stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="resolved" name={t('common.resolved')} stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="closed" name={t('common.closed')} stroke="#8B5CF6" strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -301,9 +301,9 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={(stats.byCategory || []).filter(c => c.count > 0)}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} />
+                <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} tickFormatter={(value) => transSeeded(value, 'category', t)} />
                 <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
-                <Tooltip />
+                <Tooltip formatter={(value, name, props) => [value, props?.payload ? transSeeded(props.payload.name, 'category', t) : name]} />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                   {(stats.byCategory || []).filter(c => c.count > 0).map((entry, i) => (
                     <Cell key={entry.id || entry.name} fill={COLORS[i % COLORS.length]} />
