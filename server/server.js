@@ -39,6 +39,7 @@ const pool = require('./db');
       ON CONFLICT DO NOTHING
     `);
     await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS client_deleted BOOLEAN NOT NULL DEFAULT FALSE`);
     console.log('user_groups table and groups ready');
 
     // Create request_groups junction table for group-based visibility
@@ -776,6 +777,7 @@ app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req
     const existing = await pool.query('SELECT id FROM users WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
+    await pool.query('UPDATE requests SET client_deleted = TRUE WHERE client_id = $1', [req.params.id]);
     await pool.query('UPDATE requests SET client_id = NULL WHERE client_id = $1', [req.params.id]);
     await pool.query('UPDATE requests SET assigned_to = NULL WHERE assigned_to = $1', [req.params.id]);
     await pool.query('UPDATE comments SET user_id = NULL WHERE user_id = $1', [req.params.id]);
@@ -1041,7 +1043,8 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       attachments: typeof r.attachments === 'string' ? JSON.parse(r.attachments) : r.attachments,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
-      client: r.client_name ? { id: r.client_id, name: r.client_name, email: r.client_email, role: r.client_role, avatar: r.client_avatar, createdAt: r.client_created_at } : null,
+      clientDeleted: r.client_deleted,
+      client: r.client_deleted ? { deleted: true } : (r.client_name ? { id: r.client_id, name: r.client_name, email: r.client_email, role: r.client_role, avatar: r.client_avatar, createdAt: r.client_created_at } : null),
       category: r.category_name ? { id: r.category_id, name: r.category_name, description: r.category_description, color: r.category_color } : null,
       priority: r.priority_name ? { id: r.priority_id, name: r.priority_name, color: r.priority_color, level: r.priority_level } : null,
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
@@ -1124,7 +1127,7 @@ app.get('/api/search', authMiddleware, async (req, res) => {
 
       const itemsParams = [...visParams, pattern, limit, offset];
       const itemsResult = await pool.query(`
-        SELECT r.id, r.subject, r.description, r.created_at,
+        SELECT r.id, r.subject, r.description, r.created_at, r.client_deleted,
           u.name AS client_name,
           a.name AS assignee_name,
           ag.name AS assigned_group_name, ag.color AS assigned_group_color,
@@ -1246,7 +1249,8 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       attachments: typeof r.attachments === 'string' ? JSON.parse(r.attachments) : r.attachments,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
-      client: r.client_name ? { id: r.client_id, name: r.client_name, email: r.client_email, role: r.client_role, avatar: r.client_avatar, createdAt: r.client_created_at } : null,
+      clientDeleted: r.client_deleted,
+      client: r.client_deleted ? { deleted: true } : (r.client_name ? { id: r.client_id, name: r.client_name, email: r.client_email, role: r.client_role, avatar: r.client_avatar, createdAt: r.client_created_at } : null),
       category: r.category_name ? { id: r.category_id, name: r.category_name, description: r.category_description, color: r.category_color } : null,
       priority: r.priority_name ? { id: r.priority_id, name: r.priority_name, color: r.priority_color, level: r.priority_level } : null,
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
@@ -2080,7 +2084,7 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
     const activeUsersResult = await pool.query("SELECT COUNT(*) FROM users WHERE role != 'admin'");
 
     const newTasksResult = await pool.query(`
-      SELECT r.id, r.subject, r.created_at, u.name AS client_name, c.name AS category_name, p.name AS priority_name
+      SELECT r.id, r.subject, r.created_at, r.client_deleted, u.name AS client_name, u.avatar AS client_avatar, c.name AS category_name, c.color AS category_color, p.name AS priority_name
       FROM requests r
       LEFT JOIN users u ON r.client_id = u.id
       LEFT JOIN categories c ON r.category_id = c.id

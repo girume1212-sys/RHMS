@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { api, API_BASE } from '../api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
 import PageNumbers from './PageNumbers';
+
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return null;
+  if (avatar.startsWith('http')) return avatar;
+  return `${API_BASE}${avatar}`;
+};
 
 export default function Reports() {
   const navigate = useNavigate();
@@ -199,10 +205,21 @@ export default function Reports() {
                 {paginatedTasks.map(r => (
                   <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row">
                     <td><strong>REQ-{String(r.id).padStart(4, '0')}</strong></td>
-                    <td>{r.subject}</td>
-                    <td>{r.client_name || '-'}</td>
-                    <td><span className="category-tag">{r.category_name || '-'}</span></td>
-                    <td><span className="priority-badge">{r.priority_name || '-'}</span></td>
+                    <td><span className="truncate-cell">{r.subject}</span></td>
+                    <td>
+                      {r.client_deleted ? (
+                        <span className="muted-text">{t('common.clientDeleted')}</span>
+                      ) : (
+                        <div className="assigned-user-cell">
+                          <div className="assigned-avatar" style={{ background: '#10B981', overflow: 'hidden' }}>
+                            {getAvatarUrl(r.client_avatar) ? <img src={getAvatarUrl(r.client_avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ((r.client_name || '?').charAt(0))}
+                          </div>
+                          <span className="truncate-cell">{r.client_name || '-'}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td><span className="truncate-cell"><span className="category-tag" style={{ background: (r.category_color || '#3B82F6') + '20', color: r.category_color || '#3B82F6' }}>{r.category_name || '-'}</span></span></td>
+                    <td><span className="truncate-cell"><span className="priority-badge">{r.priority_name || '-'}</span></span></td>
                     <td>{new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td>
                       <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
@@ -267,7 +284,7 @@ export default function Reports() {
                     <td>
                       <div className="assigned-user-cell">
                         <div className="assigned-avatar" style={{ background: u.role === 'developer' ? '#8B5CF6' : '#3B82F6' }}>{u.name.charAt(0)}</div>
-                        <span>{u.name}</span>
+                        <span className="truncate-cell">{u.name}</span>
                       </div>
                     </td>
                     <td><span className="role-badge" style={{ background: u.role === 'developer' ? '#8B5CF620' : '#3B82F620', color: u.role === 'developer' ? '#8B5CF6' : '#3B82F6' }}>{u.role === 'developer' ? t('role.developer') : t('role.escalationTeam')}</span></td>

@@ -317,10 +317,10 @@ export default function Groups() {
                     <td>
                       <div className="user-cell">
                         <div className="user-avatar-sm" style={{ background: g.color || '#6B7280' }}>{g.name.charAt(0)}</div>
-                        {g.name}
+                        <span className="truncate-cell">{g.name}</span>
                       </div>
                     </td>
-                    <td>{g.company_name || <span style={{ color: '#9ca3af' }}>—</span>}</td>
+                    <td><span className="truncate-cell">{g.company_name || <span style={{ color: '#9ca3af' }}>—</span>}</span></td>
                     <td>
                       <span className="role-badge" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', cursor: 'pointer' }} onClick={() => openMembers(g)}>
                         {g.memberCount || 0}
@@ -497,10 +497,10 @@ export default function Groups() {
                               <td>
                                 <div className="user-cell">
                                   <div className="user-avatar-sm" style={{ background: getRoleColor(m.role) }}>{m.name.charAt(0)}</div>
-                                  {m.name}
+                                  <span className="truncate-cell">{m.name}</span>
                                 </div>
                               </td>
-                              <td>{m.email}</td>
+                              <td><span className="truncate-cell">{m.email}</span></td>
                               <td>
                                 <span className="role-badge" style={{ background: getRoleColor(m.role) + '20', color: getRoleColor(m.role) }}>
                                   {m.role === 'support' ? t('role.escalationTeam') : t('role.' + m.role)}

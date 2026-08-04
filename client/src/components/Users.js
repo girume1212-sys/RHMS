@@ -276,10 +276,10 @@ export default function Users() {
                     <td>
                       <div className="user-cell">
                         <div className="user-avatar-sm" style={{ background: getRoleColor(u.role) }}>{u.name.charAt(0)}</div>
-                        {u.name}
+                        <span className="truncate-cell">{u.name}</span>
                       </div>
                     </td>
-                    <td>{u.email}</td>
+                    <td><span className="truncate-cell">{u.email}</span></td>
                     <td><span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>{t('role.' + u.role)}</span></td>
                     <td>
                       {u.groupNames && u.groupNames.length > 0 ? (
@@ -292,7 +292,7 @@ export default function Users() {
                         <span style={{ color: '#9ca3af' }}>-</span>
                       )}
                     </td>
-                    <td>{u.companyName || <span style={{ color: '#9ca3af' }}>-</span>}</td>
+                    <td><span className="truncate-cell">{u.companyName || <span style={{ color: '#9ca3af' }}>-</span>}</span></td>
                     <td>{new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td>
                       <div className="actions-cell-inline">

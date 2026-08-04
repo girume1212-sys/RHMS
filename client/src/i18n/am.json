@@ -242,6 +242,8 @@
     "noRequestsYet": "እስካሁን ጥያቄ የለም።",
     "noAssignedRequests": "ለእርስዎ የተመደበ ጥያቄ የለም።",
     "noMatchFilters": "ከማጣሪያዎችዎ ጋር የሚዛመድ ጥያቄ የለም።",
+    "clientDeleted": "ደንበኛው ተሰርዟል",
+    "continueWithGoogle": "በGoogle ይቀጥሉ",
     "requestPrefixLabel": "REQ-",
     "readOnly": "ለማንበብ ብቻ",
     "showMyTasks": "የእኔ ተግባራት አሳይ",

@@ -975,7 +975,7 @@ export default function RequestDetail() {
               </div>
               <div className="info-row">
                 <span className="info-label">{t('common.client')}</span>
-                <span>{request.client?.name}</span>
+                <span>{request.clientDeleted ? t('common.clientDeleted') : (request.client?.name || '-')}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">{t('common.created')}</span>

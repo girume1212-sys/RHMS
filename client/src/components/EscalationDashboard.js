@@ -352,28 +352,28 @@ if (statusName === 'New') {
               {paginatedRequests.map(r => (
                 <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row" style={isReadOnly(r) ? { opacity: 0.75 } : {}}>
                   <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
-                  <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>({t('common.readOnly')})</span>}</td>
+                  <td><span className="truncate-cell">{r.subject}</span>{isReadOnly(r) && <span className="muted-text" style={{ marginLeft: 6, fontSize: 11, fontStyle: 'italic' }}>({t('common.readOnly')})</span>}</td>
                   <td>
                     {r.assignee && r.status?.name !== 'New' ? (
                       <div className="assigned-user-cell">
                         <div className="assigned-avatar" style={{ background: '#3B82F6' }}>
                           {r.assignee.name.charAt(0)}
                         </div>
-                        <span>{r.assignee.name}</span>
+                        <span className="truncate-cell">{r.assignee.name}</span>
                       </div>
-                    ) : <span style={{ color: '#9ca3af' }}>-</span>}
+                    ) : <span className="muted-text">-</span>}
                   </td>
-                  <td>{r.client?.name || '-'}</td>
+                  <td>{r.clientDeleted ? <span className="muted-text">{t('common.clientDeleted')}</span> : <span className="truncate-cell">{r.client?.name || '-'}</span>}</td>
                   <td>
                     {r.groups && r.groups.length > 0
-                      ? r.groups.map((g, i) => (
+                      ? <span className="truncate-cell">{r.groups.map((g, i) => (
                           <span key={g.id} className="group-tag" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', marginRight: i < r.groups.length - 1 ? '4px' : 0 }}>
                             {g.name}
                           </span>
-                        ))
+                        ))}</span>
                       : '-'}
                   </td>
-                  <td><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{transSeeded(r.category?.name, 'category', t) || '-'}</span></td>
+                  <td><span className="truncate-cell"><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{transSeeded(r.category?.name, 'category', t) || '-'}</span></span></td>
                   <td>
                     <span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>
                       {transSeeded(r.priority?.name, 'priority', t) || '-'}
@@ -431,7 +431,7 @@ if (statusName === 'New') {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>
+                <tr><td colSpan="10" className="muted-text" style={{ textAlign: 'center', padding: '24px' }}>
                   {displayRequests.length === 0 ? (showAssignedOnly ? t('common.noAssignedRequests') : t('common.noRequestsYet')) : t('common.noMatchFilters')}
                 </td></tr>
               )}

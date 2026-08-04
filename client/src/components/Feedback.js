@@ -80,8 +80,10 @@ export default function Feedback() {
     if (!sort.key) return 0;
     let aVal, bVal;
     switch (sort.key) {
+      case 'id': aVal = a.id || 0; bVal = b.id || 0; break;
       case 'rating': aVal = a.rating || 0; bVal = b.rating || 0; break;
       case 'user_name': aVal = (a.user_name || '').toLowerCase(); bVal = (b.user_name || '').toLowerCase(); break;
+      case 'comment': aVal = (a.comment || '').toLowerCase(); bVal = (b.comment || '').toLowerCase(); break;
       case 'request_subject': aVal = (a.request_subject || '').toLowerCase(); bVal = (b.request_subject || '').toLowerCase(); break;
       case 'created_at': aVal = a.created_at || ''; bVal = b.created_at || ''; break;
       default: return 0;
@@ -107,13 +109,9 @@ export default function Feedback() {
   );
 
   const getSortIcon = (key) => {
-    const active = sort.key === key;
-    return (
-      <span style={{ cursor: 'pointer', marginLeft: '6px', fontSize: '12px', opacity: active ? 1 : 0.3, color: active ? '#fff' : '#fff' }}
-        onClick={(e) => { e.stopPropagation(); handleSort(key); }}>
-        {active ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}
-      </span>
-    );
+    const isActive = sort.key === key;
+    if (!isActive) return <span className="sort-icon" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>⇅</span>;
+    return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
   };
 
   return (
@@ -212,18 +210,12 @@ export default function Feedback() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '40px' }}>#</th>
-                    <th className="sortable" onClick={() => handleSort('rating')} style={{ cursor: 'pointer' }}>
-                      <span>{t('feedback.rating')} {getSortIcon('rating')}</span>
-                    </th>
-                    <th>{t('feedback.comment')}</th>
-                    <th className="sortable" onClick={() => handleSort('user_name')} style={{ cursor: 'pointer' }}>
-                      <span>{t('common.user')} {getSortIcon('user_name')}</span>
-                    </th>
-                    <th>{t('common.request')}</th>
-                    <th className="sortable" onClick={() => handleSort('created_at')} style={{ cursor: 'pointer' }}>
-                      <span>{t('common.date')} {getSortIcon('created_at')}</span>
-                    </th>
+                    <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')} {getSortIcon('id')}</span></th>
+                    <th className="sortable"><span onClick={() => handleSort('rating')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('feedback.rating')} {getSortIcon('rating')}</span></th>
+                    <th className="sortable"><span onClick={() => handleSort('comment')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('feedback.comment')} {getSortIcon('comment')}</span></th>
+                    <th className="sortable"><span onClick={() => handleSort('user_name')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.user')} {getSortIcon('user_name')}</span></th>
+                    <th className="sortable"><span onClick={() => handleSort('request_subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.request')} {getSortIcon('request_subject')}</span></th>
+                    <th className="sortable"><span onClick={() => handleSort('created_at')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.date')} {getSortIcon('created_at')}</span></th>
                     <th style={{ width: '80px' }}>{t('common.actions')}</th>
                   </tr>
                 </thead>
@@ -253,7 +245,7 @@ export default function Feedback() {
                           }}>
                             {f.user_name ? f.user_name.charAt(0).toUpperCase() : '?'}
                           </div>
-                          <span className="feedback-cell-muted" style={{ fontWeight: 500 }}>
+                          <span className="truncate-cell feedback-cell-muted" style={{ fontWeight: 500 }}>
                             {f.user_name || <span className="feedback-no-comment">{t('feedback.anonymous')}</span>}
                           </span>
                         </div>
@@ -262,7 +254,7 @@ export default function Feedback() {
                         {f.request_subject ? (
                           <a href={`/requests/${f.request_id}`}
                             onClick={(e) => { e.preventDefault(); window.location.href = `/requests/${f.request_id}`; }}
-                            className="feedback-link"
+                            className="feedback-link truncate-cell"
                             style={{
                               textDecoration: 'none', fontSize: '13px',
                               display: 'block', overflow: 'hidden', textOverflow: 'ellipsis',

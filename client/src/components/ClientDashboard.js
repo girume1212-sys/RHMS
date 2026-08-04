@@ -85,8 +85,8 @@ export default function ClientDashboard() {
 
   const getSortIcon = (key) => {
     const isActive = sort.key === key;
-    if (!isActive) return <span className="sort-icon" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>â‡…</span>;
-    return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>{sort.dir === 'asc' ? 'â†‘' : 'â†“'}</span>;
+    if (!isActive) return <span className="sort-icon" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>⇅</span>;
+    return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
   };
 
   const handleEdit = (e, id) => {
@@ -218,13 +218,13 @@ export default function ClientDashboard() {
             </thead>
             <tbody>
               {paginatedRequests.length === 0 && !error && (
-                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noRequestsFound')}</td></tr>
+                <tr><td colSpan="7" className="muted-text" style={{ textAlign: 'center', padding: '24px' }}>{t('common.noRequestsFound')}</td></tr>
               )}
               {paginatedRequests.map((r) => (
                 <tr key={r.id} onClick={() => navigate(`/client/requests/${r.id}`)} className="clickable-row">
                   <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
-                  <td>{r.subject}</td>
-                  <td><span className="category-tag">{transSeeded(r.category?.name, 'category', t) || '-'}</span></td>
+                  <td><span className="truncate-cell">{r.subject}</span></td>
+                  <td><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{transSeeded(r.category?.name, 'category', t) || '-'}</span></td>
                   <td><span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>{transSeeded(r.priority?.name, 'priority', t) || '-'}</span></td>
                   <td><span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>{transSeeded(r.status?.name, 'status', t) || '-'}</span></td>
                   <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
@@ -255,11 +255,11 @@ export default function ClientDashboard() {
             <span>{t('common.ofRequests', { count: filteredRequests.length })}</span>
           </div>
           <div className="table-pagination">
-            <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>Â«</button>
-            <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>â€¹</button>
+            <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
+            <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
             <PageNumbers page={page} totalPages={totalPages} onPageChange={setPage} />
-            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>â€º</button>
-            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>Â»</button>
+            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>›</button>
+            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>»</button>
           </div>
         </div>
       </div>

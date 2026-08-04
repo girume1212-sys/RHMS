@@ -25,6 +25,7 @@ function Pagination({ page, totalPages, onPageChange }) {
 }
 
 function RequestSection({ title, data, requestBase, onNavigate }) {
+  const { t } = useTranslation();
   if (!data || data.total === 0) return null;
   return (
     <div className="search-results-section">
@@ -37,7 +38,7 @@ function RequestSection({ title, data, requestBase, onNavigate }) {
               <span className="search-result-title">{r.subject}</span>
             </div>
             <div className="search-result-row-meta">
-              {r.client_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="user" size={13} /> {r.client_name}</span>}
+              {r.client_deleted ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="user" size={13} /> {t('common.clientDeleted')}</span> : (r.client_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="user" size={13} /> {r.client_name}</span>)}
               {r.assignee_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="wrench" size={13} /> {r.assignee_name}</span>}
               {r.assigned_group_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="company" size={13} /> {r.assigned_group_name}</span>}
               {r.category_name && <span className="category-tag" style={{ background: (r.category_color || '#3B82F6') + '20', color: r.category_color || '#3B82F6' }}>{r.category_name}</span>}

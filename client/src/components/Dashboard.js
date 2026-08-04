@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-import { api } from '../api';
+import { api, API_BASE } from '../api';
 import { PieChart, Pie, Cell, LineChart, Line, BarChart, Bar, Rectangle, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
@@ -9,6 +9,12 @@ import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return null;
+  if (avatar.startsWith('http')) return avatar;
+  return `${API_BASE}${avatar}`;
+};
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
@@ -158,7 +164,7 @@ export default function Dashboard() {
         case 'client': aVal = (a.clientName || a.client_name || '').toLowerCase(); bVal = (b.clientName || b.client_name || '').toLowerCase(); break;
         case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
         case 'assignedGroup': aVal = (a.assignedGroup?.name || '').toLowerCase(); bVal = (b.assignedGroup?.name || '').toLowerCase(); break;
-        case 'category': aVal = (a.categoryName || a.category_name || '').toLowerCase(); bVal = (b.categoryName || b.category_name || '').toLowerCase(); break;
+        case 'category': aVal = (a.category?.name || a.categoryName || a.category_name || '').toLowerCase(); bVal = (b.category?.name || b.categoryName || b.category_name || '').toLowerCase(); break;
         case 'priority': aVal = (a.priorityName || a.priority?.name || '').toLowerCase(); bVal = (b.priorityName || b.priority?.name || '').toLowerCase(); break;
         case 'status': aVal = (a.statusName || a.status?.name || '').toLowerCase(); bVal = (b.statusName || b.status?.name || '').toLowerCase(); break;
         case 'assignedTo': aVal = (a.assignedToName || a.assigned_to_name || '').toLowerCase(); bVal = (b.assignedToName || b.assigned_to_name || '').toLowerCase(); break;
@@ -199,23 +205,25 @@ export default function Dashboard() {
       <div className="charts-row">
         <div className="chart-card" style={{ flex: 1 }}>
           <h3>{t('dashboard.requestsByStatus')}</h3>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={stats.byStatus.filter(s => s.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
-                  {stats.byStatus.filter(s => s.count > 0).map((entry, i) => (
-                    <Cell key={entry.id || entry.name} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value, name) => [value, transSeeded(String(name), 'status', t)]} />
-                <text x="50%" y="47%" textAnchor="middle" dominantBaseline="middle" fontSize={28} fontWeight={700} fill="currentColor">
-                  {stats.byStatus.filter(s => s.count > 0).reduce((sum, s) => sum + s.count, 0)}
-                </text>
-                <text x="50%" y="63%" textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="#9ca3af">
-                  {t('common.total')}
-                </text>
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="chart-container pie-chart-layout">
+            <div className="pie-chart-area">
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={stats.byStatus.filter(s => s.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
+                    {stats.byStatus.filter(s => s.count > 0).map((entry, i) => (
+                      <Cell key={entry.id || entry.name} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value, name) => [value, transSeeded(String(name), 'status', t)]} />
+                  <text x="50%" y="47%" textAnchor="middle" dominantBaseline="middle" fontSize={28} fontWeight={700} fill="currentColor">
+                    {stats.byStatus.filter(s => s.count > 0).reduce((sum, s) => sum + s.count, 0)}
+                  </text>
+                  <text x="50%" y="63%" textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="currentColor" className="muted-text">
+                    {t('common.total')}
+                  </text>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <div className="chart-legend">
               {stats.byStatus.filter(s => s.count > 0).map((s, i) => (
                 <div key={s.id} className="legend-item">
@@ -230,17 +238,19 @@ export default function Dashboard() {
 
         <div className="chart-card" style={{ flex: 1 }}>
           <h3>{t('dashboard.requestsByPriority')}</h3>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={stats.byPriority.filter(p => p.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
-                  {stats.byPriority.filter(p => p.count > 0).map((entry, i) => (
-                    <Cell key={i} fill={entry.color || COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value, name) => [value, transSeeded(String(name), 'priority', t)]} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="chart-container pie-chart-layout">
+            <div className="pie-chart-area">
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={stats.byPriority.filter(p => p.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
+                    {stats.byPriority.filter(p => p.count > 0).map((entry, i) => (
+                      <Cell key={i} fill={entry.color || COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value, name) => [value, transSeeded(String(name), 'priority', t)]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <div className="chart-legend">
               {stats.byPriority.filter(p => p.count > 0).map((p, i) => (
                 <div key={p.id} className="legend-item">
@@ -259,8 +269,8 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={stats.dailyData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} />
-                <YAxis stroke="#9ca3af" fontSize={12} />
+                <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
+                <YAxis stroke="#6b7280" fontSize={12} />
                 <Tooltip />
                 <Legend formatter={(value) => ({ created: t('common.new'), resolved: t('common.resolved'), closed: t('common.closed') }[value] || value)} />
                 <Line type="monotone" dataKey="created" name={t('common.new')} stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} />
@@ -275,17 +285,19 @@ export default function Dashboard() {
       <div className="charts-row">
         <div className="chart-card" style={{ flex: 3 }}>
           <h3>{t('dashboard.requestsByCompany')}</h3>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={(stats.byCompany || []).filter(c => c.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
-                  {(stats.byCompany || []).filter(c => c.count > 0).map((entry, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="chart-container pie-chart-layout">
+            <div className="pie-chart-area">
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={(stats.byCompany || []).filter(c => c.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
+                    {(stats.byCompany || []).filter(c => c.count > 0).map((entry, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <div className="chart-legend">
               {(stats.byCompany || []).filter(c => c.count > 0).map((c, i) => (
                 <div key={i} className="legend-item">
@@ -303,8 +315,8 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={(stats.byCategory || []).filter(c => c.count > 0)}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tickLine={false} tickFormatter={(value) => transSeeded(value, 'category', t)} />
-                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
+                <XAxis dataKey="name" stroke="#6b7280" fontSize={11} tickLine={false} tickFormatter={(value) => transSeeded(value, 'category', t)} />
+                <YAxis stroke="#6b7280" fontSize={11} tickLine={false} />
                 <Tooltip formatter={(value, name, props) => [value, props?.payload ? transSeeded(props.payload.name, 'category', t) : name]} />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                   {(stats.byCategory || []).filter(c => c.count > 0).map((entry, i) => (
@@ -352,28 +364,41 @@ export default function Dashboard() {
               {paginatedRequests.map(r => (
                 <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row">
                   <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
-                  <td>{r.subject}</td>
+                  <td><span className="truncate-cell">{r.subject}</span></td>
                   <td>
                     {r.assignee && r.status?.name !== 'New' ? (
                       <div className="assigned-user-cell">
                         <div className="assigned-avatar" style={{ background: '#3B82F6' }}>
                           {r.assignee.name.charAt(0)}
                         </div>
-                        <span>{r.assignee.name}</span>
+                        <span className="truncate-cell">{r.assignee.name}</span>
                       </div>
-                    ) : <span style={{ color: '#9ca3af' }}>-</span>}
+                    ) : <span className="muted-text">-</span>}
                   </td>
-                  <td>{r.clientName || r.client_name || '-'}</td>
+                  <td>
+                    {r.clientDeleted ? (
+                      <span className="muted-text">{t('common.clientDeleted')}</span>
+                    ) : r.client?.name || r.clientName || r.client_name ? (
+                      <div className="assigned-user-cell">
+                        <div className="assigned-avatar" style={{ background: '#10B981', overflow: 'hidden' }}>
+                          {getAvatarUrl(r.client?.avatar) ? <img src={getAvatarUrl(r.client?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ((r.client?.name || r.clientName || r.client_name).charAt(0) || '?')}
+                        </div>
+                        <span className="truncate-cell">{r.client?.name || r.clientName || r.client_name}</span>
+                      </div>
+                    ) : (
+                      <span className="muted-text">-</span>
+                    )}
+                  </td>
                   <td>
                     {r.groups && r.groups.length > 0
-                      ? r.groups.map((g, i) => (
+                      ? <span className="truncate-cell">{r.groups.map((g, i) => (
                           <span key={g.id} className="group-tag" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', marginRight: i < r.groups.length - 1 ? '4px' : 0 }}>
                             {g.name}
                           </span>
-                        ))
+                        ))}</span>
                       : '-'}
                   </td>
-                  <td>{transSeeded(r.categoryName || r.category_name, 'category', t) || '-'}</td>
+                  <td><span className="truncate-cell"><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{transSeeded(r.category?.name || r.categoryName || r.category_name, 'category', t) || '-'}</span></span></td>
                   <td>
                     <span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>
                       {transSeeded(r.priorityName || r.priority?.name, 'priority', t) || '-'}
@@ -393,14 +418,14 @@ export default function Dashboard() {
                           <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(r.id); }}>{t('common.delete')}</button>
                         </>
                       ) : (
-                        <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>-</span>
+                        <span className="muted-text" style={{ fontSize: 12, fontStyle: 'italic' }}>-</span>
                       )}
                     </div>
                   </td>
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noRequestsFound')}</td></tr>
+                <tr><td colSpan="10" className="muted-text" style={{ textAlign: 'center', padding: '24px' }}>{t('common.noRequestsFound')}</td></tr>
               )}
             </tbody>
           </table>
@@ -454,8 +479,8 @@ export default function Dashboard() {
                     <ResponsiveContainer width="100%" height={400}>
                       <BarChart data={perfData.companyStats || []} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} angle={-20} textAnchor="end" height={60} />
-                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
+                        <XAxis dataKey="name" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} angle={-20} textAnchor="end" height={60} />
+                        <YAxis stroke="#6b7280" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
                         <Tooltip
                           contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                           cursor={{ fill: '#f9fafb' }}
@@ -503,8 +528,8 @@ export default function Dashboard() {
                     <ResponsiveContainer width="100%" height={400}>
                       <BarChart data={perfData.developerStats || []} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} angle={-20} textAnchor="end" height={60} />
-                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
+                        <XAxis dataKey="name" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} angle={-20} textAnchor="end" height={60} />
+                        <YAxis stroke="#6b7280" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
                         <Tooltip
                           contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                           cursor={{ fill: '#f9fafb' }}
@@ -560,13 +585,13 @@ export default function Dashboard() {
                   <div style={{ fontSize: 28, fontWeight: 700, color: '#3B82F6' }}>
                     {selectedDetail.data.data.reduce((s, d) => s + d.created, 0)}
                   </div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('dashboard.totalCreated')}</div>
+                  <div className="muted-text" style={{ fontSize: 12 }}>{t('dashboard.totalCreated')}</div>
                 </div>
                 <div className="stat-card" style={{ padding: 16, textAlign: 'center' }}>
                   <div style={{ fontSize: 28, fontWeight: 700, color: '#10B981' }}>
                     {selectedDetail.data.data.reduce((s, d) => s + d.resolved, 0)}
                   </div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('dashboard.totalResolved')}</div>
+                  <div className="muted-text" style={{ fontSize: 12 }}>{t('dashboard.totalResolved')}</div>
                 </div>
                 <div className="stat-card" style={{ padding: 16, textAlign: 'center' }}>
                   <div style={{ fontSize: 28, fontWeight: 700, color: '#8B5CF6' }}>
@@ -576,14 +601,14 @@ export default function Dashboard() {
                       return created ? Math.round((resolved / created) * 100) + '%' : '0%';
                     })()}
                   </div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('dashboard.resolutionRate')}</div>
+                  <div className="muted-text" style={{ fontSize: 12 }}>{t('dashboard.resolutionRate')}</div>
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={selectedDetail.data.data.map(d => ({ ...d }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} />
+                  <XAxis dataKey="date" stroke="#6b7280" fontSize={11} tickLine={false} />
+                  <YAxis stroke="#6b7280" fontSize={11} tickLine={false} />
                   <Tooltip />
                   <Legend />
                   <Bar dataKey="created" name={t('common.created')} fill="#3B82F6" radius={[4, 4, 0, 0]} />

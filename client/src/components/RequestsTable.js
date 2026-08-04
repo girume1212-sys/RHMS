@@ -1,11 +1,17 @@
 import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { api, API_BASE } from '../api';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return null;
+  if (avatar.startsWith('http')) return avatar;
+  return `${API_BASE}${avatar}`;
+};
 
 const RequestsTable = forwardRef(function RequestsTable({
   user,
@@ -72,14 +78,19 @@ const RequestsTable = forwardRef(function RequestsTable({
       const s = statuses.find(st => st.id === status);
       status = s ? s.name : '';
     }
+    let category = initialFilter.category || '';
+    if (category && /^\d+$/.test(category)) {
+      const c = categories.find(cat => cat.id === category);
+      category = c ? c.name : '';
+    }
     setFilter({
       status,
       priority: initialFilter.priority || '',
-      category: initialFilter.category || '',
+      category,
       search: initialFilter.search || ''
     });
     setPage(1);
-  }, [initialFilter.status, initialFilter.priority, initialFilter.category, initialFilter.search, statuses]);
+  }, [initialFilter.status, initialFilter.priority, initialFilter.category, initialFilter.search, statuses, categories]);
 
   useEffect(() => {
     if (onDataChange) onDataChange({ requests, statuses, showMyTasks, filter });
@@ -320,30 +331,45 @@ const RequestsTable = forwardRef(function RequestsTable({
                 {paginated.map(r => (
                   <tr key={r.id} onClick={() => navigate(`${basePath}/requests/${r.id}`)} className="clickable-row" style={isReadOnly(r) ? { opacity: 0.75 } : {}}>
                     <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
-                    <td>{r.subject}{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>({t('common.readOnly')})</span>}</td>
+                    <td><span className="truncate-cell">{r.subject}</span>{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>({t('common.readOnly')})</span>}</td>
                     {!isClient && (
                       <td>
                         {r.assignee && r.status?.name !== 'New' ? (
                           <div className="assigned-user-cell">
                             <div className="assigned-avatar" style={{ background: '#3B82F6' }}>{r.assignee.name.charAt(0)}</div>
-                            <span>{r.assignee.name}</span>
+                            <span className="truncate-cell">{r.assignee.name}</span>
                           </div>
                         ) : <span style={{ color: '#9ca3af' }}>-</span>}
                       </td>
                     )}
-                    {!isClient && <td>{r.client?.name || '-'}</td>}
+                    {!isClient && (
+                      <td>
+                        {r.clientDeleted ? (
+                          <span className="muted-text">{t('common.clientDeleted')}</span>
+                        ) : r.client?.name ? (
+                          <div className="assigned-user-cell">
+                            <div className="assigned-avatar" style={{ background: '#10B981', overflow: 'hidden' }}>
+                              {getAvatarUrl(r.client?.avatar) ? <img src={getAvatarUrl(r.client?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (r.client?.name.charAt(0) || '?')}
+                            </div>
+                            <span className="truncate-cell">{r.client?.name}</span>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#9ca3af' }}>-</span>
+                        )}
+                      </td>
+                    )}
                     {!isClient && (
                       <td>
                         {r.groups && r.groups.length > 0
-                          ? r.groups.map((g, i) => (
+                          ? <span className="truncate-cell">{r.groups.map((g, i) => (
                               <span key={g.id} className="group-tag" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', marginRight: i < r.groups.length - 1 ? '4px' : 0 }}>
                                 {g.name}
                               </span>
-                            ))
+                            ))}</span>
                           : '-'}
                       </td>
                     )}
-                    <td><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{transSeeded(r.category?.name, 'category', t) || '-'}</span></td>
+                    <td><span className="truncate-cell"><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{transSeeded(r.category?.name, 'category', t) || '-'}</span></span></td>
                     <td><span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>{transSeeded(r.priority?.name, 'priority', t) || '-'}</span></td>
                     <td><span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>{transSeeded(r.status?.name, 'status', t) || '-'}</span></td>
                     <td>{r.updatedAt ? new Date(r.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>

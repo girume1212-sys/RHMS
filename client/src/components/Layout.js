@@ -132,6 +132,19 @@ export default function Layout() {
     return item.roles.includes(user?.role);
   };
 
+  const isNavItemActive = (item) => {
+    if (item.path === '/categories') {
+      if (location.pathname === '/categories') return true;
+      if (location.pathname === '/requests' && new URLSearchParams(location.search).get('category')) return true;
+      return false;
+    }
+    if (item.path === '/requests') {
+      if (location.pathname === '/requests' && !new URLSearchParams(location.search).get('category')) return true;
+      return false;
+    }
+    return location.pathname === item.path;
+  };
+
   useEffect(() => {
     api.get('/api/requests').then(data => {
       const msgs = [];
@@ -328,7 +341,7 @@ export default function Layout() {
               {section.items.filter(hasPermission).map((item) => (
                 <div key={item.path}>
                   <button
-                    className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
+                    className={`nav-item ${isNavItemActive(item) ? 'active' : ''}`}
                     onClick={() => navigate(item.path)}
                   >
                     <span className="nav-icon"><Icon name={item.icon} /></span>

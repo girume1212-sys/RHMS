@@ -4,6 +4,7 @@ import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import Icon from './Icon';
+import PageNumbers from './PageNumbers';
 
 export default function Company() {
   const { t } = useTranslation();
@@ -16,6 +17,9 @@ export default function Company() {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'client' });
+  const [userSort, setUserSort] = useState({ key: '', dir: 'asc' });
+  const [userPage, setUserPage] = useState(1);
+  const [userPerPage, setUserPerPage] = useState(5);
   const [toasts, setToasts] = useState([]);
   const [form, setForm] = useState({
     companyId: '',
@@ -122,6 +126,34 @@ export default function Company() {
     return users.filter(u => (u.companyName || u.company_name) === companyName);
   };
 
+  const handleUserSort = (key) => {
+    setUserSort(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
+    setUserPage(1);
+  };
+
+  const getUserSortIcon = (key) => {
+    const isActive = userSort.key === key;
+    if (!isActive) return <span className="sort-icon" onClick={(e) => { e.stopPropagation(); handleUserSort(key); }}>⇅</span>;
+    return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleUserSort(key); }}>{userSort.dir === 'asc' ? '↑' : '↓'}</span>;
+  };
+
+  const getCompanyUsersSorted = (companyName) => {
+    const list = getCompanyUsers(companyName);
+    if (!userSort.key) return list;
+    return [...list].sort((a, b) => {
+      let aVal, bVal;
+      switch (userSort.key) {
+        case 'user': aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase(); break;
+        case 'email': aVal = (a.email || '').toLowerCase(); bVal = (b.email || '').toLowerCase(); break;
+        case 'role': aVal = (a.role || '').toLowerCase(); bVal = (b.role || '').toLowerCase(); break;
+        default: return 0;
+      }
+      if (aVal < bVal) return userSort.dir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return userSort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
   const getRoleColor = (role) => {
     const colors = { admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981' };
     return colors[role] || '#6B7280';
@@ -187,6 +219,11 @@ export default function Company() {
     };
     return colors[industry] || '#0ea5e9';
   };
+
+  const companyUsersSorted = selectedCompany ? getCompanyUsersSorted(selectedCompany.name) : [];
+  const companyUsersTotal = companyUsersSorted.length;
+  const companyUsersTotalPages = Math.ceil(companyUsersTotal / userPerPage);
+  const paginatedUsers = companyUsersSorted.slice((userPage - 1) * userPerPage, userPage * userPerPage);
 
   return (
     <div className="page-container">
@@ -302,7 +339,7 @@ export default function Company() {
           <h3>{t('company.companiesCount', { count: companies.length })}</h3>
           <div className="category-cards-grid">
             {companies.map((c) => (
-              <div key={c.id} className="category-manage-card" style={{ '--cat-color': getIndustryColor(c.industry), cursor: 'pointer' }} onClick={() => setSelectedCompany(c)}>
+              <div key={c.id} className="category-manage-card" style={{ '--cat-color': getIndustryColor(c.industry), cursor: 'pointer' }} onClick={() => { setSelectedCompany(c); setUserPage(1); }}>
                 <div className="category-manage-card-top">
                   <div className="category-manage-icon"><Icon name={getIndustryIcon(c.industry)} size={32} /></div>
                   <span className="category-manage-count">{t('company.usersCount', { count: getUserCount(c.name) })}</span>
@@ -329,6 +366,7 @@ export default function Company() {
         <div className="modal-overlay" onClick={() => setSelectedCompany(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '1100px' }}>
             <div className="modal-header">
+              <button className="back-link" onClick={() => setSelectedCompany(null)}>← {t('common.back')}</button>
               <div className="modal-header-content">
                 <div className="modal-icon"><Icon name={getIndustryIcon(selectedCompany.industry)} size={22} /></div>
                 <div>
@@ -342,48 +380,66 @@ export default function Company() {
               {getCompanyUsers(selectedCompany.name).length === 0 ? (
                 <div className="empty-state">{t('company.noUsers')}</div>
               ) : (
-                <div className="table-card" style={{ overflowX: 'hidden' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '70px' }}>{t('common.id')}</th>
-                        <th>{t('common.user')}</th>
-                        <th>{t('common.email')}</th>
-                        <th>{t('common.role')}</th>
-                        <th>{t('company.approved')}</th>
-                        <th style={{ width: '150px' }}>{t('common.actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {getCompanyUsers(selectedCompany.name).map((u, idx) => (
-                        <tr key={u.id}>
-                          <td>{idx + 1}</td>
-                          <td>
-                            <div className="user-cell">
-                              <div className="user-avatar-sm" style={{ background: getRoleColor(u.role) }}>
-                                {u.name.charAt(0)}
-                              </div>
-                              {u.name}
-                            </div>
-                          </td>
-                          <td>{u.email}</td>
-                          <td>
-                            <span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>
-                              {u.role === 'support' ? t('role.escalationTeam') : u.role}
-                            </span>
-                          </td>
-                          <td>{u.approved ? <span style={{ color: '#10B981' }}><Icon name="resolved" size={16} /></span> : <span style={{ color: '#EF4444' }}><Icon name="rejected" size={16} /></span>}</td>
-                          <td>
-                            <div className="actions-cell-inline">
-                              <button className="action-btn-text edit" onClick={() => openEditUser(u)}>{t('common.edit')}</button>
-                              <button className="action-btn-text delete" onClick={() => handleDeleteUser(u.id, u.name)}>{t('common.delete')}</button>
-                            </div>
-                          </td>
+                <>
+                  <div className="table-card" style={{ overflowX: 'hidden' }}>
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '70px' }}>{t('common.id')}</th>
+                          <th className="sortable"><span onClick={() => handleUserSort('user')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.user')} {getUserSortIcon('user')}</span></th>
+                          <th className="sortable"><span onClick={() => handleUserSort('email')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.email')} {getUserSortIcon('email')}</span></th>
+                          <th className="sortable"><span onClick={() => handleUserSort('role')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.role')} {getUserSortIcon('role')}</span></th>
+                          <th style={{ width: '150px' }}>{t('common.actions')}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {paginatedUsers.map((u, idx) => (
+                          <tr key={u.id}>
+                            <td>{idx + 1 + (userPage - 1) * userPerPage}</td>
+                            <td>
+                              <div className="user-cell">
+                                <div className="user-avatar-sm" style={{ background: getRoleColor(u.role) }}>
+                                  {u.name.charAt(0)}
+                                </div>
+                                <span className="truncate-cell">{u.name}</span>
+                              </div>
+                            </td>
+                            <td><span className="truncate-cell">{u.email}</span></td>
+                            <td>
+                              <span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>
+                                {u.role === 'support' ? t('role.escalationTeam') : u.role}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="actions-cell-inline">
+                                <button className="action-btn-text edit" onClick={() => openEditUser(u)}>{t('common.edit')}</button>
+                                <button className="action-btn-text delete" onClick={() => handleDeleteUser(u.id, u.name)}>{t('common.delete')}</button>
+                              </div>
+                            </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                    </table>
+                  </div>
+                  <div className="table-footer">
+                    <div className="table-footer-info">
+                      <span>{t('common.show')}</span>
+                      <select value={userPerPage} onChange={(e) => { setUserPerPage(Number(e.target.value)); setUserPage(1); }}>
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                      </select>
+                      <span>{t('common.ofUsers', { count: companyUsersTotal })}</span>
+                    </div>
+                    <div className="table-pagination">
+                      <button className="page-btn" disabled={userPage === 1} onClick={() => setUserPage(1)}>«</button>
+                      <button className="page-btn" disabled={userPage === 1} onClick={() => setUserPage(userPage - 1)}>‹</button>
+                      <PageNumbers page={userPage} totalPages={companyUsersTotalPages} onPageChange={setUserPage} />
+                      <button className="page-btn" disabled={userPage === companyUsersTotalPages || companyUsersTotalPages === 0} onClick={() => setUserPage(userPage + 1)}>›</button>
+                      <button className="page-btn" disabled={userPage === companyUsersTotalPages || companyUsersTotalPages === 0} onClick={() => setUserPage(companyUsersTotalPages)}>»</button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
             <div className="modal-actions">

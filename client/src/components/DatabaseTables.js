@@ -165,7 +165,7 @@ export default function DatabaseTables() {
                         <tr key={i}>
                           {tableData.columns.map(col => (
                             <td key={col.column_name} style={{ maxWidth: '200px' }}>
-                              <span title={String(row[col.column_name])} style={{ cursor: 'default' }}>
+                              <span className="truncate-cell" title={String(row[col.column_name])} style={{ cursor: 'default', maxWidth: '200px' }}>
                                 {formatDate(row[col.column_name])}
                               </span>
                             </td>

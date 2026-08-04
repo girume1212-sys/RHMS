@@ -134,7 +134,7 @@ export default function GlobalSearch({ clientMode = false, placeholder }) {
                           <strong>REQ-{String(r.id).padStart(4, '0')}</strong> {r.subject}
                         </span>
                         <span className="global-search-item-meta">
-                          {r.client_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="user" size={13} /> {r.client_name}</span>}
+                          {r.client_deleted ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="user" size={13} /> {t('common.clientDeleted')}</span> : (r.client_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="user" size={13} /> {r.client_name}</span>)}
                           {r.status_name && <span className="status-badge" style={{ background: (r.status_color || '#6B7280') + '20', color: r.status_color || '#6B7280' }}>{transSeeded(r.status_name, 'status', t)}</span>}
                           {r.priority_name && <span className="priority-badge" style={{ background: (r.priority_color || '#6B7280') + '20', color: r.priority_color || '#6B7280' }}>{r.priority_name}</span>}
                           {r.category_name && <span className="category-tag" style={{ background: (r.category_color || '#3B82F6') + '20', color: r.category_color || '#3B82F6' }}>{r.category_name}</span>}

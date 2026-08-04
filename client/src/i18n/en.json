@@ -242,6 +242,8 @@
     "noRequestsYet": "No requests yet.",
     "noAssignedRequests": "No requests assigned to you.",
     "noMatchFilters": "No requests match your filters.",
+    "clientDeleted": "Client Deleted",
+    "continueWithGoogle": "Continue with Google",
     "requestPrefixLabel": "REQ-",
     "readOnly": "read-only",
     "showMyTasks": "Show My Tasks",

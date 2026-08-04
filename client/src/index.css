@@ -272,6 +272,44 @@ body {
 .google-btn-container iframe {
   width: 100% !important;
 }
+.google-btn-container button[data-google-custom="true"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+  gap: 10px;
+  box-sizing: border-box;
+  padding: 0 16px;
+  height: 44px;
+  width: 100% !important;
+  cursor: pointer;
+  background: #ffffff;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  box-shadow: none;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.google-btn-container button[data-google-custom="true"]:hover {
+  background: #f8f9fa;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3);
+}
+.google-btn-container button[data-google-custom="true"] svg {
+  flex-shrink: 0;
+  display: block;
+  align-self: center;
+  vertical-align: middle;
+}
+.google-btn-container .google-btn-text {
+  font-family: Roboto, 'Segoe UI', Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  color: #3c4043;
+  white-space: nowrap;
+  line-height: 1;
+  align-self: center;
+  vertical-align: middle;
+}
 .google-loading {
   text-align: center;
   color: rgba(255, 255, 255, 0.6);
@@ -6094,6 +6132,12 @@ body.dark-mode .perf-toggle-btn.active {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
+  justify-content: center;
+}
+.table-footer .table-pagination {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 .page-btn {
   min-width: 28px;
@@ -6969,6 +7013,21 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
   border-bottom: none;
 }
 
+/* Long text in a table cell shows as an ellipsis (...) instead of wrapping */
+.truncate-cell {
+  display: inline-block;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+@media (max-width: 768px) {
+  .truncate-cell {
+    max-width: 80px;
+  }
+}
+
 /* Row action buttons */
 .action-btn-text {
   padding: 6px 12px;
@@ -7283,9 +7342,11 @@ body.dark-mode .btn-outline:hover:not(:disabled) {
   }
   .table-pagination {
     width: 100%;
-    justify-content: flex-start;
+    justify-content: center;
     overflow-x: auto;
     flex-wrap: wrap;
+    position: static;
+    transform: none;
   }
 }
 
@@ -7432,6 +7493,20 @@ body,
 .chart-legend {
   flex: 1 1 170px;
   min-width: 0;
+}
+
+/* Pie charts: keep legend to the right of the chart */
+.chart-container.pie-chart-layout {
+  flex-wrap: nowrap;
+}
+.chart-container.pie-chart-layout .pie-chart-area {
+  flex: 0 0 55%;
+  min-width: 0;
+}
+.chart-container.pie-chart-layout .chart-legend {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 45%;
 }
 
 /* Page headers allow wrapping on medium screens */
@@ -7651,4 +7726,299 @@ body,
 .requests-list .table-card .data-table tbody td {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* ==========================================================================
+   CONTRAST & VISIBILITY FIXES  (Bright + Dark)
+   Visual only - no functionality, logic or behavior changes.
+   These rules only raise low-contrast colors to readable levels in both
+   themes. Bright-mode overrides come first; dark-mode overrides (higher
+   specificity, later in the sheet) win when .dark-mode is active.
+   ========================================================================== */
+
+/* ---- Bright mode: raise faded #9ca3af/#94a3b8 text to #6b7280 (WCAG AA) ---- */
+.comment-time,
+.dropdown-panel-time,
+.dropdown-panel-empty,
+.timeline-meta,
+.timeline-time,
+.timeline-dot,
+.activity-meta,
+.perf-subtitle,
+.req-cal-weekday,
+.req-cal-more,
+.req-cal-empty,
+.unassigned,
+.file-preview-size,
+.msg-att-size,
+.feedback-char-count,
+.settings-desc,
+.language-english,
+.category-card-desc,
+.category-manage-desc,
+.bubble-pill-time,
+.composer-hint,
+.chat-empty,
+.empty-state,
+.table-info,
+.page-ellipsis,
+.composer-pending-remove,
+.color-value,
+.lifecycle-time,
+.dropdown-arrow,
+.feedback-rating-num,
+.toggle-sublabel,
+.ml-menu,
+.user-role-small,
+.multi-select-value.placeholder,
+.search-icon,
+.global-search-icon,
+.table-search-box .search-icon {
+  color: #6b7280;
+}
+
+/* Bright mode: primary-colored link text darkens to #2563eb for AA on white */
+.view-all-link,
+.timeline-request,
+.feedback-link,
+.global-search-see-all,
+.global-search-footer button,
+.global-search-item-title strong,
+.search-result-id {
+  color: #2563eb;
+}
+
+/* Bright mode: small icon / control affordances */
+.sort-icon {
+  color: #6b7280;
+  opacity: 0.6;
+}
+.page-btn:disabled {
+  opacity: 0.55;
+}
+.logo-placeholder {
+  color: #6b7280;
+}
+
+/* ---- Bright mode: login/signup page readability ---- */
+.login-subtitle {
+  color: rgba(255, 255, 255, 0.75);
+}
+.login-input-icon {
+  color: rgba(255, 255, 255, 0.6);
+}
+.login-input-wrapper input::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
+.show-password-btn {
+  color: rgba(255, 255, 255, 0.75);
+}
+.show-password-btn:hover {
+  color: #ffffff;
+}
+.login-divider span {
+  color: rgba(255, 255, 255, 0.6);
+}
+.remember-me {
+  color: rgba(255, 255, 255, 0.75);
+}
+.signup-link {
+  color: rgba(255, 255, 255, 0.7);
+}
+.google-loading {
+  color: rgba(255, 255, 255, 0.75);
+}
+.modal-card p {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* ============================ DARK MODE ============================ */
+
+/* Dark mode: raise slate-500 #64748b and faded text to slate-400 #94a3b8 */
+body.dark-mode .comment-time,
+body.dark-mode .dropdown-panel-time,
+body.dark-mode .dropdown-panel-empty,
+body.dark-mode .timeline-meta,
+body.dark-mode .timeline-time,
+body.dark-mode .timeline-dot,
+body.dark-mode .timeline-user,
+body.dark-mode .activity-meta,
+body.dark-mode .perf-subtitle,
+body.dark-mode .req-cal-more,
+body.dark-mode .req-cal-empty,
+body.dark-mode .unassigned,
+body.dark-mode .file-preview-size,
+body.dark-mode .msg-att-size,
+body.dark-mode .feedback-char-count,
+body.dark-mode .settings-desc,
+body.dark-mode .language-english,
+body.dark-mode .category-card-desc,
+body.dark-mode .category-manage-desc,
+body.dark-mode .bubble-pill-time,
+body.dark-mode .composer-hint,
+body.dark-mode .chat-empty,
+body.dark-mode .empty-state,
+body.dark-mode .page-ellipsis,
+body.dark-mode .composer-pending-remove,
+body.dark-mode .color-value,
+body.dark-mode .lifecycle-time,
+body.dark-mode .lifecycle-desc,
+body.dark-mode .dropdown-arrow,
+body.dark-mode .feedback-rating-num,
+body.dark-mode .toggle-sublabel,
+body.dark-mode .ml-menu,
+body.dark-mode .user-role-small,
+body.dark-mode .multi-select-value.placeholder,
+body.dark-mode .search-icon,
+body.dark-mode .global-search-icon,
+body.dark-mode .table-search-box .search-icon,
+body.dark-mode .req-cal-weekday,
+body.dark-mode .chat-time,
+body.dark-mode .legend-value,
+body.dark-mode .stat-content p,
+body.dark-mode .stat-card-simple p,
+body.dark-mode .info-label,
+body.dark-mode .action-group label {
+  color: #94a3b8;
+}
+
+/* Dark mode: ensure headings / values are bright on slate panels */
+body.dark-mode .stat-content h3,
+body.dark-mode .chart-card h3,
+body.dark-mode .legend-label,
+body.dark-mode .activity-card h3,
+body.dark-mode .requests-table-card h3 {
+  color: #f1f5f9;
+}
+body.dark-mode .stat-card-simple h3 {
+  color: #60a5fa;
+}
+
+/* Dark mode: primary-colored links/ids brighten to blue-300 for contrast */
+body.dark-mode .view-all-link,
+body.dark-mode .timeline-request,
+body.dark-mode .global-search-see-all,
+body.dark-mode .global-search-footer button,
+body.dark-mode .search-result-id {
+  color: #93c5fd;
+}
+body.dark-mode .req-id {
+  color: #7dd3fc;
+}
+
+/* Dark mode: generic sort icons become visible on dark panels */
+body.dark-mode .sort-icon {
+  color: #94a3b8;
+  opacity: 0.8;
+}
+
+/* Dark mode: destructive/small muted controls */
+body.dark-mode .ml-menu:hover {
+  color: #fca5a5;
+}
+body.dark-mode .composer-pending-remove:hover {
+  color: #fca5a5;
+}
+
+/* Dark mode: status/priority/category badges keep their meaning but text is
+   lightened so the value stays legible on slate backgrounds. */
+body.dark-mode .status-badge,
+body.dark-mode .priority-badge,
+body.dark-mode .category-tag {
+  filter: brightness(1.4) saturate(1.1);
+}
+
+/* Dark mode: table sortable header control remains readable */
+body.dark-mode .data-table thead .sortable:hover {
+  color: #93c5fd;
+}
+
+/* ---- Muted text helper (replaces inline #9ca3af across dashboards) ---- */
+.muted-text {
+  color: #6b7280;
+}
+body.dark-mode .muted-text {
+  color: #94a3b8;
+}
+
+/* Dark mode: recharts axis lines/ticks stay readable on slate chart cards */
+body.dark-mode .chart-card .recharts-cartesian-axis-line,
+body.dark-mode .chart-card .recharts-cartesian-axis-tick-line,
+body.dark-mode .chart-card .recharts-cartesian-axis-tick-value {
+  stroke: #94a3b8 !important;
+}
+
+/* --------------------------------------------------------------------------
+   ADDITIONAL CONTRAST FIXES (Bright + Dark)
+   Visual only. Extends the block above to cover remaining low-contrast text,
+   icons, placeholders and sidebar labels so themes stay readable/consistent.
+   -------------------------------------------------------------------------- */
+
+/* Bright mode: raise remaining faded #9ca3af text/icons to #6b7280 */
+.form-card .form-group input::placeholder,
+.form-card .form-group textarea::placeholder,
+.edit-form .form-group input::placeholder,
+.edit-form .form-group textarea::placeholder,
+.file-upload-hint,
+.global-search-clear,
+.global-search-empty,
+.hint-default,
+.feedback-textarea-label span,
+.feedback-no-comment {
+  color: #6b7280;
+}
+.modal-close {
+  color: #6b7280;
+}
+
+/* Dark mode: raise remaining slate-500 #64748b to slate-400 #94a3b8 */
+body.dark-mode .form-card .form-group input::placeholder,
+body.dark-mode .form-card .form-group textarea::placeholder,
+body.dark-mode .edit-form .form-group input::placeholder,
+body.dark-mode .edit-form .form-group textarea::placeholder,
+body.dark-mode .file-upload-hint,
+body.dark-mode .global-search-clear,
+body.dark-mode .global-search-empty,
+body.dark-mode .hint-default,
+body.dark-mode .feedback-textarea-label span,
+body.dark-mode .feedback-no-comment {
+  color: #94a3b8;
+}
+
+/* Dark sidebar labels brighter */
+body.dark-mode .sidebar-brand span,
+body.dark-mode .sidebar-header,
+body.dark-mode .sidebar-toggle,
+body.dark-mode .nav-section,
+body.dark-sidebar .sidebar-brand span,
+body.dark-sidebar .sidebar-header,
+body.dark-sidebar .sidebar-toggle,
+body.dark-sidebar .nav-section {
+  color: #94a3b8;
+}
+
+/* ---- Comment composer: ensure emoji/attach icons + textarea are visible ----
+   .composer-btn uses <Icon> with currentColor, which fell back to the UA
+   button color (dark) and disappeared on the dark background. Force explicit
+   colors so the icons, input and borders are always readable. ---- */
+.composer-btn {
+  color: #374151;
+}
+.composer-btn:hover {
+  color: #2563EB;
+}
+.composer-textarea::placeholder,
+.composer-pending-remove {
+  color: #6b7280;
+}
+body.dark-mode .composer-btn {
+  color: #e2e8f0;
+}
+body.dark-mode .composer-btn:hover {
+  color: #ffffff;
+  background: #1e3a5f;
+  border-color: #3B82F6;
+}
+body.dark-mode .composer-textarea::placeholder {
+  color: #94a3b8;
 }
