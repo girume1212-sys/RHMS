@@ -296,13 +296,10 @@ export default function ClientProfile() {
         </div>
 
         {/* Edit Form Card */}
-        <div style={{
-          background: '#fff', borderRadius: '20px', padding: '32px',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #e5e7eb'
-        }}>
+        <div className="account-details-card">
           <h3 style={{
             margin: '0 0 24px', fontSize: '18px', fontWeight: '600',
-            color: '#1f2937', display: 'flex', alignItems: 'center', gap: '8px'
+            display: 'flex', alignItems: 'center', gap: '8px'
           }}>
             <span style={{
               width: '32px', height: '32px', borderRadius: '8px',
@@ -314,7 +311,7 @@ export default function ClientProfile() {
           </h3>
 
           {editing ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div className="account-edit-form" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               {/* Name Field */}
               <div style={{ position: 'relative' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: '#2563EB', marginBottom: '6px' }}>
@@ -453,6 +450,7 @@ export default function ClientProfile() {
               <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                 <button
                   onClick={handleCancel}
+                  className="account-cancel-btn"
                   style={{
                     flex: 1, padding: '12px', borderRadius: '12px',
                     border: '2px solid #e5e7eb',
@@ -491,10 +489,9 @@ export default function ClientProfile() {
                 { label: t('common.role'), value: user?.role, icon: 'shield', color: '#3730a3', capitalize: true },
                 { label: t('common.memberSince'), value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-', icon: 'calendar', color: '#1d4ed8' },
               ].map((item, i) => (
-                <div key={i} style={{
+                <div key={i} className={i < 4 ? 'detail-divider' : ''} style={{
                   display: 'flex', alignItems: 'center', gap: '14px',
-                  padding: '14px 0',
-                  borderBottom: i < 4 ? '1px solid #f3f4f6' : 'none'
+                  padding: '14px 0'
                 }}>
                   <div style={{
                     width: '40px', height: '40px', borderRadius: '10px',
@@ -503,9 +500,9 @@ export default function ClientProfile() {
                     fontSize: '18px', flexShrink: 0
                   }}><Icon name={item.icon} size={18} /></div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '2px' }}>{item.label}</div>
-                    <div style={{
-                      fontSize: '14px', fontWeight: '500', color: '#1f2937',
+                    <div className="detail-label" style={{ fontSize: '12px', marginBottom: '2px' }}>{item.label}</div>
+                    <div className="detail-value" style={{
+                      fontSize: '14px', fontWeight: '500',
                       textTransform: item.capitalize ? 'capitalize' : 'none'
                     }}>{item.value}</div>
                   </div>
@@ -514,21 +511,6 @@ export default function ClientProfile() {
             </div>
           )}
         </div>
-      </div>
-
-      <div style={{
-        maxWidth: '900px', marginTop: '24px', background: '#fff',
-        borderRadius: '20px', padding: '24px 32px',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #e5e7eb',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px'
-      }}>
-        <div>
-          <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, verticalAlign: 'middle' }}><Icon name="globe" size={16} /></span> {t('settings.language')}
-          </h3>
-          <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>{t('settings.languageDescription')}</p>
-        </div>
-        <LanguageSelector variant="inline" />
       </div>
     </div>
   );

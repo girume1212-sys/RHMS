@@ -7,8 +7,6 @@ import { useTranslation } from '../i18n/useTranslation';
 import LanguageSelector from './LanguageSelector';
 import { API_BASE } from '../api';
 
-const GOOGLE_BTN_TEXT = 'Continue with Google';
-
 const GOOGLE_G_ICON = `
   <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true" focusable="false">
     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -32,7 +30,7 @@ export default function Login() {
   const [errors, setErrors] = useState({ forgotEmail: '' });
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleBtnReady, setGoogleBtnReady] = useState(false);
-  const googleBtnRef = useRef(null);
+  const googleScriptRef = useRef(null);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -46,44 +44,59 @@ export default function Login() {
   }, []);
 
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      if (window.google && window.google.accounts) {
-        window.google.accounts.id.initialize({
-          client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
-          callback: handleGoogleResponse,
-          locale: 'en',
-        });
-        if (googleBtnRef.current) {
-          window.google.accounts.id.renderButton(googleBtnRef.current, {
-            theme: 'outline',
-            size: 'large',
-            width: '100%',
-            text: 'continue_with',
-            shape: 'rectangular',
-          });
-          const button = googleBtnRef.current.querySelector('button') || googleBtnRef.current.querySelector('[role="button"]');
-          if (button) {
-            button.innerHTML = `${GOOGLE_G_ICON}<span class="google-btn-text">${GOOGLE_BTN_TEXT}</span>`;
-            button.setAttribute('data-google-custom', 'true');
-            setGoogleBtnReady(true);
-          }
-        }
+    loadGoogleScript(() => {});
+    return () => {
+      if (googleScriptRef.current) {
+        document.body.removeChild(googleScriptRef.current);
+        googleScriptRef.current = null;
       }
     };
-    document.body.appendChild(script);
-    return () => { document.body.removeChild(script); };
   }, []);
 
-  useEffect(() => {
-    if (!googleBtnReady) return;
-    const button = googleBtnRef.current?.querySelector('[data-google-custom="true"]');
-    const label = button?.querySelector('.google-btn-text');
-    if (label) label.textContent = GOOGLE_BTN_TEXT;
-  }, [googleBtnReady]);
+  const initGoogle = () => {
+    if (window.google && window.google.accounts) {
+      window.google.accounts.id.initialize({
+        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+        callback: handleGoogleResponse,
+        locale: 'en',
+      });
+      setGoogleBtnReady(true);
+      return true;
+    }
+    return false;
+  };
+
+  const loadGoogleScript = (onReady) => {
+    if (initGoogle()) {
+      onReady();
+      return;
+    }
+    if (!googleScriptRef.current) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      googleScriptRef.current = script;
+      document.body.appendChild(script);
+    }
+    googleScriptRef.current.onload = () => {
+      if (initGoogle()) onReady();
+    };
+  };
+
+  const handleGoogleClick = () => {
+    setError('');
+    loadGoogleScript(() => {
+      try {
+        if (window.google && window.google.accounts) {
+          window.google.accounts.id.prompt();
+        }
+      } catch (err) {
+        console.error('Google sign-in error:', err);
+        setError(t('common.googleSignInFailed'));
+      }
+    });
+  };
 
   const handleGoogleResponse = async (response) => {
     setGoogleLoading(true);
@@ -182,8 +195,7 @@ export default function Login() {
               <input
                 type="text"
                 value={usernameOrEmail}
-                onChange={(e) => setUsernameOrEmail(e.target.value.replace(/\s/g, ''))}
-                onKeyDown={(e) => e.key === ' ' && e.preventDefault()}
+                onChange={(e) => setUsernameOrEmail(e.target.value)}
                 placeholder={t('common.userNameOrEmail')}
                 required
               />
@@ -238,7 +250,14 @@ export default function Login() {
         </div>
 
         <div className="google-btn-wrapper">
-          <div ref={googleBtnRef} className="google-btn-container"></div>
+          <button
+            type="button"
+            className="google-btn"
+            onClick={handleGoogleClick}
+          >
+            <span className="google-btn-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: GOOGLE_G_ICON }} />
+            <span className="google-btn-text">{t('common.googleContinue')}</span>
+          </button>
           {googleLoading && <div className="google-loading">{t('common.googleSignIn')}</div>}
         </div>
 

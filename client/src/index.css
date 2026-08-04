@@ -263,52 +263,58 @@ body {
   width: 100%;
   margin-bottom: 4px;
 }
-.google-btn-container {
-  width: 100%;
-}
-.google-btn-container > div {
-  width: 100% !important;
-}
-.google-btn-container iframe {
-  width: 100% !important;
-}
-.google-btn-container button[data-google-custom="true"] {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  text-align: center;
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 10px;
   box-sizing: border-box;
-  padding: 0 16px;
+  width: 100%;
   height: 44px;
-  width: 100% !important;
+  padding: 0 16px;
   cursor: pointer;
   background: #ffffff;
-  border: 1px solid #dadce0;
-  border-radius: 8px;
-  box-shadow: none;
-  transition: background 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid #747775;
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.15);
+  font-family: inherit;
+  transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
 }
-.google-btn-container button[data-google-custom="true"]:hover {
+.google-btn:hover {
   background: #f8f9fa;
-  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3);
+  border-color: #5f6368;
+  box-shadow: 0 2px 6px rgba(60, 64, 67, 0.25);
 }
-.google-btn-container button[data-google-custom="true"] svg {
+.google-btn:active {
+  background: #f1f3f4;
+  border-color: #5f6368;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.2);
+  transform: translateY(1px);
+}
+.google-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #4285f4;
+}
+.google-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  display: block;
-  align-self: center;
-  vertical-align: middle;
 }
-.google-btn-container .google-btn-text {
+.google-btn-icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+.google-btn-text {
   font-family: Roboto, 'Segoe UI', Arial, sans-serif;
   font-size: 15px;
   font-weight: 500;
   letter-spacing: 0.2px;
-  color: #3c4043;
+  color: #1f1f1f;
   white-space: nowrap;
   line-height: 1;
-  align-self: center;
-  vertical-align: middle;
+  text-align: center;
 }
 .google-loading {
   text-align: center;
@@ -703,14 +709,33 @@ body.dark-mode .dropdown-panel-user { color: #94a3b8; }
   display: flex;
   align-items: center;
   gap: 8px;
-  background: none;
-  border: none;
+  background: transparent;
+  border: 1px solid transparent;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 8px;
-  transition: background 0.2s;
+  padding: 5px 9px;
+  border-radius: 999px;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.user-menu-btn:hover { background: #f3f4f6; }
+.user-menu-btn:hover {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+.user-menu-btn:focus-visible {
+  outline: none;
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+.user-menu-btn:active {
+  background: rgba(59, 130, 246, 0.14);
+  transform: scale(0.98);
+}
+.user-menu-btn .user-avatar-tiny {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.user-menu-btn:hover .user-avatar-tiny {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
 .user-avatar-tiny {
   width: 32px;
   height: 32px;
@@ -784,9 +809,17 @@ body.dark-mode .dropdown-panel-user { color: #94a3b8; }
   font-family: inherit;
 }
 .dropdown-item {
-  transition: background 0.15s, color 0.15s, transform 0.15s;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
-.dropdown-item:hover { background: #f3f4f6; transform: translateX(2px); }
+.dropdown-item:hover {
+  background: rgba(59, 130, 246, 0.08);
+  transform: translateX(2px);
+}
+.dropdown-item:focus-visible {
+  outline: none;
+  background: rgba(59, 130, 246, 0.08);
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.35);
+}
 .dropdown-item.logout { color: #ef4444; }
 .dropdown-item.logout:hover { background: #fef2f2; }
 
@@ -1469,6 +1502,36 @@ body.dark-mode .page-ellipsis { color: #64748b; }
   border-radius: 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.35);
+}
+/* Account Details Card */
+.account-details-card {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 28px 32px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+.detail-divider {
+  border-bottom: 1px solid #e5e7eb;
+}
+.detail-label {
+  color: #6b7280;
+}
+.detail-value {
+  color: #1f2937;
+}
+body.dark-mode .account-details-card {
+  background: #1e293b;
+  border-color: #334155;
+}
+body.dark-mode .detail-divider {
+  border-bottom-color: #334155;
+}
+body.dark-mode .detail-label {
+  color: #94a3b8;
+}
+body.dark-mode .detail-value {
+  color: #e2e8f0;
 }
 .calendar-icon-btn {
   display: flex;
@@ -4611,6 +4674,17 @@ body.dark-mode .empty-state {
 }
 
 /* Dropdown Dark */
+body.dark-mode .user-menu-btn:hover,
+body.dark-mode .user-menu-btn:focus-visible {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+body.dark-mode .user-menu-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+body.dark-mode .user-menu-btn:active {
+  background: rgba(59, 130, 246, 0.22);
+}
 body.dark-mode .user-dropdown {
   background: #1e293b;
   border: 1px solid #334155;
@@ -4619,11 +4693,27 @@ body.dark-mode .dropdown-name,
 body.dark-mode .dropdown-item {
   color: #e2e8f0;
 }
+body.dark-mode .dropdown-role {
+  color: #9aa6b8;
+}
 body.dark-mode .dropdown-divider {
   border-top-color: #334155;
 }
 body.dark-mode .dropdown-header {
   border-bottom-color: #334155;
+}
+body.dark-mode .dropdown-item:hover,
+body.dark-mode .dropdown-item:focus-visible {
+  background: rgba(59, 130, 246, 0.15);
+}
+body.dark-mode .dropdown-item:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.4);
+}
+body.dark-mode .dropdown-item.logout {
+  color: #f87171;
+}
+body.dark-mode .dropdown-item.logout:hover {
+  background: rgba(239, 68, 68, 0.15);
 }
 
 /* Button Overrides Dark */

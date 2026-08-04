@@ -165,6 +165,7 @@
     "enterEmail": "Enter your email",
     "sendResetLink": "Send Reset Link",
     "googleSignIn": "Signing in with Google...",
+    "googleContinue": "Continue with Google",
     "googleSignInFailed": "Google sign-in failed",
     "welcomeSubtitle": "Welcome back! Please enter your details",
     "fillDetails": "Fill in the details to get started",
