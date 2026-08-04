@@ -213,16 +213,16 @@ export default function Feedback() {
                 <thead>
                   <tr>
                     <th style={{ width: '40px' }}>#</th>
-                    <th onClick={() => handleSort('rating')} style={{ cursor: 'pointer' }}>
-                      {t('feedback.rating')} {getSortIcon('rating')}
+                    <th className="sortable" onClick={() => handleSort('rating')} style={{ cursor: 'pointer' }}>
+                      <span>{t('feedback.rating')} {getSortIcon('rating')}</span>
                     </th>
                     <th>{t('feedback.comment')}</th>
-                    <th onClick={() => handleSort('user_name')} style={{ cursor: 'pointer' }}>
-                      {t('common.user')} {getSortIcon('user_name')}
+                    <th className="sortable" onClick={() => handleSort('user_name')} style={{ cursor: 'pointer' }}>
+                      <span>{t('common.user')} {getSortIcon('user_name')}</span>
                     </th>
                     <th>{t('common.request')}</th>
-                    <th onClick={() => handleSort('created_at')} style={{ cursor: 'pointer' }}>
-                      {t('common.date')} {getSortIcon('created_at')}
+                    <th className="sortable" onClick={() => handleSort('created_at')} style={{ cursor: 'pointer' }}>
+                      <span>{t('common.date')} {getSortIcon('created_at')}</span>
                     </th>
                     <th style={{ width: '80px' }}>{t('common.actions')}</th>
                   </tr>

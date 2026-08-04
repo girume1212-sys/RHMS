@@ -336,15 +336,15 @@ export default function Dashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')}</span> {getSortIcon('id')}</th>
-                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')}</span> {getSortIcon('subject')}</th>
-                <th className="sortable"><span onClick={() => handleSort('assignedTo')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedTo')}</span> {getSortIcon('assignedTo')}</th>
-                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')}</span> {getSortIcon('client')}</th>
-                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')}</span> {getSortIcon('groups')}</th>
-                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')}</span> {getSortIcon('category')}</th>
-                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')}</span> {getSortIcon('priority')}</th>
-                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')}</span> {getSortIcon('status')}</th>
-                <th className="sortable"><span onClick={() => handleSort('createdAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.created')}</span> {getSortIcon('createdAt')}</th>
+                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')} {getSortIcon('id')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')} {getSortIcon('subject')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('assignedTo')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedTo')} {getSortIcon('assignedTo')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')} {getSortIcon('client')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')} {getSortIcon('groups')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')} {getSortIcon('category')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')} {getSortIcon('priority')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')} {getSortIcon('status')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('createdAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.created')} {getSortIcon('createdAt')}</span></th>
                 <th>{t('common.actions')}</th>
               </tr>
             </thead>
@@ -555,7 +555,7 @@ export default function Dashboard() {
               <button className="modal-close" onClick={() => setSelectedDetail(null)}>&times;</button>
             </div>
             <div className="modal-body">
-              <div className="stats-grid" style={{ marginBottom: 20, gridTemplateColumns: '1fr 1fr 1fr' }}>
+              <div className="stats-grid" style={{ marginBottom: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))' }}>
                 <div className="stat-card" style={{ padding: 16, textAlign: 'center' }}>
                   <div style={{ fontSize: 28, fontWeight: 700, color: '#3B82F6' }}>
                     {selectedDetail.data.data.reduce((s, d) => s + d.created, 0)}

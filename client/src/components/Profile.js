@@ -182,7 +182,7 @@ export default function Profile() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', maxWidth: '900px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '24px', maxWidth: '900px' }}>
         <div style={{
           background: 'linear-gradient(145deg, #3B82F6, #2563EB, #1D4ED8)',
           borderRadius: '20px', padding: '32px', color: '#fff',

@@ -1885,7 +1885,7 @@ body.dark-mode .req-cal-legend-item { color: #94a3b8; }
   border-radius: 12px;
   padding: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  overflow-x: auto;
+  overflow-x: hidden;
   border: 1px solid rgba(0, 180, 216, 0.1);
 }
 .table-card .data-table thead tr {
@@ -6017,6 +6017,10 @@ body.dark-mode .perf-toggle-btn.active {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: nowrap;
+}
+.actions-cell-inline .action-btn-text {
+  flex-shrink: 0;
 }
 .action-btn-text {
   padding: 3px 8px;
@@ -6068,6 +6072,7 @@ body.dark-mode .perf-toggle-btn.active {
   align-items: center;
   padding: 12px 20px;
   border-top: 1px solid #e5e7eb;
+  position: relative;
 }
 .table-footer-info {
   display: flex;
@@ -6872,7 +6877,7 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 640px;
+  min-width: 0;
 }
 
 /* Header */
@@ -6888,10 +6893,11 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 14px 18px;
+  padding: 14px 12px;
   border: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .table-card .data-table thead th:first-child,
 .data-table thead th:first-child {
@@ -6918,6 +6924,27 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
   opacity: 1;
 }
 
+/* Sort icons sit right next to the column name and the whole header always
+   stays on one row so the arrow never wraps below the column name. */
+.dashboard .table-card .data-table thead th.sortable,
+.data-table thead th.sortable {
+  white-space: nowrap;
+}
+.dashboard .table-card .data-table thead th.sortable > span:first-child,
+.data-table thead th.sortable > span:first-child {
+  white-space: nowrap;
+}
+.data-table thead th.sortable .sort-icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+.data-table thead th.sortable .sort-icon:hover {
+  opacity: 1;
+}
+
 /* Body rows */
 .data-table tbody tr {
   background: #FFFFFF;
@@ -6930,12 +6957,13 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
   background: var(--rhms-row-hover);
 }
 .data-table tbody td {
-  padding: 13px 18px;
+  padding: 13px 12px;
   font-size: 13.5px;
   color: #334155;
   border-bottom: 1px solid #EEF1F5;
   vertical-align: middle;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 .data-table tbody tr:last-child td {
   border-bottom: none;
@@ -7227,7 +7255,7 @@ body.dark-mode .btn-outline:hover:not(:disabled) {
 @media (max-width: 768px) {
   .data-table thead th,
   .data-table tbody td {
-    padding: 11px 12px;
+    padding: 11px 8px;
   }
   .table-header-bar {
     flex-direction: column;
@@ -7302,4 +7330,325 @@ body.dark-mode .btn-outline:hover:not(:disabled) {
   .page-container .page-header h1 {
     font-size: 20px;
   }
+}
+
+/* ==========================================================================
+   RESPONSIVE LAYOUT / VIEWPORT FIT
+   Keeps every page inside the viewport - no horizontal overflow.
+   Visual/layout only - no functionality changes.
+   ========================================================================== */
+
+html {
+  overflow-x: hidden;
+}
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Allow flex/grid children to shrink below their intrinsic content size */
+.main-area,
+.content,
+.page-container,
+.dashboard,
+.detail-grid,
+.detail-main,
+.detail-sidebar,
+.chart-card,
+.chart-container,
+.stat-card,
+.stats-grid,
+.charts-row,
+.bottom-row,
+.activity-card,
+.requests-table-card,
+.table-card,
+.form-card,
+.settings-card,
+.settings-content,
+.perf-charts-grid,
+.grid-cards,
+.settings-grid,
+.settings-grid-2col,
+.modal,
+.category-cards,
+.category-cards-grid {
+  min-width: 0;
+}
+
+.page-container {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.form-card {
+  width: 100%;
+}
+
+/* Long unbreakable content should wrap instead of overflowing */
+.detail-description,
+.comment-body p,
+.dropdown-panel-message,
+.table-info,
+.req-calendar-panel {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+/* Responsive topbar - let the search box absorb available space */
+.topbar {
+  min-width: 0;
+}
+.topbar-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.topbar-right {
+  flex-shrink: 0;
+}
+.global-search {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 120px;
+  max-width: 420px;
+}
+
+/* Table header bars wrap instead of overflowing */
+.table-header-bar {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.table-header-actions {
+  flex-wrap: wrap;
+}
+
+/* Chart cards wrap gracefully */
+.chart-container {
+  flex-wrap: wrap;
+}
+.chart-legend {
+  flex: 1 1 170px;
+  min-width: 0;
+}
+
+/* Page headers allow wrapping on medium screens */
+.page-header,
+.page-container > .page-header,
+.page-container .page-header {
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.header-actions {
+  flex-wrap: wrap;
+}
+
+/* ========== MEDIUM SCREENS (<= 1200px) ========== */
+@media (max-width: 1200px) {
+  /* Detail pages: stack the info sidebar below the main content */
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Category management cards: 4 -> 3 columns */
+  .category-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .search-box {
+    width: 320px;
+  }
+  .global-search {
+    max-width: 320px;
+  }
+}
+
+/* ========== MEDIUM-SMALL SCREENS (<= 992px) ========== */
+@media (max-width: 992px) {
+  .category-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Settings: stack tabs above content */
+  .settings-layout {
+    flex-direction: column;
+  }
+  .settings-tabs {
+    width: 100%;
+    min-width: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+  }
+  .settings-tabs .settings-tab {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 130px;
+    justify-content: center;
+  }
+  .settings-grid-2col {
+    grid-template-columns: 1fr;
+  }
+
+  /* Compact topbar controls */
+  .theme-toggle .theme-toggle-label {
+    display: none;
+  }
+  .theme-toggle {
+    padding: 6px 12px;
+  }
+  .user-menu-btn > span {
+    display: none;
+  }
+  .lang-selector-topbar .lang-selector-current {
+    display: none;
+  }
+
+  .search-box {
+    width: 240px;
+  }
+  .global-search {
+    max-width: 240px;
+  }
+}
+
+/* ========== SMALL SCREENS (<= 768px) ========== */
+@media (max-width: 768px) {
+  .content {
+    padding: 16px;
+  }
+
+  .global-search {
+    max-width: 180px;
+    min-width: 110px;
+  }
+
+  /* Compact topbar */
+  .topbar {
+    padding: 0 16px;
+  }
+  .user-menu-btn {
+    padding: 4px;
+  }
+
+  /* Keep dropdown panels inside the viewport */
+  .dropdown-panel,
+  .notification-panel {
+    width: min(420px, calc(100vw - 24px)) !important;
+    right: 0;
+    left: auto;
+  }
+  .user-dropdown {
+    width: min(260px, calc(100vw - 24px));
+  }
+  .global-search-dropdown {
+    min-width: min(300px, calc(100vw - 80px));
+  }
+
+  /* Forms stack to one column */
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  .category-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .modal {
+    padding: 24px 20px;
+  }
+  .settings-card {
+    padding: 20px;
+  }
+  .settings-card-split {
+    grid-template-columns: 1fr;
+  }
+  .settings-card-left {
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+}
+
+/* ========== EXTRA SMALL SCREENS (<= 480px) ========== */
+@media (max-width: 480px) {
+  .content {
+    padding: 12px;
+  }
+
+  .global-search {
+    max-width: 150px;
+    min-width: 90px;
+  }
+  .topbar {
+    padding: 0 12px;
+  }
+  .topbar-left {
+    gap: 8px;
+  }
+  .topbar-right {
+    gap: 4px;
+  }
+  .lang-selector-topbar .lang-selector-btn,
+  .theme-toggle {
+    padding: 6px 8px;
+  }
+  .topbar-icon {
+    padding: 6px;
+  }
+
+  .category-cards-grid {
+    grid-template-columns: 1fr;
+  }
+  .category-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
+    gap: 10px;
+  }
+
+  .btn {
+    padding: 8px 14px;
+  }
+}
+
+/* ==========================================================================
+   DASHBOARD TABLES - FIT AVAILABLE WIDTH
+   Dashboard tables use all the available card width - no horizontal
+   scrolling, so columns, headers and data all stay fully visible.
+   Visual/layout only - no functionality changes.
+   ========================================================================== */
+
+/* Slightly wider desktop content area so dashboards use more of the screen */
+@media (min-width: 769px) {
+  .content {
+    padding: 20px;
+  }
+}
+
+/* Dashboard tables always size to their card (overrides the 640px minimum) */
+.dashboard .data-table {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Balanced cell padding + content wraps instead of stretching the table */
+.dashboard .table-card .data-table tbody td {
+  padding: 12px 10px;
+  overflow-wrap: anywhere;
+}
+
+/* Headers wrap onto two lines instead of stretching the table wide */
+.dashboard .table-card .data-table thead th {
+  padding: 12px 10px;
+  white-space: normal;
+}
+
+/* Long text (request titles, names, group tags) wraps inside its cell so the
+   full value stays visible and columns never stretch out of the table. */
+.dashboard .table-card .data-table tbody td,
+.requests-list .table-card .data-table tbody td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }

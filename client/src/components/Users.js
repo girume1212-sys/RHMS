@@ -261,12 +261,12 @@ export default function Users() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sortable">{t('common.user')} {getSortIcon('name')}</th>
-                  <th className="sortable">{t('common.email')} {getSortIcon('email')}</th>
-                  <th className="sortable">{t('common.role')} {getSortIcon('role')}</th>
-                  <th className="sortable">{t('common.group')} {getSortIcon('group')}</th>
-                  <th className="sortable">{t('common.company')} {getSortIcon('company')}</th>
-                  <th className="sortable">{t('common.created')} {getSortIcon('createdAt')}</th>
+                  <th className="sortable"><span>{t('common.user')} {getSortIcon('name')}</span></th>
+                  <th className="sortable"><span>{t('common.email')} {getSortIcon('email')}</span></th>
+                  <th className="sortable"><span>{t('common.role')} {getSortIcon('role')}</span></th>
+                  <th className="sortable"><span>{t('common.group')} {getSortIcon('group')}</span></th>
+                  <th className="sortable"><span>{t('common.company')} {getSortIcon('company')}</span></th>
+                  <th className="sortable"><span>{t('common.created')} {getSortIcon('createdAt')}</span></th>
                   <th>{t('common.actions')}</th>
                 </tr>
               </thead>

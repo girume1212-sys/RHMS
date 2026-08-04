@@ -167,8 +167,10 @@ const RequestsTable = forwardRef(function RequestsTable({
       actions.push({ label: t('common.startWork'), status: 'In Progress', color: '#F59E0B', icon: 'play' });
     }
     if (statusName === 'In Progress') {
-      actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: 'check' });
       actions.push({ label: t('common.waitingForClient'), status: 'Waiting for Client', color: '#F97316', icon: 'help' });
+    }
+    if (statusName === 'Waiting for Client') {
+      actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: 'check' });
     }
     return actions;
   };
@@ -297,15 +299,15 @@ const RequestsTable = forwardRef(function RequestsTable({
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')}</span> {getSortIcon('id')}</th>
-                  <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')}</span> {getSortIcon('subject')}</th>
-                  {!isClient && <th className="sortable"><span onClick={() => handleSort('assignee')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedTo')}</span> {getSortIcon('assignee')}</th>}
-                  {!isClient && <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')}</span> {getSortIcon('client')}</th>}
-                  {!isClient && <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')}</span> {getSortIcon('groups')}</th>}
-                  <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')}</span> {getSortIcon('category')}</th>
-                  <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')}</span> {getSortIcon('priority')}</th>
-                  <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')}</span> {getSortIcon('status')}</th>
-                  <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.updated')}</span> {getSortIcon('updatedAt')}</th>
+                  <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')} {getSortIcon('id')}</span></th>
+                  <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')} {getSortIcon('subject')}</span></th>
+                  {!isClient && <th className="sortable"><span onClick={() => handleSort('assignee')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedTo')} {getSortIcon('assignee')}</span></th>}
+                  {!isClient && <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')} {getSortIcon('client')}</span></th>}
+                  {!isClient && <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')} {getSortIcon('groups')}</span></th>}
+                  <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')} {getSortIcon('category')}</span></th>
+                  <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')} {getSortIcon('priority')}</span></th>
+                  <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')} {getSortIcon('status')}</span></th>
+                  <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.updated')} {getSortIcon('updatedAt')}</span></th>
                   <th>{t('common.actions')}</th>
                 </tr>
               </thead>
@@ -348,7 +350,7 @@ const RequestsTable = forwardRef(function RequestsTable({
                     <td>
                       <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                         {isReadOnly(r) ? (
-                          <span style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>{t('common.readOnly')}</span>
+                          <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>
                         ) : isDeveloper ? (
                           quickActions(r).map((action, i) =>
                             action.type === 'claim' ? (

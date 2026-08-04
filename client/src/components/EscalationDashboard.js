@@ -220,12 +220,11 @@ if (statusName === 'New') {
       actions.push({ label: t('common.startWork'), status: 'In Progress', color: '#F59E0B', icon: 'play', type: 'status' });
     }
     if (statusName === 'In Progress') {
-      actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: 'check', type: 'status' });
       actions.push({ label: t('common.waitingForClient'), status: 'Waiting for Client', color: '#F97316', icon: 'help', type: 'status' });
       actions.push({ label: t('common.escalate'), status: 'Escalated', color: '#EF4444', icon: 'alarm', type: 'status' });
     }
     if (statusName === 'Waiting for Client') {
-      actions.push({ label: t('common.followUp'), status: 'In Progress', color: '#F59E0B', icon: 'phone', type: 'status' });
+      actions.push({ label: t('common.resolve'), status: 'Resolved', color: '#10B981', icon: 'check', type: 'status' });
     }
     if (statusName === 'Escalated') {
       if (r.assignedTo === user.id) {
@@ -337,15 +336,15 @@ if (statusName === 'New') {
           <table className="data-table">
             <thead>
               <tr>
-                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')}</span> {getSortIcon('id')}</th>
-                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')}</span> {getSortIcon('subject')}</th>
+                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')} {getSortIcon('id')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')} {getSortIcon('subject')}</span></th>
                 <th>{t('common.assignedTo')}</th>
-                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')}</span> {getSortIcon('client')}</th>
-                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')}</span> {getSortIcon('groups')}</th>
-                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')}</span> {getSortIcon('category')}</th>
-                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')}</span> {getSortIcon('priority')}</th>
-                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')}</span> {getSortIcon('status')}</th>
-                <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.updated')}</span> {getSortIcon('updatedAt')}</th>
+                <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')} {getSortIcon('client')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')} {getSortIcon('groups')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')} {getSortIcon('category')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')} {getSortIcon('priority')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')} {getSortIcon('status')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.updated')} {getSortIcon('updatedAt')}</span></th>
                 <th>{t('common.actions')}</th>
               </tr>
             </thead>

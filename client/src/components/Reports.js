@@ -186,12 +186,12 @@ export default function Reports() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sortable">{t('common.id')} {getTasksSortIcon('id')}</th>
-                  <th className="sortable">{t('common.requestTitle')} {getTasksSortIcon('subject')}</th>
-                  <th className="sortable">{t('common.client')} {getTasksSortIcon('client')}</th>
-                  <th className="sortable">{t('common.category')} {getTasksSortIcon('category')}</th>
-                  <th className="sortable">{t('common.priority')} {getTasksSortIcon('priority')}</th>
-                  <th className="sortable">{t('common.created')} {getTasksSortIcon('created')}</th>
+                  <th className="sortable"><span>{t('common.id')} {getTasksSortIcon('id')}</span></th>
+                  <th className="sortable"><span>{t('common.requestTitle')} {getTasksSortIcon('subject')}</span></th>
+                  <th className="sortable"><span>{t('common.client')} {getTasksSortIcon('client')}</span></th>
+                  <th className="sortable"><span>{t('common.category')} {getTasksSortIcon('category')}</span></th>
+                  <th className="sortable"><span>{t('common.priority')} {getTasksSortIcon('priority')}</span></th>
+                  <th className="sortable"><span>{t('common.created')} {getTasksSortIcon('created')}</span></th>
                   <th>{t('common.actions')}</th>
                 </tr>
               </thead>
@@ -252,13 +252,13 @@ export default function Reports() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sortable">{t('common.user')} {getPerfSortIcon('name')}</th>
-                  <th className="sortable">{t('common.role')} {getPerfSortIcon('role')}</th>
-                  <th className="sortable">{t('dashboard.totalAssigned')} {getPerfSortIcon('total')}</th>
-                  <th className="sortable">{t('common.resolved')} {getPerfSortIcon('resolved')}</th>
-                  <th className="sortable">{t('common.inProgress')} {getPerfSortIcon('inProgress')}</th>
-                  <th className="sortable">{t('common.pending')} {getPerfSortIcon('pending')}</th>
-                  <th className="sortable">{t('dashboard.resolutionRate')} {getPerfSortIcon('rate')}</th>
+                  <th className="sortable"><span>{t('common.user')} {getPerfSortIcon('name')}</span></th>
+                  <th className="sortable"><span>{t('common.role')} {getPerfSortIcon('role')}</span></th>
+                  <th className="sortable"><span>{t('dashboard.totalAssigned')} {getPerfSortIcon('total')}</span></th>
+                  <th className="sortable"><span>{t('common.resolved')} {getPerfSortIcon('resolved')}</span></th>
+                  <th className="sortable"><span>{t('common.inProgress')} {getPerfSortIcon('inProgress')}</span></th>
+                  <th className="sortable"><span>{t('common.pending')} {getPerfSortIcon('pending')}</span></th>
+                  <th className="sortable"><span>{t('dashboard.resolutionRate')} {getPerfSortIcon('rate')}</span></th>
                 </tr>
               </thead>
               <tbody>

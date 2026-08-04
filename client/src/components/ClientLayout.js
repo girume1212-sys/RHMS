@@ -329,7 +329,7 @@ export default function ClientLayout() {
           <div className="topbar-right">
             <LanguageSelector variant="topbar" />
             <button className="theme-toggle" onClick={toggleDarkMode} title={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}>
-              {darkMode ? <><span className="toggle-icon"><Icon name="sun" /></span><span>{t('common.brightMode')}</span></> : <><span className="toggle-icon"><Icon name="moon" /></span><span>{t('common.darkMode')}</span></>}
+              {darkMode ? <><span className="toggle-icon"><Icon name="sun" /></span><span className="theme-toggle-label">{t('common.brightMode')}</span></> : <><span className="toggle-icon"><Icon name="moon" /></span><span className="theme-toggle-label">{t('common.darkMode')}</span></>}
             </button>
             <div className="notification-container" style={{ position: 'relative' }}>
               <button className="theme-toggle" onClick={openNotifications} title={t('common.notifications')} style={{ position: 'relative' }}>

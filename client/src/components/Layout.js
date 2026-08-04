@@ -393,7 +393,7 @@ export default function Layout() {
           <div className="topbar-right">
             <LanguageSelector variant="topbar" />
             <button className="theme-toggle" onClick={toggleDarkMode} title={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}>
-              {darkMode ? <><span className="toggle-icon"><Icon name="sun" /></span><span>{t('topbar.bright')}</span></> : <><span className="toggle-icon"><Icon name="moon" /></span><span>{t('topbar.dark')}</span></>}
+              {darkMode ? <><span className="toggle-icon"><Icon name="sun" /></span><span className="theme-toggle-label">{t('topbar.bright')}</span></> : <><span className="toggle-icon"><Icon name="moon" /></span><span className="theme-toggle-label">{t('topbar.dark')}</span></>}
             </button>
             <div className="topbar-icon-container">
               <button className="topbar-icon" title={t('topbar.notifications')} onClick={openNotifications}>

@@ -149,13 +149,13 @@ export default function DatabaseTables() {
               </div>
 
               <div className="table-card" style={{ boxShadow: 'none', padding: 0, border: 'none' }}>
-                <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 350px)' }}>
+                <div style={{ overflowY: 'auto', overflowX: 'hidden', maxHeight: 'calc(100vh - 350px)' }}>
                   <table className="data-table">
                     <thead>
                       <tr>
                         {tableData.columns.map(col => (
                           <th key={col.column_name} className="sortable">
-                            {col.column_name} {getSortIcon(col.column_name)}
+                            <span>{col.column_name} {getSortIcon(col.column_name)}</span>
                           </th>
                         ))}
                       </tr>

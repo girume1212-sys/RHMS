@@ -661,11 +661,11 @@ export default function Settings() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ minWidth: '160px' }}>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '24px', flexWrap: 'wrap' }}>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ minWidth: '0' }}>
             {saving ? t('common.saving') : t('common.save')}
           </button>
-          <button className="btn btn-outline" onClick={handleReset} disabled={saving} style={{ minWidth: '120px' }}>
+          <button className="btn btn-outline" onClick={handleReset} disabled={saving} style={{ minWidth: '0' }}>
             {t('settings.reset')}
           </button>
         </div>

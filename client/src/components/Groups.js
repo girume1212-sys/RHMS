@@ -303,10 +303,10 @@ export default function Groups() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th style={{ width: '80px', cursor: 'pointer' }} onClick={() => handleSort('id')}>{t('common.id')} <span className="sort-icon">{sort.key === 'id' ? (sort.dir === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
-                  <th className="sortable">{t('common.group')} {getSortIcon('name')}</th>
-                  <th className="sortable">{t('common.company')} {getSortIcon('company')}</th>
-                  <th className="sortable">{t('common.members')} {getSortIcon('members')}</th>
+                  <th style={{ width: '80px', cursor: 'pointer' }} onClick={() => handleSort('id')}><span>{t('common.id')} {getSortIcon('id')}</span></th>
+                  <th className="sortable"><span>{t('common.group')} {getSortIcon('name')}</span></th>
+                  <th className="sortable"><span>{t('common.company')} {getSortIcon('company')}</span></th>
+                  <th className="sortable"><span>{t('common.members')} {getSortIcon('members')}</span></th>
                   <th>{t('common.actions')}</th>
                 </tr>
               </thead>
@@ -481,13 +481,13 @@ export default function Groups() {
                         {filteredMembers.length === 0 ? (
                           <div className="empty-state">{t('common.noMembersMatching', { query: memberSearch })}</div>
                         ) : (
-                      <div className="table-card" style={{ overflow: 'auto' }}>
+                      <div className="table-card" style={{ overflowX: 'hidden' }}>
             <table className="data-table">
                         <thead>
                           <tr>
-                            <th className="sortable">{t('common.user')} {getMemberSortIcon('name')}</th>
-                            <th className="sortable">{t('common.email')} {getMemberSortIcon('email')}</th>
-                            <th className="sortable">{t('common.role')} {getMemberSortIcon('role')}</th>
+                            <th className="sortable"><span>{t('common.user')} {getMemberSortIcon('name')}</span></th>
+                            <th className="sortable"><span>{t('common.email')} {getMemberSortIcon('email')}</span></th>
+                            <th className="sortable"><span>{t('common.role')} {getMemberSortIcon('role')}</span></th>
                             <th style={{ width: '80px' }}>{t('common.actions')}</th>
                           </tr>
                         </thead>

@@ -342,7 +342,7 @@ export default function Company() {
               {getCompanyUsers(selectedCompany.name).length === 0 ? (
                 <div className="empty-state">{t('company.noUsers')}</div>
               ) : (
-                <div className="table-card" style={{ overflow: 'auto' }}>
+                <div className="table-card" style={{ overflowX: 'hidden' }}>
                   <table className="data-table">
                     <thead>
                       <tr>

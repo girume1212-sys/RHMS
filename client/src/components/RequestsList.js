@@ -20,7 +20,7 @@ export default function RequestsList() {
   };
 
   return (
-    <div className="page-container">
+    <div className="page-container requests-list">
       <div className="page-header">
         <div>
           <button className="back-link" onClick={() => navigate(basePath || '/')}>← {t('common.back')}</button>
