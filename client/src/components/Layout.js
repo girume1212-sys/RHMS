@@ -8,6 +8,12 @@ import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
 import Icon from './Icon';
 
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return null;
+  if (avatar.startsWith('http')) return avatar;
+  return `${API_BASE}${avatar}`;
+};
+
 export default function Layout() {
   const { user, logout, darkMode, toggleDarkMode, systemName, systemLogo } = useAuth();
   const { t } = useTranslation();
@@ -395,8 +401,8 @@ export default function Layout() {
           ))}
         </nav>
         <div className="sidebar-user">
-          <div className="user-avatar-small">
-            {user?.name?.charAt(0) || 'U'}
+          <div className="user-avatar-small" style={{ overflow: 'hidden' }}>
+            {getAvatarUrl(user?.avatar) ? <img src={getAvatarUrl(user?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (user?.name?.charAt(0) || 'U')}
           </div>
           {sidebarOpen && (
             <div className="user-info-small">
@@ -520,14 +526,14 @@ export default function Layout() {
             </div>
             <div className="user-menu-container">
               <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
-                <div className="user-avatar-tiny">{user?.name?.charAt(0) || 'U'}</div>
+                <div className="user-avatar-tiny" style={{ overflow: 'hidden' }}>{getAvatarUrl(user?.avatar) ? <img src={getAvatarUrl(user?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (user?.name?.charAt(0) || 'U')}</div>
                 <span>{user?.name}</span>
                 <span className="dropdown-arrow">▾</span>
               </button>
               {showUserMenu && (
                 <div className="user-dropdown">
                   <div className="dropdown-header">
-                    <div className="dropdown-avatar">{user?.name?.charAt(0)}</div>
+                    <div className="dropdown-avatar" style={{ overflow: 'hidden' }}>{getAvatarUrl(user?.avatar) ? <img src={getAvatarUrl(user?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : user?.name?.charAt(0)}</div>
                     <div>
                       <div className="dropdown-name">{user?.name}</div>
                       <div className="dropdown-role">{getRoleLabel(user?.role)}</div>

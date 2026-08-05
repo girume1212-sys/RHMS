@@ -5,6 +5,13 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import Icon from './Icon';
 import PageNumbers from './PageNumbers';
+import { API_BASE } from '../api';
+
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return null;
+  if (avatar.startsWith('http')) return avatar;
+  return `${API_BASE}${avatar}`;
+};
 
 export default function Company() {
   const { t } = useTranslation();
@@ -398,8 +405,8 @@ export default function Company() {
                             <td>{idx + 1 + (userPage - 1) * userPerPage}</td>
                             <td>
                               <div className="user-cell">
-                                <div className="user-avatar-sm" style={{ background: getRoleColor(u.role) }}>
-                                  {u.name.charAt(0)}
+                                <div className="user-avatar-sm" style={{ background: getRoleColor(u.role), overflow: 'hidden' }}>
+                                  {getAvatarUrl(u.avatar) ? <img src={getAvatarUrl(u.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : u.name.charAt(0)}
                                 </div>
                                 <span className="truncate-cell">{u.name}</span>
                               </div>

@@ -6,6 +6,13 @@ import { getSavedSearchQuery, saveSearchQuery } from '../utils/searchStore';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
 import Icon from './Icon';
+import { API_BASE } from '../api';
+
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return null;
+  if (avatar.startsWith('http')) return avatar;
+  return `${API_BASE}${avatar}`;
+};
 
 export default function GlobalSearch({ clientMode = false, placeholder }) {
   const navigate = useNavigate();
@@ -155,8 +162,8 @@ export default function GlobalSearch({ clientMode = false, placeholder }) {
                     {results.users.items.map(u => (
                       <button type="button" key={u.id} className="global-search-item" onClick={() => goTo('/users')}>
                         <span className="global-search-item-title">
-                          <span className="global-search-avatar" style={{ background: u.role === 'admin' ? '#EF4444' : u.role === 'support' ? '#3B82F6' : u.role === 'developer' ? '#8B5CF6' : '#10B981' }}>
-                            {(u.name || '?').charAt(0)}
+                          <span className="global-search-avatar" style={{ background: u.role === 'admin' ? '#EF4444' : u.role === 'support' ? '#3B82F6' : u.role === 'developer' ? '#8B5CF6' : '#10B981', overflow: 'hidden' }}>
+                            {getAvatarUrl(u.avatar) ? <img src={getAvatarUrl(u.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (u.name || '?').charAt(0)}
                           </span>
                           {u.name}
                         </span>

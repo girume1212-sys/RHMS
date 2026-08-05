@@ -6,10 +6,17 @@ import { saveSearchQuery } from '../utils/searchStore';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+import { API_BASE } from '../api';
 
 function getRoleColor(role) {
   return { admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981' }[role] || '#6B7280';
 }
+
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return null;
+  if (avatar.startsWith('http')) return avatar;
+  return `${API_BASE}${avatar}`;
+};
 
 function Pagination({ page, totalPages, onPageChange }) {
   if (totalPages <= 1) return null;
@@ -63,7 +70,7 @@ function UserSection({ data, onNavigate }) {
         {data.items.map(u => (
           <button key={u.id} className="search-result-row" onClick={() => onNavigate('/users')}>
             <div className="search-result-row-main">
-              <span className="global-search-avatar" style={{ background: getRoleColor(u.role) }}>{(u.name || '?').charAt(0)}</span>
+              <span className="global-search-avatar" style={{ background: getRoleColor(u.role), overflow: 'hidden' }}>{getAvatarUrl(u.avatar) ? <img src={getAvatarUrl(u.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (u.name || '?').charAt(0)}</span>
               <span className="search-result-title">{u.name}</span>
               <span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>{t('role.' + u.role)}</span>
             </div>

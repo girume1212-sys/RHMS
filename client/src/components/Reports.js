@@ -283,7 +283,7 @@ export default function Reports() {
                   <tr key={u.id}>
                     <td>
                       <div className="assigned-user-cell">
-                        <div className="assigned-avatar" style={{ background: u.role === 'developer' ? '#8B5CF6' : '#3B82F6' }}>{u.name.charAt(0)}</div>
+                        <div className="assigned-avatar" style={{ background: u.role === 'developer' ? '#8B5CF6' : '#3B82F6', overflow: 'hidden' }}>{getAvatarUrl(u.avatar) ? <img src={getAvatarUrl(u.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : u.name.charAt(0)}</div>
                         <span className="truncate-cell">{u.name}</span>
                       </div>
                     </td>

@@ -6,6 +6,13 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+import { API_BASE } from '../api';
+
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return null;
+  if (avatar.startsWith('http')) return avatar;
+  return `${API_BASE}${avatar}`;
+};
 
 export default function Groups() {
   const { t } = useTranslation();
@@ -451,8 +458,8 @@ export default function Groups() {
                                     );
                                   }}
                                 />
-                                <span className="member-checkbox-avatar" style={{ background: getRoleColor(u.role) }}>
-                                  {u.name.charAt(0)}
+                                <span className="member-checkbox-avatar" style={{ background: getRoleColor(u.role), overflow: 'hidden' }}>
+                                  {getAvatarUrl(u.avatar) ? <img src={getAvatarUrl(u.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : u.name.charAt(0)}
                                 </span>
                                 <span className="member-checkbox-name">{u.name}</span>
                                 <span className="member-checkbox-email">{u.email}</span>
@@ -501,7 +508,9 @@ export default function Groups() {
                             <tr key={m.id}>
                               <td>
                                 <div className="user-cell">
-                                  <div className="user-avatar-sm" style={{ background: getRoleColor(m.role) }}>{m.name.charAt(0)}</div>
+                                  <div className="user-avatar-sm" style={{ background: getRoleColor(m.role), overflow: 'hidden' }}>
+                                    {getAvatarUrl(m.avatar) ? <img src={getAvatarUrl(m.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : m.name.charAt(0)}
+                                  </div>
                                   <span className="truncate-cell">{m.name}</span>
                                 </div>
                               </td>

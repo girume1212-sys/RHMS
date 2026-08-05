@@ -336,7 +336,7 @@ const RequestsTable = forwardRef(function RequestsTable({
                       <td>
                         {r.assignee && r.status?.name !== 'New' ? (
                           <div className="assigned-user-cell">
-                            <div className="assigned-avatar" style={{ background: '#3B82F6' }}>{r.assignee.name.charAt(0)}</div>
+                            <div className="assigned-avatar" style={{ background: '#3B82F6', overflow: 'hidden' }}>{getAvatarUrl(r.assignee.avatar) ? <img src={getAvatarUrl(r.assignee.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : r.assignee.name.charAt(0)}</div>
                             <span className="truncate-cell">{r.assignee.name}</span>
                           </div>
                         ) : <span style={{ color: '#9ca3af' }}>-</span>}

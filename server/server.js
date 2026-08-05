@@ -2427,7 +2427,7 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
     `);
 
     const userPerformanceResult = await pool.query(`
-      SELECT u.id, u.name, u.role,
+      SELECT u.id, u.name, u.role, u.avatar,
         COUNT(r.id) AS total_assigned,
         COUNT(CASE WHEN s.name = 'Resolved' OR s.name = 'Closed' THEN 1 END) AS resolved,
         COUNT(CASE WHEN s.name = 'In Progress' THEN 1 END) AS in_progress,
@@ -2436,7 +2436,7 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
       LEFT JOIN requests r ON r.assigned_to = u.id
       LEFT JOIN statuses s ON r.status_id = s.id
       WHERE u.role IN ('developer', 'support')
-      GROUP BY u.id, u.name, u.role
+      GROUP BY u.id, u.name, u.role, u.avatar
       ORDER BY resolved DESC
     `);
 
@@ -2529,7 +2529,7 @@ app.delete('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (re
 app.get('/api/groups/:id/members', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT u.id, u.name, u.email, u.role, u.approved
+      SELECT u.id, u.name, u.email, u.role, u.avatar, u.approved
       FROM user_groups ug
       JOIN users u ON u.id = ug.user_id
       WHERE ug.group_id = $1
