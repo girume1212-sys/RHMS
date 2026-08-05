@@ -37,7 +37,7 @@ export default function RequestDetail() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [commentSearch, setCommentSearch] = useState('');
   const [commentFilter, setCommentFilter] = useState('all');
-  const [commentSort, setCommentSort] = useState('latest');
+  const [commentSort, setCommentSort] = useState('oldest');
   const commentFileInputRef = useRef(null);
   const commentTextareaRef = useRef(null);
   const [existingFeedback, setExistingFeedback] = useState(null);
@@ -846,8 +846,9 @@ export default function RequestDetail() {
                 }
                 const c = item.comment;
                 const isClientRole = c.user?.role === 'client';
+                const isOwnComment = !!user && !!c.user && c.user.id === user.id;
                 return (
-                  <div key={c.id || `cm-${idx}`} className={`chat-row ${isClientRole ? '' : 'right'}`}>
+                  <div key={c.id || `cm-${idx}`} className={`chat-row ${isOwnComment ? 'right' : ''}`}>
                     <div className={`chat-avatar ${isClientRole ? 'client' : 'staff'}`}>{renderAvatar(c.user)}</div>
                     <div className="chat-column">
                       <div className="chat-meta">

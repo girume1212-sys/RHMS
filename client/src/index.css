@@ -5149,7 +5149,10 @@ body.dark-mode .category-modal-header {
 .logo-preview img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  border-radius: 50%;
 }
 .logo-remove-btn {
   position: absolute;
@@ -5222,10 +5225,12 @@ body.dark-mode .logo-upload-btn:hover {
 .sidebar-logo {
   width: 96px;
   height: 96px;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center;
   border-radius: 12px;
   flex-shrink: 0;
   display: block;
+  overflow: hidden;
 }
 .sidebar.collapsed .sidebar-logo {
   width: 44px;

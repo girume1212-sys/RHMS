@@ -34,6 +34,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState(null);
   const logoInputRef = useRef(null);
   const [companies, setCompanies] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -289,13 +290,14 @@ export default function Settings() {
           <div className="settings-field">
             <label>{t('settings.systemLogo')}</label>
             <div className="logo-upload-area">
-              {form.systemLogo ? (
+              {form.systemLogo || logoPreview ? (
                 <div className="logo-preview">
-                  <img src={`${API_BASE}${form.systemLogo}`} alt="Logo" />
+                  <img src={logoPreview || `${API_BASE}${form.systemLogo}`} alt="Logo" />
                   <button type="button" className="logo-remove-btn" onClick={async () => {
                     try {
                       await api.delete('/api/settings/logo');
                       handleChange('systemLogo', '');
+                      setLogoPreview(null);
                       addToast(t('settings.logoRemoved'), 'success');
                     } catch { addToast(t('settings.logoRemoveFailed'), 'error'); }
                   }}>&times;</button>
@@ -319,15 +321,18 @@ export default function Settings() {
                 onChange={async (e) => {
                   const file = e.target.files[0];
                   if (!file) return;
+                  setLogoPreview(URL.createObjectURL(file));
                   setLogoUploading(true);
                   try {
                     const fd = new FormData();
                     fd.append('logo', file);
                     const res = await api.upload('/api/settings/logo', fd);
                     handleChange('systemLogo', res.logo);
+                    setLogoPreview(null);
                     addToast(t('settings.logoUploaded'), 'success');
                   } catch (err) {
                     console.error('Logo upload error:', err);
+                    setLogoPreview(null);
                     addToast(t('common.uploadFailed') + ': ' + (err.message || 'unknown error'), 'error');
                   } finally {
                     if (logoInputRef.current) logoInputRef.current.value = '';

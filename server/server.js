@@ -251,6 +251,93 @@ const pool = require('./db');
       )
     `);
     console.log('attachments table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id VARCHAR(50) PRIMARY KEY,
+        user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL DEFAULT 'info',
+        title VARCHAR(500),
+        message TEXT NOT NULL,
+        request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
+        is_read BOOLEAN NOT NULL DEFAULT false,
+        read_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_request_id ON notifications(request_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC)`);
+    console.log('notifications table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id VARCHAR(50) PRIMARY KEY,
+        user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash VARCHAR(255) NOT NULL UNIQUE,
+        refresh_token_hash VARCHAR(255) UNIQUE,
+        user_agent TEXT,
+        ip_address VARCHAR(45),
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        revoked_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`);
+    console.log('sessions table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS login_audit (
+        id VARCHAR(50) PRIMARY KEY,
+        user_id VARCHAR(50) REFERENCES users(id) ON DELETE SET NULL,
+        email VARCHAR(255),
+        action VARCHAR(50) NOT NULL,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        details TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_login_audit_user ON login_audit(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_login_audit_email ON login_audit(email)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_login_audit_created ON login_audit(created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_login_audit_action ON login_audit(action)`);
+    console.log('login_audit table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sla_tracking (
+        id VARCHAR(50) PRIMARY KEY,
+        request_id VARCHAR(50) NOT NULL UNIQUE REFERENCES requests(id) ON DELETE CASCADE,
+        sla_policy_id VARCHAR(50) REFERENCES sla_policies(id) ON DELETE SET NULL,
+        response_due_at TIMESTAMP WITH TIME ZONE,
+        resolution_due_at TIMESTAMP WITH TIME ZONE,
+        first_response_at TIMESTAMP WITH TIME ZONE,
+        resolved_at TIMESTAMP WITH TIME ZONE,
+        response_breached BOOLEAN NOT NULL DEFAULT false,
+        resolution_breached BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sla_tracking_policy ON sla_tracking(sla_policy_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sla_tracking_due ON sla_tracking(response_due_at, resolution_due_at)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sla_tracking_breached ON sla_tracking(response_breached, resolution_breached)`);
+    console.log('sla_tracking table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS request_watchers (
+        request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
+        user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        PRIMARY KEY (request_id, user_id)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_request_watchers_user ON request_watchers(user_id)`);
+    console.log('request_watchers table ready');
   } catch (err) {
     console.log('Init error:', err.message);
   }
@@ -312,7 +399,21 @@ async function maintenanceMiddleware(req, res, next) {
   } catch { next(); }
 };
 
-// SSE notification helper
+// Persist a notification to the notifications table (best-effort, never throws)
+async function persistNotification(userId, message, data = {}) {
+  try {
+    await pool.query(
+      `INSERT INTO notifications (id, user_id, type, title, message, request_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      [uuidv4(), userId, data.type || 'info', data.title || null,
+        message || '', (data.requestId && String(data.requestId).match(/^REQ-\d+/)) ? data.requestId : null]
+    );
+  } catch (err) {
+    console.error('Failed to persist notification:', err.message);
+  }
+}
+
+// SSE notification helper (also persists to notifications table)
 function notifyAdmins(message, data = {}) {
   const payload = JSON.stringify({ message, data, timestamp: new Date().toISOString() });
   for (const [userId, clients] of sseClients) {
@@ -324,6 +425,10 @@ function notifyAdmins(message, data = {}) {
       }
     }
   }
+  persistNotification('all-admins', message, data);
+  pool.query('SELECT id FROM users WHERE role = $1 OR role = $2 OR role = $3', ['admin', 'support', 'developer'])
+    .then(r => r.rows.forEach(row => persistNotification(row.id, message, data)))
+    .catch(() => {});
 }
 
 function notifyAll(message, data = {}) {
@@ -337,6 +442,9 @@ function notifyAll(message, data = {}) {
       }
     }
   }
+  pool.query('SELECT id FROM users')
+    .then(r => r.rows.forEach(row => persistNotification(row.id, message, data)))
+    .catch(() => {});
 }
 
 function notifyUser(userId, message, data = {}) {
@@ -350,6 +458,44 @@ function notifyUser(userId, message, data = {}) {
         clients.delete(client);
       }
     }
+  }
+  persistNotification(userId, message, data);
+}
+
+// Record an authentication or privileged action in login_audit (best-effort)
+async function auditLogin(action, userId, email, req) {
+  try {
+    await pool.query(
+      `INSERT INTO login_audit (id, user_id, email, action, ip_address, user_agent, details, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+      [uuidv4(), userId || null, email || null, action,
+        (req && (req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress)) || null,
+        (req && req.headers['user-agent']) || null, null]
+    );
+  } catch (err) {
+    console.error('Failed to persist login_audit:', err.message);
+  }
+}
+
+// Create a persisted session row (best-effort)
+async function persistSession(userId, token, req) {
+  try {
+    const expiresInMs = (() => {
+      try {
+        return jwt.decode(token) ? (jwt.decode(token).exp || 0) * 1000 : 0;
+      } catch { return 0; }
+    })();
+    await pool.query(
+      `INSERT INTO sessions (id, user_id, token_hash, user_agent, ip_address, expires_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (token_hash) DO NOTHING`,
+      [uuidv4(), userId, token,
+        (req && req.headers['user-agent']) || null,
+        (req && (req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress)) || null,
+        expiresInMs ? new Date(expiresInMs) : new Date(Date.now() + 24 * 60 * 60 * 1000)]
+    );
+  } catch (err) {
+    console.error('Failed to persist session:', err.message);
   }
 }
 
@@ -544,6 +690,7 @@ app.post('/api/auth/signup', async (req, res) => {
       await pool.query('INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, defaultGroupId]);
     }
 
+    auditLogin('signup', id, email, req);
     res.status(201).json({ message: 'Account created successfully', user: mapUser(result.rows[0]) });
   } catch (err) {
     console.error(err);
@@ -568,14 +715,18 @@ app.post('/api/auth/login', async (req, res) => {
       if (user) {
         const currentAttempts = (user.login_attempts || 0) + 1;
         await pool.query('UPDATE users SET login_attempts = $1 WHERE id = $2', [currentAttempts, user.id]);
+        auditLogin('login_failed', user.id, user.email, req);
         if (currentAttempts >= maxAttempts) {
           await pool.query("UPDATE users SET approved = false WHERE id = $1", [user.id]);
         }
+      } else {
+        auditLogin('login_failed', null, credential, req);
       }
       return res.status(401).json({ error: 'Invalid username, email or password' });
     }
 
     if (user.login_attempts >= maxAttempts) {
+      auditLogin('login_locked', user.id, user.email, req);
       return res.status(423).json({ error: 'Account locked due to too many failed attempts. Contact administrator.' });
     }
 
@@ -586,6 +737,8 @@ app.post('/api/auth/login', async (req, res) => {
     const expiresIn = sessionTimeout > 0 ? `${sessionTimeout}m` : '24h';
 
     const token = jwt.sign({ id: user.id, role: user.role, sessionTimeout }, JWT_SECRET, { expiresIn });
+    auditLogin('login_success', user.id, user.email, req);
+    persistSession(user.id, token, req);
     res.json({ token, user: mapUser(user) });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -624,6 +777,8 @@ app.post('/api/auth/google', async (req, res) => {
     }
 
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+    auditLogin('login_success', user.id, email, req);
+    persistSession(user.id, token, req);
     res.json({ token, user: mapUser(user) });
   } catch (err) {
     console.error('Google auth error:', err);
@@ -2311,7 +2466,7 @@ app.get('/api/db-tables', authMiddleware, roleMiddleware('admin'), async (req, r
 app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const { tableName } = req.params;
-    const allowedTables = ['users', 'categories', 'priorities', 'statuses', 'requests', 'comments', 'activity_log'];
+    const allowedTables = ['users', 'categories', 'priorities', 'statuses', 'requests', 'comments', 'activity_log', 'announcements', 'knowledge_base', 'tags', 'templates', 'sla_policies', 'sla_tracking', 'attachments', 'notifications', 'sessions', 'login_audit', 'request_watchers', 'request_tags', 'system_settings', 'feedback', 'groups', 'companies'];
     if (!allowedTables.includes(tableName)) {
       return res.status(400).json({ error: 'Invalid table name' });
     }
@@ -2550,6 +2705,652 @@ app.use((err, req, res, next) => {
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'Not found' });
+});
+
+// ============================================================================
+// Announcements, Knowledge Base, Tags, Templates, SLA, Watchers, Attachments,
+// Notifications, Sessions, and Login Audit CRUD endpoints
+// ============================================================================
+
+// --- Announcements ---
+app.get('/api/announcements', authMiddleware, async (req, res) => {
+  try {
+    const isAdmin = req.user.role === 'admin';
+    const params = [];
+    let where = 'WHERE (expires_at IS NULL OR expires_at > NOW())';
+    if (!isAdmin) {
+      params.push(req.user.role);
+      where += ` AND (target_role IS NULL OR target_role = $${params.length})`;
+    }
+    const result = await pool.query(`SELECT a.*, u.name AS created_by_name FROM announcements a LEFT JOIN users u ON a.created_by = u.id ${where} ORDER BY a.created_at DESC`, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/announcements', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const { title, content, priority, target_role, expires_at } = req.body;
+    if (!title || !content) return res.status(400).json({ error: 'Title and content are required' });
+    const id = uuidv4();
+    const result = await pool.query(
+      `INSERT INTO announcements (id, title, content, priority, target_role, created_by, expires_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+      [id, title, content, priority || 'normal', target_role || null, req.user.id, expires_at || null]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/announcements/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const { title, content, priority, target_role, expires_at } = req.body;
+    const result = await pool.query(
+      `UPDATE announcements SET title = COALESCE($1, title), content = COALESCE($2, content),
+         priority = COALESCE($3, priority), target_role = COALESCE($4, target_role), expires_at = $5
+       WHERE id = $6 RETURNING *`,
+      [title, content, priority, target_role, expires_at === undefined ? null : expires_at, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Announcement not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/announcements/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM announcements WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Announcement not found' });
+    res.json({ message: 'Announcement deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Knowledge Base ---
+app.get('/api/knowledge-base', authMiddleware, async (req, res) => {
+  try {
+    const { search, categoryId } = req.query;
+    const params = [];
+    let where = "WHERE status = 'published'";
+    if (req.user.role === 'admin') where = 'WHERE 1=1';
+    if (search) { params.push(`%${search}%`); where += ` AND (title ILIKE $${params.length} OR content ILIKE $${params.length})`; }
+    if (categoryId) { params.push(categoryId); where += ` AND category_id = $${params.length}`; }
+    const result = await pool.query(
+      `SELECT k.*, c.name AS category_name, u.name AS created_by_name
+       FROM knowledge_base k
+       LEFT JOIN categories c ON k.category_id = c.id
+       LEFT JOIN users u ON k.created_by = u.id ${where} ORDER BY k.updated_at DESC`,
+      params
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/knowledge-base/:id', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT k.*, c.name AS category_name, u.name AS created_by_name
+       FROM knowledge_base k
+       LEFT JOIN categories c ON k.category_id = c.id
+       LEFT JOIN users u ON k.created_by = u.id WHERE k.id = $1`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Article not found' });
+    await pool.query('UPDATE knowledge_base SET views = views + 1 WHERE id = $1', [req.params.id]);
+    result.rows[0].views = (result.rows[0].views || 0) + 1;
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/knowledge-base', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
+  try {
+    const { title, content, category_id, tags, status } = req.body;
+    if (!title || !content) return res.status(400).json({ error: 'Title and content are required' });
+    const id = uuidv4();
+    const result = await pool.query(
+      `INSERT INTO knowledge_base (id, title, content, category_id, tags, status, created_by, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) RETURNING *`,
+      [id, title, content, category_id || null, Array.isArray(tags) ? tags : [], status || 'published', req.user.id]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/knowledge-base/:id', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
+  try {
+    const { title, content, category_id, tags, status } = req.body;
+    const result = await pool.query(
+      `UPDATE knowledge_base SET title = COALESCE($1, title), content = COALESCE($2, content),
+         category_id = COALESCE($3, category_id), tags = COALESCE($4, tags), status = COALESCE($5, status),
+         updated_at = NOW() WHERE id = $6 RETURNING *`,
+      [title, content, category_id, Array.isArray(tags) ? tags : null, status, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Article not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/knowledge-base/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM knowledge_base WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Article not found' });
+    res.json({ message: 'Article deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Tags ---
+app.get('/api/tags', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM tags ORDER BY name');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/tags', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
+  try {
+    const { name, color } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Tag name is required' });
+    const id = uuidv4();
+    const result = await pool.query(
+      'INSERT INTO tags (id, name, color) VALUES ($1, $2, $3) RETURNING *',
+      [id, name.trim(), color || '#6B7280']
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Tag name already exists' });
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/tags/:id', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
+  try {
+    const { name, color } = req.body;
+    const result = await pool.query(
+      'UPDATE tags SET name = COALESCE($1, name), color = COALESCE($2, color) WHERE id = $3 RETURNING *',
+      [name, color, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Tag not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Tag name already exists' });
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/tags/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    await pool.query('DELETE FROM request_tags WHERE tag_id = $1', [req.params.id]);
+    const result = await pool.query('DELETE FROM tags WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Tag not found' });
+    res.json({ message: 'Tag deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Templates ---
+app.get('/api/templates', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT t.*, c.name AS category_name, p.name AS priority_name
+       FROM templates t
+       LEFT JOIN categories c ON t.category_id = c.id
+       LEFT JOIN priorities p ON t.priority_id = p.id
+       WHERE t.is_public = true OR t.created_by = $1
+       ORDER BY t.created_at DESC`,
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/templates', authMiddleware, async (req, res) => {
+  try {
+    const { name, subject, description, category_id, priority_id, is_public } = req.body;
+    if (!name || !subject) return res.status(400).json({ error: 'Name and subject are required' });
+    const id = uuidv4();
+    const result = await pool.query(
+      `INSERT INTO templates (id, name, subject, description, category_id, priority_id, is_public, created_by, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()) RETURNING *`,
+      [id, name, subject, description || null, category_id || null, priority_id || null, is_public === undefined ? true : !!is_public, req.user.id]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/templates/:id', authMiddleware, async (req, res) => {
+  try {
+    const tmpl = await pool.query('SELECT * FROM templates WHERE id = $1', [req.params.id]);
+    if (tmpl.rows.length === 0) return res.status(404).json({ error: 'Template not found' });
+    if (tmpl.rows[0].created_by !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Insufficient permissions' });
+    const { name, subject, description, category_id, priority_id, is_public } = req.body;
+    const result = await pool.query(
+      `UPDATE templates SET name = COALESCE($1, name), subject = COALESCE($2, subject),
+         description = COALESCE($3, description), category_id = COALESCE($4, category_id),
+         priority_id = COALESCE($5, priority_id), is_public = COALESCE($6, is_public),
+         updated_at = NOW() WHERE id = $7 RETURNING *`,
+      [name, subject, description, category_id, priority_id, is_public === undefined ? null : !!is_public, req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/templates/:id', authMiddleware, async (req, res) => {
+  try {
+    const tmpl = await pool.query('SELECT created_by FROM templates WHERE id = $1', [req.params.id]);
+    if (tmpl.rows.length === 0) return res.status(404).json({ error: 'Template not found' });
+    if (tmpl.rows[0].created_by !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Insufficient permissions' });
+    await pool.query('DELETE FROM templates WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Template deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- SLA Policies ---
+app.get('/api/sla/policies', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT sp.*, c.name AS category_name, p.name AS priority_name
+       FROM sla_policies sp
+       LEFT JOIN categories c ON sp.category_id = c.id
+       LEFT JOIN priorities p ON sp.priority_id = p.id
+       ORDER BY sp.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/sla/policies', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const { name, category_id, priority_id, response_time_minutes, resolution_time_minutes, escalation_enabled } = req.body;
+    if (!name || !response_time_minutes || !resolution_time_minutes) return res.status(400).json({ error: 'Name and response/resolution times are required' });
+    const id = uuidv4();
+    const result = await pool.query(
+      `INSERT INTO sla_policies (id, name, category_id, priority_id, response_time_minutes, resolution_time_minutes, escalation_enabled, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+      [id, name, category_id || null, priority_id || null, response_time_minutes, resolution_time_minutes, escalation_enabled === undefined ? false : !!escalation_enabled]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/sla/policies/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const { name, category_id, priority_id, response_time_minutes, resolution_time_minutes, escalation_enabled } = req.body;
+    const result = await pool.query(
+      `UPDATE sla_policies SET name = COALESCE($1, name), category_id = COALESCE($2, category_id),
+         priority_id = COALESCE($3, priority_id), response_time_minutes = COALESCE($4, response_time_minutes),
+         resolution_time_minutes = COALESCE($5, resolution_time_minutes),
+         escalation_enabled = COALESCE($6, escalation_enabled) WHERE id = $7 RETURNING *`,
+      [name, category_id, priority_id, response_time_minutes, resolution_time_minutes, escalation_enabled === undefined ? null : !!escalation_enabled, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'SLA policy not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/sla/policies/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM sla_policies WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'SLA policy not found' });
+    res.json({ message: 'SLA policy deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- SLA Tracking ---
+app.get('/api/sla/tracking', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT st.*, r.subject AS request_subject, sp.name AS policy_name
+       FROM sla_tracking st
+       LEFT JOIN requests r ON st.request_id = r.id
+       LEFT JOIN sla_policies sp ON st.sla_policy_id = sp.id
+       ORDER BY st.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/sla/tracking', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
+  try {
+    const { request_id, sla_policy_id, response_due_at, resolution_due_at, first_response_at, resolved_at, response_breached, resolution_breached } = req.body;
+    if (!request_id) return res.status(400).json({ error: 'request_id is required' });
+    const request = await pool.query('SELECT id FROM requests WHERE id = $1', [request_id]);
+    if (request.rows.length === 0) return res.status(400).json({ error: 'Request not found' });
+    const id = uuidv4();
+    const result = await pool.query(
+      `INSERT INTO sla_tracking (id, request_id, sla_policy_id, response_due_at, resolution_due_at, first_response_at, resolved_at, response_breached, resolution_breached, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+       ON CONFLICT (request_id) DO UPDATE SET sla_policy_id = EXCLUDED.sla_policy_id,
+         response_due_at = COALESCE(EXCLUDED.response_due_at, sla_tracking.response_due_at),
+         resolution_due_at = COALESCE(EXCLUDED.resolution_due_at, sla_tracking.resolution_due_at),
+         first_response_at = COALESCE(EXCLUDED.first_response_at, sla_tracking.first_response_at),
+         resolved_at = COALESCE(EXCLUDED.resolved_at, sla_tracking.resolved_at),
+         response_breached = EXCLUDED.response_breached, resolution_breached = EXCLUDED.resolution_breached,
+         updated_at = NOW()
+       RETURNING *`,
+      [id, request_id, sla_policy_id || null, response_due_at || null, resolution_due_at || null, first_response_at || null, resolved_at || null, response_breached === undefined ? false : !!response_breached, resolution_breached === undefined ? false : !!resolution_breached]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/sla/tracking/:id', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
+  try {
+    const { sla_policy_id, response_due_at, resolution_due_at, first_response_at, resolved_at, response_breached, resolution_breached } = req.body;
+    const result = await pool.query(
+      `UPDATE sla_tracking SET sla_policy_id = COALESCE($1, sla_policy_id),
+         response_due_at = COALESCE($2, response_due_at), resolution_due_at = COALESCE($3, resolution_due_at),
+         first_response_at = COALESCE($4, first_response_at), resolved_at = COALESCE($5, resolved_at),
+         response_breached = COALESCE($6, response_breached), resolution_breached = COALESCE($7, resolution_breached),
+         updated_at = NOW() WHERE id = $8 RETURNING *`,
+      [sla_policy_id, response_due_at, resolution_due_at, first_response_at, resolved_at, response_breached === undefined ? null : !!response_breached, resolution_breached === undefined ? null : !!resolution_breached, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'SLA tracking record not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/sla/tracking/:id', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM sla_tracking WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'SLA tracking record not found' });
+    res.json({ message: 'SLA tracking record deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Request Watchers ---
+app.get('/api/requests/:id/watchers', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT rw.request_id, rw.created_at, u.id AS user_id, u.name, u.role, u.avatar
+       FROM request_watchers rw
+       JOIN users u ON rw.user_id = u.id
+       WHERE rw.request_id = $1`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/requests/:id/watchers', authMiddleware, async (req, res) => {
+  try {
+    const { user_id } = req.body;
+    const userId = user_id || req.user.id;
+    const result = await pool.query(
+      `INSERT INTO request_watchers (request_id, user_id, created_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (request_id, user_id) DO NOTHING RETURNING *`,
+      [req.params.id, userId]
+    );
+    res.status(201).json(result.rows[0] || { request_id: req.params.id, user_id: userId, created_at: new Date().toISOString() });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/requests/:id/watchers/:userId', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM request_watchers WHERE request_id = $1 AND user_id = $2',
+      [req.params.id, req.params.userId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Watcher not found' });
+    res.json({ message: 'Watcher removed' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Attachments ---
+app.get('/api/attachments', authMiddleware, roleMiddleware('admin', 'support', 'developer', 'client'), async (req, res) => {
+  try {
+    const { request_id } = req.query;
+    const params = [];
+    let where = '';
+    if (request_id) { params.push(request_id); where = 'WHERE a.request_id = $1'; }
+    const result = await pool.query(
+      `SELECT a.*, u.name AS user_name FROM attachments a LEFT JOIN users u ON a.user_id = u.id ${where} ORDER BY a.created_at DESC`,
+      params
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/attachments', authMiddleware, async (req, res) => {
+  try {
+    const { request_id, filename, original_name, mime_type, size_bytes } = req.body;
+    if (!request_id || !filename) return res.status(400).json({ error: 'request_id and filename are required' });
+    const request = await pool.query('SELECT id FROM requests WHERE id = $1', [request_id]);
+    if (request.rows.length === 0) return res.status(400).json({ error: 'Request not found' });
+    const id = uuidv4();
+    const result = await pool.query(
+      `INSERT INTO attachments (id, request_id, user_id, filename, original_name, mime_type, size_bytes, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+      [id, request_id, req.user.id, filename, original_name || filename, mime_type || null, size_bytes || null]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/attachments/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM attachments WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Attachment not found' });
+    res.json({ message: 'Attachment deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Notifications (persisted, per-user) ---
+app.get('/api/notifications', authMiddleware, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const result = await pool.query(
+      'SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2',
+      [req.user.id, limit]
+    );
+    const unread = await pool.query(
+      'SELECT COUNT(*)::int AS count FROM notifications WHERE user_id = $1 AND is_read = false',
+      [req.user.id]
+    );
+    res.json({ notifications: result.rows, unread: unread.rows[0].count });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/notifications', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
+  try {
+    const { user_id, type, title, message, request_id } = req.body;
+    if (!user_id || !message) return res.status(400).json({ error: 'user_id and message are required' });
+    const id = uuidv4();
+    const result = await pool.query(
+      `INSERT INTO notifications (id, user_id, type, title, message, request_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
+      [id, user_id, type || 'info', title || null, message, request_id || null]
+    );
+    notifyUser(user_id, message, { type: type || 'info', title, requestId: request_id });
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/notifications/:id/read', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'UPDATE notifications SET is_read = true, read_at = NOW() WHERE id = $1 AND user_id = $2 RETURNING *',
+      [req.params.id, req.user.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Notification not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/notifications/read-all', authMiddleware, async (req, res) => {
+  try {
+    await pool.query('UPDATE notifications SET is_read = true, read_at = NOW() WHERE user_id = $1 AND is_read = false', [req.user.id]);
+    res.json({ message: 'All notifications marked as read' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/notifications/:id', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM notifications WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Notification not found' });
+    res.json({ message: 'Notification deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Sessions ---
+app.get('/api/sessions', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT s.*, u.name AS user_name, u.email AS user_email
+       FROM sessions s LEFT JOIN users u ON s.user_id = u.id
+       WHERE s.revoked_at IS NULL ORDER BY s.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/sessions/:id', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      const mine = await pool.query('SELECT id FROM sessions WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+      if (mine.rows.length === 0) return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    const result = await pool.query('UPDATE sessions SET revoked_at = NOW() WHERE id = $1 RETURNING *', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Session not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Login Audit ---
+app.get('/api/login-audit', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const { action, email } = req.query;
+    const conditions = [];
+    const params = [];
+    if (action) { params.push(action); conditions.push(`action = $${params.length}`); }
+    if (email) { params.push(`%${email}%`); conditions.push(`email ILIKE $${params.length}`); }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const result = await pool.query(
+      `SELECT l.*, u.name AS user_name FROM login_audit l LEFT JOIN users u ON l.user_id = u.id ${where} ORDER BY l.created_at DESC LIMIT $${params.length + 1}`,
+      [...params, limit]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/login-audit/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM login_audit WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Audit record not found' });
+    res.json({ message: 'Audit record deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.get('*', (req, res) => {
