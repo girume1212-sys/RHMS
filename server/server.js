@@ -1340,6 +1340,37 @@ groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.grou
         r.groups = (r.groups || []).filter(g => userGroupIds.includes(g.id));
       });
     }
+
+    // Attach comments to each request so the client's messages panel can surface
+    // recent comments without issuing a separate request per item.
+    try {
+      const reqIds = result.rows.map(r => r.id);
+      if (reqIds.length > 0) {
+        const commentsResult = await pool.query(`
+          SELECT c.*, u.name as user_name, u.email as user_email, u.role as user_role, u.avatar as user_avatar
+          FROM comments c
+          LEFT JOIN users u ON c.user_id = u.id
+          WHERE c.request_id = ANY($1::text[])
+          ORDER BY c.created_at ASC
+        `, [reqIds]);
+        const commentsByRequest = {};
+        for (const c of commentsResult.rows) {
+          if (!commentsByRequest[c.request_id]) commentsByRequest[c.request_id] = [];
+          commentsByRequest[c.request_id].push({
+            id: c.id,
+            requestId: c.request_id,
+            userId: c.user_id,
+            content: c.content,
+            createdAt: c.created_at,
+            attachments: typeof c.attachments === 'string' ? JSON.parse(c.attachments) : (c.attachments || []),
+            user: c.user_name ? { id: c.user_id, name: c.user_name, email: c.user_email, role: c.user_role, avatar: c.user_avatar } : null
+          });
+        }
+        enriched.forEach(r => { r.comments = commentsByRequest[r.id] || []; });
+      }
+    } catch (e) {
+      console.error('Load comments for requests error:', e.message);
+    }
     res.json(enriched);
   } catch (err) {
     console.error(err);
@@ -1827,10 +1858,19 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
   }
 });
 
-app.delete('/api/requests/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+app.delete('/api/requests/:id', authMiddleware, async (req, res) => {
   try {
-    const existing = await pool.query('SELECT id FROM requests WHERE id = $1', [req.params.id]);
+    const existing = await pool.query('SELECT id, client_id, status_id FROM requests WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+
+    if (req.user.role !== 'admin') {
+      const canDelete = req.user.role === 'client'
+        && existing.rows[0].client_id === req.user.id
+        && existing.rows[0].status_id === '1';
+      if (!canDelete) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
+    }
 
     await pool.query('DELETE FROM comments WHERE request_id = $1', [req.params.id]);
     await pool.query('DELETE FROM activity_log WHERE request_id = $1', [req.params.id]);
@@ -1850,6 +1890,11 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
   try {
     const existing = await pool.query('SELECT id, client_id, assigned_to, status_id FROM requests WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+
+    // Support and developer can only comment on their own assigned requests
+    if ((req.user.role === 'support' || req.user.role === 'developer') && existing.rows[0].assigned_to !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied - you can only modify requests assigned to you' });
+    }
 
     // Check group access for non-admin, non-client, non-assignee users
     const isEscalated = existing.rows[0].status_id === '9';

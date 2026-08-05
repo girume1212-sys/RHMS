@@ -161,6 +161,24 @@ export default function Layout() {
     }).catch(() => {});
   }, [user]);
 
+  // Seed the unread badge from persisted notifications so it survives page reloads
+  useEffect(() => {
+    if (!user) return;
+    api.get('/api/notifications').then(data => {
+      const unreadList = (data.notifications || [])
+        .filter(n => !n.is_read)
+        .slice(0, 20)
+        .map(n => ({
+          id: n.id,
+          type: n.type,
+          message: n.message,
+          requestId: n.request_id,
+          timestamp: n.created_at
+        }));
+      setUnreadNotifications(unreadList);
+    }).catch(() => {});
+  }, [user]);
+
   // SSE real-time notifications
   useEffect(() => {
     if (!user) return;
@@ -285,12 +303,14 @@ export default function Layout() {
     if (next) {
       setPanelNotifications(unreadNotifications);
       setUnreadNotifications([]);
+      api.put('/api/notifications/read-all').catch(() => {});
     }
   };
 
   const markAllRead = useCallback(() => {
     setUnreadNotifications([]);
     setPanelNotifications([]);
+    api.put('/api/notifications/read-all').catch(() => {});
   }, []);
 
   const getNotifTitle = (type) => {

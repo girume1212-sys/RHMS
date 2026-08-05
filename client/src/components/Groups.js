@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
@@ -8,6 +9,8 @@ import Icon from './Icon';
 
 export default function Groups() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [groups, setGroups] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -280,7 +283,7 @@ export default function Groups() {
           <h1>{t('sidebar.groups')}</h1>
           <p>{t('common.manageGroups')}</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ {t('common.addGroup')}</button>
+        {isAdmin && (<button className="btn btn-primary" onClick={openCreate}>+ {t('common.addGroup')}</button>)}
       </div>
 
       {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{error}</div>}
@@ -328,9 +331,9 @@ export default function Groups() {
                     </td>
                     <td>
                       <div className="actions-cell-inline">
-                        <button className="action-btn-text edit" onClick={(e) => { e.stopPropagation(); openEdit(g); }}>{t('common.edit')}</button>
+                        {isAdmin && <button className="action-btn-text edit" onClick={(e) => { e.stopPropagation(); openEdit(g); }}>{t('common.edit')}</button>}
                         <button className="action-btn-text" style={{ color: '#3B82F6' }} onClick={(e) => { e.stopPropagation(); openMembers(g); }}>{t('common.members')}</button>
-                        <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}>{t('common.delete')}</button>
+                        {isAdmin && <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}>{t('common.delete')}</button>}
                       </div>
                     </td>
                   </tr>
@@ -409,9 +412,11 @@ export default function Groups() {
                   <div className="loading-screen"><div className="spinner"></div></div>
                 ) : (
                   <>
-                    <button className="btn btn-primary" style={{ marginBottom: '16px' }} onClick={() => setShowAddMember(prev => !prev)}>
-                      {showAddMember ? `− ${t('common.cancel')}` : `+ ${t('common.addMember')}`}
-                    </button>
+                    {isAdmin && (
+                      <button className="btn btn-primary" style={{ marginBottom: '16px' }} onClick={() => setShowAddMember(prev => !prev)}>
+                        {showAddMember ? `− ${t('common.cancel')}` : `+ ${t('common.addMember')}`}
+                      </button>
+                    )}
                     {showAddMember && (
                       <div className="add-member-panel">
                         {selectedUserIds.length > 0 && (
@@ -488,7 +493,7 @@ export default function Groups() {
                             <th className="sortable"><span>{t('common.user')} {getMemberSortIcon('name')}</span></th>
                             <th className="sortable"><span>{t('common.email')} {getMemberSortIcon('email')}</span></th>
                             <th className="sortable"><span>{t('common.role')} {getMemberSortIcon('role')}</span></th>
-                            <th style={{ width: '80px' }}>{t('common.actions')}</th>
+                            {isAdmin && <th style={{ width: '80px' }}>{t('common.actions')}</th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -507,7 +512,9 @@ export default function Groups() {
                                 </span>
                               </td>
                               <td>
+                                {isAdmin && (
                                 <button className="action-btn-text delete" onClick={() => setRemoveTarget(m)}>{t('common.remove')}</button>
+                                )}
                               </td>
                             </tr>
                           ))}

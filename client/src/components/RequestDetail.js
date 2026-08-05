@@ -50,6 +50,16 @@ export default function RequestDetail() {
   const isClient = user?.role === 'client';
   const basePath = isClient ? '/client' : '';
 
+  // Support and developer can only comment on their own assigned requests
+  const canComment = (() => {
+    if (user?.role === 'admin' || isClient) return true;
+    if (user?.role === 'support' || user?.role === 'developer') {
+      if (!request) return true;
+      return request.assignedTo === user.id;
+    }
+    return true;
+  })();
+
   const addToast = useCallback((message, type = 'success') => {
     const tid = Date.now();
     setToasts(prev => [...prev, { id: tid, message, type }]);
@@ -895,65 +905,71 @@ export default function RequestDetail() {
               )}
             </div>
 
-            <div className="chat-composer">
-              {pendingFiles.length > 0 && (
-                <div className="composer-pending">
-                  {pendingFiles.map((file, i) => (
-                    <div key={`pf-${i}`} className="composer-pending-item">
-                      <span className="composer-pending-icon"><Icon name="paperclip" size={14} /></span>
-                      <span className="composer-pending-name">{file.name}</span>
-                      <button type="button" className="composer-pending-remove" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}>✕</button>
-                    </div>
-                  ))}
+            {canComment ? (
+              <div className="chat-composer">
+                {pendingFiles.length > 0 && (
+                  <div className="composer-pending">
+                    {pendingFiles.map((file, i) => (
+                      <div key={`pf-${i}`} className="composer-pending-item">
+                        <span className="composer-pending-icon"><Icon name="paperclip" size={14} /></span>
+                        <span className="composer-pending-name">{file.name}</span>
+                        <button type="button" className="composer-pending-remove" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showEmojiPicker && (
+                  <div className="emoji-picker">
+                    {['😀', '😂', '😊', '😍', '👍', '👏', '🙏', '🎉', '🔥', '✅', '❌', '⚠️', '📌', '💡', '📎', '🕐', '🚀', '👀'].map(e => (
+                      <button key={e} type="button" className="emoji-picker-item" onClick={() => insertEmoji(e)}>{e}</button>
+                    ))}
+                  </div>
+                )}
+                <div className="composer-toolbar">
+                  <button type="button" className="composer-btn" title={t('common.attachFile')} onClick={() => commentFileInputRef.current?.click()}><Icon name="paperclip" size={16} /></button>
+                  <button type="button" className="composer-btn" title={t('common.emoji')} onClick={() => setShowEmojiPicker(v => !v)}><Icon name="smile" size={16} /></button>
+                  <textarea
+                    ref={commentTextareaRef}
+                    className="composer-textarea"
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleComment();
+                      }
+                    }}
+                    placeholder={t('common.typeComment')}
+                    rows={1}
+                  />
+                  <button
+                    type="button"
+                    className="composer-send"
+                    title={t('common.send')}
+                    disabled={submitting || (!comment.trim() && pendingFiles.length === 0)}
+                    onClick={handleComment}
+                  >
+                    {submitting ? '⏳' : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13" /><path d="M22 2L15 22l-4-9-9-4z" /></svg>}
+                  </button>
+                  <input
+                    ref={commentFileInputRef}
+                    type="file"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length > 0) setPendingFiles(prev => [...prev, ...files]);
+                      e.target.value = '';
+                    }}
+                  />
                 </div>
-              )}
-              {showEmojiPicker && (
-                <div className="emoji-picker">
-                  {['😀', '😂', '😊', '😍', '👍', '👏', '🙏', '🎉', '🔥', '✅', '❌', '⚠️', '📌', '💡', '📎', '🕐', '🚀', '👀'].map(e => (
-                    <button key={e} type="button" className="emoji-picker-item" onClick={() => insertEmoji(e)}>{e}</button>
-                  ))}
-                </div>
-              )}
-              <div className="composer-toolbar">
-                <button type="button" className="composer-btn" title={t('common.attachFile')} onClick={() => commentFileInputRef.current?.click()}><Icon name="paperclip" size={16} /></button>
-                <button type="button" className="composer-btn" title={t('common.emoji')} onClick={() => setShowEmojiPicker(v => !v)}><Icon name="smile" size={16} /></button>
-                <textarea
-                  ref={commentTextareaRef}
-                  className="composer-textarea"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleComment();
-                    }
-                  }}
-                  placeholder={t('common.typeComment')}
-                  rows={1}
-                />
-                <button
-                  type="button"
-                  className="composer-send"
-                  title={t('common.send')}
-                  disabled={submitting || (!comment.trim() && pendingFiles.length === 0)}
-                  onClick={handleComment}
-                >
-                  {submitting ? '⏳' : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13" /><path d="M22 2L15 22l-4-9-9-4z" /></svg>}
-                </button>
-                <input
-                  ref={commentFileInputRef}
-                  type="file"
-                  multiple
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length > 0) setPendingFiles(prev => [...prev, ...files]);
-                    e.target.value = '';
-                  }}
-                />
+                <div className="composer-hint">{t('common.composerHint')}</div>
               </div>
-              <div className="composer-hint">{t('common.composerHint')}</div>
-            </div>
+            ) : (
+              <div className="composer-hint" style={{ padding: '16px', textAlign: 'center', color: '#9ca3af' }}>
+                {t('common.readOnly')}
+              </div>
+            )}
           </div>
         </div>
 

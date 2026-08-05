@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
-import { API_BASE, isTokenExpired } from '../api';
+import { api, API_BASE, isTokenExpired } from '../api';
 import GlobalSearch from './GlobalSearch';
 import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
@@ -22,8 +22,10 @@ export default function ClientLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState([]);
   const [panelNotifications, setPanelNotifications] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
   const eventSourceRef = useRef(null);
   const dismissedIds = useRef(new Set());
@@ -65,6 +67,7 @@ export default function ClientLayout() {
       }
       if (!e.target.closest('.notification-container')) {
         setShowNotifications(false);
+        setShowMessages(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -189,6 +192,24 @@ export default function ClientLayout() {
       }
     };
   }, [user, playNotificationSound]);
+
+  // Load messages (comments from support on the client's requests)
+  useEffect(() => {
+    if (!user) return;
+    api.get('/api/requests').then(data => {
+      const msgs = [];
+      data.forEach(r => {
+        if (r.comments) {
+          r.comments.forEach(c => {
+            if (c.userId !== user?.id) {
+              msgs.push({ ...c, requestId: r.id, requestSubject: r.subject });
+            }
+          });
+        }
+      });
+      setMessages(msgs.slice(0, 10));
+    }).catch(() => {});
+  }, [user]);
 
   // Status toast listener
   const [statusToast, setStatusToast] = useState(null);
@@ -363,6 +384,39 @@ export default function ClientLayout() {
                               {n.userName && <span className="dropdown-panel-user"><Icon name="user" size={12} /> {n.userName}</span>}
                               <span className="dropdown-panel-time">{n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</span>
                             </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="notification-container" style={{ position: 'relative' }}>
+              <button className="theme-toggle" onClick={() => { setShowMessages(!showMessages); setShowNotifications(false); }} title={t('topbar.messages')} style={{ position: 'relative' }}>
+                <span className="toggle-icon"><Icon name="mail" /></span>
+                {messages.length > 0 && (
+                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                    {messages.length > 99 ? '99+' : messages.length}
+                  </span>
+                )}
+              </button>
+              {showMessages && (
+                <div className="dropdown-panel notification-panel" style={{ width: 420, border: darkMode ? '1px solid #334155' : '1px solid #e5e7eb', background: darkMode ? '#1e293b' : '#fff' }}>
+                  <div className="dropdown-panel-header" style={{ color: darkMode ? '#e2e8f0' : 'inherit' }}>
+                    <span>{t('topbar.messages')}</span>
+                  </div>
+                  {messages.length === 0 ? (
+                    <div className="dropdown-panel-empty">{t('topbar.noMessages')}</div>
+                  ) : (
+                    <div className="dropdown-panel-list">
+                      {messages.map((m, i) => (
+                        <div key={i} className="dropdown-panel-item" onClick={() => { navigate(`/client/requests/${m.requestId}`); setShowMessages(false); }}>
+                          <div className="dropdown-panel-avatar">{m.user?.name?.charAt(0) || 'U'}</div>
+                          <div className="dropdown-panel-content">
+                            <p><strong>{m.user?.name || t('common.unknown')}</strong> {t('common.commentedOn')} <strong>#{m.requestId}</strong></p>
+                            <p className="dropdown-panel-message">{m.content}</p>
+                            <span className="dropdown-panel-time">{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</span>
                           </div>
                         </div>
                       ))}
