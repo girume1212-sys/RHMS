@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
@@ -307,6 +308,22 @@ const pool = require('./db');
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_login_audit_created ON login_audit(created_at DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_login_audit_action ON login_audit(action)`);
     console.log('login_audit table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id VARCHAR(50) PRIMARY KEY,
+        user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash VARCHAR(255) NOT NULL UNIQUE,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        used_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        created_by_ip VARCHAR(45)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_token_hash ON password_reset_tokens(token_hash)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_expires ON password_reset_tokens(expires_at)`);
+    console.log('password_reset_tokens table ready');
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sla_tracking (
@@ -783,6 +800,115 @@ app.post('/api/auth/google', async (req, res) => {
   } catch (err) {
     console.error('Google auth error:', err);
     res.status(500).json({ error: 'Google authentication failed' });
+  }
+});
+
+// Password reset: SHA-256 of the raw token is stored; the raw token travels in the link.
+const hashResetToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
+
+// Request a password reset link for an account. Generic response prevents user enumeration.
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    const userResult = await pool.query('SELECT id, name, email FROM users WHERE LOWER(email) = $1', [email]);
+
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0];
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = hashResetToken(rawToken);
+
+      // Invalidate any previously issued, unused tokens for this user.
+      await pool.query("UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL", [user.id]);
+
+      const ttlResult = await pool.query("SELECT value FROM system_settings WHERE key = 'passwordResetTokenTtl'");
+      const ttlMinutes = ttlResult.rows.length > 0 ? parseInt(ttlResult.rows[0].value) || 60 : 60;
+      const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
+
+      await pool.query(
+        `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_by_ip, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [uuidv4(), user.id, tokenHash, expiresAt,
+          (req.headers['x-forwarded-for'] || req.ip || null)]
+      );
+
+      auditLogin('password_reset_requested', user.id, user.email, req);
+
+      // No mailer is configured; surface the reset link on the server console and
+      // as an in-app notification so the flow is usable on this local deployment.
+      const resetUrl = `${req.protocol}://${req.get('host')}/reset-password?token=${rawToken}`;
+      console.log(`[PasswordReset] Reset link for ${user.email}: ${resetUrl}`);
+      notifyUser(user.id, `Password reset requested. Use this link within ${ttlMinutes} minutes: ${resetUrl}`,
+        { type: 'password_reset', title: 'Password Reset' });
+    }
+
+    res.json({ message: 'If an account exists with this email, a password reset link has been sent.' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Failed to send password reset link' });
+  }
+});
+
+// Validate a reset token without consuming it.
+app.get('/api/auth/reset-password/validate', async (req, res) => {
+  try {
+    const rawToken = req.query.token || '';
+    if (!rawToken) return res.json({ valid: false });
+    const result = await pool.query(
+      `SELECT t.expires_at, t.used_at, u.email, u.name, u.id
+       FROM password_reset_tokens t JOIN users u ON u.id = t.user_id
+       WHERE t.token_hash = $1`,
+      [hashResetToken(rawToken)]
+    );
+    const row = result.rows[0];
+    if (!row) return res.json({ valid: false, reason: 'not_found' });
+    if (row.used_at) return res.json({ valid: false, reason: 'used' });
+    if (new Date(row.expires_at).getTime() < Date.now()) return res.json({ valid: false, reason: 'expired' });
+    res.json({ valid: true, email: row.email, name: row.name, expiresAt: row.expires_at });
+  } catch (err) {
+    console.error('Validate reset token error:', err);
+    res.status(500).json({ error: 'Failed to validate reset token' });
+  }
+});
+
+// Consume a valid reset token and set a new password.
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const rawToken = (req.body.token || '').trim();
+    const { password } = req.body;
+    if (!rawToken || !password) return res.status(400).json({ error: 'Token and password are required' });
+
+    const pwResult = await pool.query("SELECT value FROM system_settings WHERE key = 'passwordLength'");
+    const minLength = pwResult.rows.length > 0 ? parseInt(pwResult.rows[0].value) || 8 : 8;
+    if (password.length < minLength) {
+      return res.status(400).json({ error: `Password must be at least ${minLength} characters` });
+    }
+
+    const result = await pool.query(
+      `SELECT t.id AS token_id, t.expires_at, t.used_at, u.id AS user_id
+       FROM password_reset_tokens t JOIN users u ON u.id = t.user_id
+       WHERE t.token_hash = $1`,
+      [hashResetToken(rawToken)]
+    );
+    const row = result.rows[0];
+    if (!row) return res.status(400).json({ error: 'Invalid or expired reset token' });
+    if (row.used_at) return res.status(400).json({ error: 'Invalid or expired reset token' });
+    if (new Date(row.expires_at).getTime() < Date.now()) return res.status(400).json({ error: 'Reset token has expired' });
+
+    const hashedPassword = bcrypt.hashSync(password, 10);
+    await pool.query('UPDATE users SET password = $1, login_attempts = 0 WHERE id = $2', [hashedPassword, row.user_id]);
+    await pool.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1', [row.token_id]);
+    // Revoke all existing sessions for the user so the new password takes effect.
+    await pool.query('UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL', [row.user_id]);
+
+    const userResult = await pool.query('SELECT id, email FROM users WHERE id = $1', [row.user_id]);
+    auditLogin('password_reset_success', row.user_id, userResult.rows[0]?.email, req);
+
+    res.json({ message: 'Password has been reset. You can now sign in with your new password.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 
@@ -2466,7 +2592,7 @@ app.get('/api/db-tables', authMiddleware, roleMiddleware('admin'), async (req, r
 app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const { tableName } = req.params;
-    const allowedTables = ['users', 'categories', 'priorities', 'statuses', 'requests', 'comments', 'activity_log', 'announcements', 'knowledge_base', 'tags', 'templates', 'sla_policies', 'sla_tracking', 'attachments', 'notifications', 'sessions', 'login_audit', 'request_watchers', 'request_tags', 'system_settings', 'feedback', 'groups', 'companies'];
+    const allowedTables = ['users', 'categories', 'priorities', 'statuses', 'requests', 'comments', 'activity_log', 'announcements', 'knowledge_base', 'tags', 'templates', 'sla_policies', 'sla_tracking', 'attachments', 'notifications', 'sessions', 'login_audit', 'request_watchers', 'request_tags', 'system_settings', 'feedback', 'groups', 'companies', 'user_groups', 'request_groups', 'password_reset_tokens'];
     if (!allowedTables.includes(tableName)) {
       return res.status(400).json({ error: 'Invalid table name' });
     }
@@ -2518,6 +2644,7 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
       { key: 'passwordLength', value: '8' },
       { key: 'twoFactorAuth', value: 'false' },
       { key: 'maxLoginAttempts', value: '5' },
+      { key: 'passwordResetTokenTtl', value: '60' },
       { key: 'defaultStatus', value: '1' },
       { key: 'defaultPriority', value: '2' },
       { key: 'autoRequestId', value: 'true' },
@@ -2632,6 +2759,7 @@ app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (
       { key: 'passwordLength', value: '8' },
       { key: 'twoFactorAuth', value: 'false' },
       { key: 'maxLoginAttempts', value: '5' },
+      { key: 'passwordResetTokenTtl', value: '60' },
       { key: 'defaultStatus', value: '1' },
       { key: 'defaultPriority', value: '2' },
       { key: 'autoRequestId', value: 'true' },

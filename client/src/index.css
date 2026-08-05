@@ -5255,8 +5255,9 @@ body.dark-mode .logo-upload-btn:hover {
   align-items: center;
   gap: 10px;
 }
-.input-with-unit input {
-  width: 80px;
+.settings-field .input-with-unit input {
+  width: 1300px;
+  height: 42px;
   flex-shrink: 0;
 }
 .input-unit {
