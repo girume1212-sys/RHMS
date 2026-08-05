@@ -365,7 +365,7 @@ export default function RequestDetail() {
   };
 
   const getStatusColor = (status) => {
-    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444', Rejected: '#DC2626' };
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Rejected: '#DC2626' };
     return colors[status?.name] || '#6B7280';
   };
 
@@ -1135,7 +1135,7 @@ export default function RequestDetail() {
                   ) : (
                     <select value={request.statusId} onChange={(e) => handleStatusChange(e.target.value)}>
                       {statuses
-                        .filter(s => s.name !== 'Reopened')
+                        .filter(s => s.name !== 'Rejected')
                         .filter(s => !((user.role === 'developer' || user.role === 'support') && (s.name === 'Closed' || s.name === 'Rejected')))
                         .map(s => <option key={s.id} value={s.id}>{transSeeded(s.name, 'status', t)}</option>)}
                     </select>

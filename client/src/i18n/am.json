@@ -630,8 +630,7 @@
     "Resolved": "ተፈትቷል",
     "Closed": "ተዘግቷል",
     "Escalated": "ተላልፏል",
-    "Rejected": "ውድቅ ተደርጓል",
-    "Reopened": "እንደገና ተከፍቷል"
+    "Rejected": "ውድቅ ተደርጓል"
   },
   "category": {
     "Hardware": "ሃርድዌር",

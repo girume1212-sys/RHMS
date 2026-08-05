@@ -119,8 +119,7 @@ const statuses = [
   { id: '4', name: 'Waiting for Client', color: '#F97316' },
   { id: '5', name: 'Resolved', color: '#10B981' },
   { id: '6', name: 'Closed', color: '#6B7280' },
-  { id: '7', name: 'Reopened', color: '#EF4444' },
-  { id: '8', name: 'Rejected', color: '#DC2626' }
+  { id: '7', name: 'Rejected', color: '#DC2626' }
 ];
 
 const requests = [

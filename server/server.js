@@ -158,6 +158,12 @@ const pool = require('./db');
       INSERT INTO statuses (id, name, color) VALUES ('9', 'Escalated', '#EF4444')
       ON CONFLICT (id) DO NOTHING
     `);
+    const reopenedStatus = await pool.query(`SELECT id FROM statuses WHERE LOWER(name) = 'reopened'`);
+    if (reopenedStatus.rows.length > 0) {
+      const reopenedId = reopenedStatus.rows[0].id;
+      await pool.query(`UPDATE requests SET status_id = (SELECT id FROM statuses WHERE LOWER(name) = 'new' LIMIT 1) WHERE status_id = $1`, [reopenedId]);
+      await pool.query(`DELETE FROM statuses WHERE id = $1`, [reopenedId]);
+    }
     console.log('statuses ready');
 
     // --- New tables ---
@@ -1239,7 +1245,7 @@ app.post('/api/priorities', authMiddleware, roleMiddleware('admin'), async (req,
 // Statuses Routes
 app.get('/api/statuses', authMiddleware, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM statuses ORDER BY id');
+    const result = await pool.query(`SELECT * FROM statuses WHERE LOWER(name) <> 'reopened' ORDER BY id`);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -2070,7 +2076,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     const rejected = statusMap['8'] || 0;
 
     const statusesResult = await pool.query('SELECT * FROM statuses ORDER BY id');
-    const statuses = statusesResult.rows;
+    const statuses = statusesResult.rows.filter(s => s.name.toLowerCase() !== 'reopened');
     const byStatus = statuses.map(s => ({
       ...s,
       count: statusMap[s.id] || 0,
@@ -2395,6 +2401,7 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
     const byStatusResult = await pool.query(`
       SELECT s.name, COUNT(r.id) as count FROM statuses s
       LEFT JOIN requests r ON r.status_id = s.id
+      WHERE LOWER(s.name) <> 'reopened'
       GROUP BY s.name, s.id ORDER BY s.id
     `);
     const byPriorityResult = await pool.query(`

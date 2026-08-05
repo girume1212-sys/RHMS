@@ -146,16 +146,20 @@ export default function Layout() {
   };
 
   const isNavItemActive = (item) => {
+    const { pathname, search } = location;
+    const isRequestsChild = pathname === '/requests' || pathname.startsWith('/requests/');
+
     if (item.path === '/categories') {
-      if (location.pathname === '/categories') return true;
-      if (location.pathname === '/requests' && new URLSearchParams(location.search).get('category')) return true;
+      if (pathname === '/categories') return true;
+      if (pathname === '/requests' && new URLSearchParams(search).get('category')) return true;
       return false;
     }
     if (item.path === '/requests') {
-      if (location.pathname === '/requests' && !new URLSearchParams(location.search).get('category')) return true;
+      if (isRequestsChild && !new URLSearchParams(search).get('category')) return true;
       return false;
     }
-    return location.pathname === item.path;
+    if (item.path === '/') return pathname === '/';
+    return pathname === item.path || pathname.startsWith(item.path + '/');
   };
 
   useEffect(() => {

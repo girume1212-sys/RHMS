@@ -56,7 +56,7 @@ export default function ClientDashboard() {
   }, []);
 
   const getStatusColor = (status) => {
-    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Reopened: '#EF4444', Rejected: '#DC2626' };
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Rejected: '#DC2626' };
     return colors[status?.name] || '#6B7280';
   };
 
@@ -70,10 +70,10 @@ export default function ClientDashboard() {
     setPage(1);
   };
 
-  const ClientStatCard = ({ icon, value, label, color }) => {
+  const ClientStatCard = ({ icon, value, label, color, onClick }) => {
     const [h, setH] = useState(false);
     return (
-      <div className="stat-card" style={{ cursor: 'pointer', transform: h ? 'translateY(-4px)' : '', boxShadow: h ? `0 8px 25px ${color}30` : '', borderLeft: h ? `4px solid ${color}` : '4px solid transparent', transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s' }} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}>
+      <div className="stat-card" style={{ cursor: onClick ? 'pointer' : 'default', transform: h ? 'translateY(-4px)' : '', boxShadow: h ? `0 8px 25px ${color}22` : '', borderLeft: h ? `4px solid ${color}` : '4px solid transparent', transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s' }} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} onClick={onClick}>
         <div className="stat-icon" style={{ background: color + '15', color: color }}>{icon}</div>
         <div className="stat-content">
           <h3>{value}</h3>
@@ -186,14 +186,14 @@ export default function ClientDashboard() {
       )}
 
       <div className="stats-grid">
-        <ClientStatCard icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} color="#3B82F6" />
-        <ClientStatCard icon={<Icon name="new" />} value={stats.open} label={t('common.new')} color="#10B981" />
-        <ClientStatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" />
-        <ClientStatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} color="#8B5CF6" />
-        <ClientStatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} color="#6B7280" />
-        <ClientStatCard icon={<Icon name="rejected" />} value={stats.rejected} label={t('common.rejected')} color="#DC2626" />
-        <ClientStatCard icon={<Icon name="waiting" />} value={stats.waitingClient} label={t('common.waitingForClient')} color="#F97316" />
-        <ClientStatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} color="#EF4444" />
+        <ClientStatCard icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} color="#3B82F6" onClick={() => navigate('/client/requests')} />
+        <ClientStatCard icon={<Icon name="new" />} value={stats.open} label={t('common.new')} color="#10B981" onClick={() => navigate('/client/requests?status=New')} />
+        <ClientStatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => navigate('/client/requests?status=In Progress')} />
+        <ClientStatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} color="#8B5CF6" onClick={() => navigate('/client/requests?status=Resolved')} />
+        <ClientStatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} color="#6B7280" onClick={() => navigate('/client/requests?status=Closed')} />
+        <ClientStatCard icon={<Icon name="rejected" />} value={stats.rejected} label={t('common.rejected')} color="#DC2626" onClick={() => navigate('/client/requests?status=Rejected')} />
+        <ClientStatCard icon={<Icon name="waiting" />} value={stats.waitingClient} label={t('common.waitingForClient')} color="#F97316" onClick={() => navigate('/client/requests?status=Waiting for Client')} />
+        <ClientStatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} color="#EF4444" onClick={() => navigate('/client/requests?status=Escalated')} />
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>

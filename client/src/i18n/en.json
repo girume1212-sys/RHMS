@@ -631,8 +631,7 @@
     "Resolved": "Resolved",
     "Closed": "Closed",
     "Escalated": "Escalated",
-    "Rejected": "Rejected",
-    "Reopened": "Reopened"
+    "Rejected": "Rejected"
   },
   "category": {
     "Hardware": "Hardware",

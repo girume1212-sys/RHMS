@@ -323,7 +323,7 @@ if (statusName === 'New') {
             </label>
             <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
               <option value="">{t('common.allStatuses')}</option>
-              {statuses.filter(s => s.name !== 'Closed' && s.name !== 'Reopened').map(s => <option key={s.id} value={s.name}>{transSeeded(s.name, 'status', t)}</option>)}
+              {statuses.filter(s => s.name !== 'Closed').map(s => <option key={s.id} value={s.name}>{transSeeded(s.name, 'status', t)}</option>)}
             </select>
             <select className="filter-select" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}>
               <option value="">{t('common.allPriorities')}</option>
