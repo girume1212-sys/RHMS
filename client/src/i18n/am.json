@@ -191,6 +191,7 @@
     "description": "መግለጫ",
     "attachments": "አባሪዎች",
     "comments": "አስተያየቶች",
+    "unreadComments": "ያልተነበቡ አስተያየቶች",
     "history": "ታሪክ",
     "information": "መረጃ",
     "changeStatus": "ሁኔታ ቀይር",

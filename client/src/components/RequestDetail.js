@@ -40,6 +40,9 @@ export default function RequestDetail() {
   const [commentSort, setCommentSort] = useState('oldest');
   const commentFileInputRef = useRef(null);
   const commentTextareaRef = useRef(null);
+  const chatRef = useRef(null);
+  const lastSeenRef = useRef(null);
+  const [unreadFilterIds, setUnreadFilterIds] = useState(null);
   const [existingFeedback, setExistingFeedback] = useState(null);
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -60,6 +63,43 @@ export default function RequestDetail() {
     return true;
   })();
 
+  const unreadComments = (request?.comments || []).filter(c =>
+    c.user?.id !== user?.id &&
+    lastSeenRef.current !== null &&
+    new Date(c.createdAt).getTime() > lastSeenRef.current
+  );
+  const unreadCount = unreadComments.length;
+
+  const isChatNearBottom = () => {
+    const el = chatRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  };
+
+  const scrollChatToBottom = () => {
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+  };
+
+  const lastSeenKey = `rhms_comment_seen_${id}`;
+  const ignoreInitialScrollResetRef = useRef(true);
+  const initialScrollDoneRef = useRef(false);
+
+  const persistLastSeen = () => {
+    lastSeenRef.current = Date.now();
+    try { localStorage.setItem(lastSeenKey, String(lastSeenRef.current)); } catch (e) {}
+  };
+
+  const initLastSeen = () => {
+    if (lastSeenRef.current !== null) return;
+    let stored = null;
+    try { stored = localStorage.getItem(lastSeenKey); } catch (e) {}
+    const val = stored ? parseInt(stored, 10) : NaN;
+    lastSeenRef.current = Number.isNaN(val) ? Date.now() : val;
+    if (!stored) {
+      try { localStorage.setItem(lastSeenKey, String(lastSeenRef.current)); } catch (e) {}
+    }
+  };
+
   const addToast = useCallback((message, type = 'success') => {
     const tid = Date.now();
     setToasts(prev => [...prev, { id: tid, message, type }]);
@@ -79,6 +119,42 @@ export default function RequestDetail() {
     api.get('/api/categories').then(setCategories).catch(() => {});
     api.get('/api/priorities').then(setPriorities).catch(() => {});
     loadFeedback();
+  }, [id]);
+
+  // Auto-scroll chat to the bottom on first load and when new comments arrive while at the bottom
+  useEffect(() => {
+    if (!request) return;
+    if (!initialScrollDoneRef.current) {
+      initialScrollDoneRef.current = true;
+      requestAnimationFrame(scrollChatToBottom);
+      setTimeout(() => { ignoreInitialScrollResetRef.current = false; }, 400);
+      return;
+    }
+    if (isChatNearBottom()) {
+      requestAnimationFrame(scrollChatToBottom);
+    }
+  }, [request?.comments?.length]);
+
+  // Reset the unread counter when the user scrolls to the latest comments
+  useEffect(() => {
+    const el = chatRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      if (isChatNearBottom() && !ignoreInitialScrollResetRef.current) persistLastSeen();
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [request?.comments?.length]);
+
+  // Real-time chat: poll comments so new ones appear without a manual refresh
+  useEffect(() => {
+    if (!id) return;
+    const timer = setInterval(() => {
+      api.get(`/api/requests/${id}`).then(data => {
+        setRequest(prev => prev ? { ...prev, comments: data.comments, status: data.status, statusId: data.statusId, assignedTo: data.assignedTo } : data);
+      }).catch(() => {});
+    }, 4000);
+    return () => clearInterval(timer);
   }, [id]);
 
   const loadFeedback = () => {
@@ -111,6 +187,7 @@ export default function RequestDetail() {
   const loadRequest = () => {
     api.get(`/api/requests/${id}`).then(data => {
       setRequest(data);
+      initLastSeen();
       const attachments = data.attachments || [];
       setEditForm({ subject: data.subject, description: data.description, categoryId: data.categoryId, priorityId: data.priorityId, statusId: data.statusId, assignedTo: data.assignedTo || '', attachments });
       setEditAttachments(attachments);
@@ -279,6 +356,7 @@ export default function RequestDetail() {
       loadRequest();
       loadActivity();
       showStatusToast(t('common.commentAddedToRequest', { id }), 'comment', id);
+      setTimeout(() => { scrollChatToBottom(); persistLastSeen(); }, 100);
     } catch (err) {
       addToast(t('common.failedAddComment') + ': ' + err.message, 'error');
     } finally {
@@ -410,6 +488,9 @@ export default function RequestDetail() {
     }
     if (commentFilter === 'client') filteredComments = filteredComments.filter(c => c.user?.role === 'client');
     if (commentFilter === 'staff') filteredComments = filteredComments.filter(c => c.user?.role !== 'client');
+    if (unreadFilterIds) {
+      filteredComments = filteredComments.filter(c => unreadFilterIds.includes(c.id || c.createdAt));
+    }
 
     const sortedComments = [...filteredComments].sort((a, b) => {
       const diff = new Date(a.createdAt) - new Date(b.createdAt);
@@ -845,7 +926,7 @@ export default function RequestDetail() {
               </div>
             </div>
 
-            <div className="chat-conversation">
+            <div className="chat-conversation" ref={chatRef}>
               {buildChatItems().map((item, idx) => {
                 if (item.kind === 'separator') {
                   return (
@@ -904,6 +985,29 @@ export default function RequestDetail() {
                 <div className="chat-empty">{t('common.noMessagesYet')}</div>
               )}
             </div>
+
+            <button
+              type="button"
+              className="chat-unread-float"
+              style={{ bottom: canComment ? 76 : 16 }}
+              title={t('common.unreadComments')}
+              onClick={() => {
+                if (unreadFilterIds) {
+                  setUnreadFilterIds(null);
+                } else {
+                  const ids = unreadComments.map(c => c.id || c.createdAt);
+                  if (ids.length > 0) {
+                    setUnreadFilterIds(ids);
+                    persistLastSeen();
+                  }
+                }
+              }}
+            >
+              <Icon name="comment" size={18} />
+              {unreadCount > 0 && !unreadFilterIds && (
+                <span className="badge chat-unread-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+              )}
+            </button>
 
             {canComment ? (
               <div className="chat-composer">

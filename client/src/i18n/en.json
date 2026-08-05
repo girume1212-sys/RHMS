@@ -191,6 +191,7 @@
     "description": "Description",
     "attachments": "Attachments",
     "comments": "Comments",
+    "unreadComments": "Unread comments",
     "history": "History",
     "information": "Information",
     "changeStatus": "Change Status",

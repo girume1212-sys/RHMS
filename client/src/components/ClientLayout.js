@@ -26,11 +26,18 @@ export default function ClientLayout() {
   const [unreadNotifications, setUnreadNotifications] = useState([]);
   const [panelNotifications, setPanelNotifications] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
   const eventSourceRef = useRef(null);
   const dismissedIds = useRef(new Set());
   const showNotificationsRef = useRef(false);
   const audioUnlocked = useRef(false);
+  const messagesSeenRef = useRef((() => {
+    let v = null;
+    try { v = localStorage.getItem('rhms_messages_seen'); } catch (e) {}
+    const n = v ? parseInt(v, 10) : NaN;
+    return Number.isNaN(n) ? Date.now() : n;
+  })());
 
   // Unlock audio on first user interaction
   useEffect(() => {
@@ -143,9 +150,13 @@ export default function ClientLayout() {
             timestamp: data.timestamp
           };
 
-          setUnreadNotifications(prev => [notification, ...prev].slice(0, 20));
-          if (showNotificationsRef.current) {
-            setPanelNotifications(prev => [notification, ...prev].slice(0, 20));
+          const isOwnAction = notification.userId && String(notification.userId) === String(user.id);
+
+          if (!isOwnAction) {
+            setUnreadNotifications(prev => [notification, ...prev].slice(0, 20));
+            if (showNotificationsRef.current) {
+              setPanelNotifications(prev => [notification, ...prev].slice(0, 20));
+            }
           }
 
           if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
@@ -193,22 +204,32 @@ export default function ClientLayout() {
     };
   }, [user, playNotificationSound]);
 
-  // Load messages (comments from support on the client's requests)
+  // Load messages (comments from support on the client's requests) with unread tracking
   useEffect(() => {
     if (!user) return;
-    api.get('/api/requests').then(data => {
-      const msgs = [];
-      data.forEach(r => {
-        if (r.comments) {
-          r.comments.forEach(c => {
-            if (c.userId !== user?.id) {
-              msgs.push({ ...c, requestId: r.id, requestSubject: r.subject });
-            }
-          });
-        }
-      });
-      setMessages(msgs.slice(0, 10));
-    }).catch(() => {});
+    let cancelled = false;
+    const loadMessages = () => {
+      api.get('/api/requests').then(data => {
+        const msgs = [];
+        data.forEach(r => {
+          if (r.comments) {
+            r.comments.forEach(c => {
+              if (c.userId !== user.id) {
+                msgs.push({ ...c, requestId: r.id, requestSubject: r.subject });
+              }
+            });
+          }
+        });
+        msgs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        if (cancelled) return;
+        setMessages(msgs);
+        const seen = messagesSeenRef.current;
+        setUnreadMessages(msgs.filter(m => new Date(m.createdAt).getTime() > seen).length);
+      }).catch(() => {});
+    };
+    loadMessages();
+    const timer = setInterval(loadMessages, 5000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [user]);
 
   // Status toast listener
@@ -393,11 +414,20 @@ export default function ClientLayout() {
               )}
             </div>
             <div className="notification-container" style={{ position: 'relative' }}>
-              <button className="theme-toggle" onClick={() => { setShowMessages(!showMessages); setShowNotifications(false); }} title={t('topbar.messages')} style={{ position: 'relative' }}>
+              <button className="theme-toggle" onClick={() => {
+                const next = !showMessages;
+                setShowMessages(next);
+                setShowNotifications(false);
+                if (next) {
+                  messagesSeenRef.current = Date.now();
+                  try { localStorage.setItem('rhms_messages_seen', String(messagesSeenRef.current)); } catch (e) {}
+                  setUnreadMessages(0);
+                }
+              }} title={t('topbar.messages')} style={{ position: 'relative' }}>
                 <span className="toggle-icon"><Icon name="mail" /></span>
-                {messages.length > 0 && (
-                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                    {messages.length > 99 ? '99+' : messages.length}
+                {unreadMessages > 0 && (
+                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#22C55E', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                    {unreadMessages > 99 ? '99+' : unreadMessages}
                   </span>
                 )}
               </button>
@@ -410,7 +440,7 @@ export default function ClientLayout() {
                     <div className="dropdown-panel-empty">{t('topbar.noMessages')}</div>
                   ) : (
                     <div className="dropdown-panel-list">
-                      {messages.map((m, i) => (
+                      {messages.slice(0, 10).map((m, i) => (
                         <div key={i} className="dropdown-panel-item" onClick={() => { navigate(`/client/requests/${m.requestId}`); setShowMessages(false); }}>
                           <div className="dropdown-panel-avatar">{m.user?.name?.charAt(0) || 'U'}</div>
                           <div className="dropdown-panel-content">

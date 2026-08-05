@@ -19,6 +19,7 @@ export default function Layout() {
   const [showMessages, setShowMessages] = useState(false);
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifications, setUnreadNotifications] = useState([]);
   const [panelNotifications, setPanelNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -27,6 +28,12 @@ export default function Layout() {
   const eventSourceRef = useRef(null);
   const audioUnlocked = useRef(false);
   const notificationAudio = useRef(null);
+  const messagesSeenRef = useRef((() => {
+    let v = null;
+    try { v = localStorage.getItem('rhms_messages_seen'); } catch (e) {}
+    const n = v ? parseInt(v, 10) : NaN;
+    return Number.isNaN(n) ? Date.now() : n;
+  })());
 
   // Unlock audio on first user interaction
   useEffect(() => {
@@ -146,19 +153,30 @@ export default function Layout() {
   };
 
   useEffect(() => {
-    api.get('/api/requests').then(data => {
-      const msgs = [];
-      data.forEach(r => {
-        if (r.comments) {
-          r.comments.forEach(c => {
-            if (c.userId !== user?.id) {
-              msgs.push({ ...c, requestId: r.id, requestSubject: r.subject });
-            }
-          });
-        }
-      });
-      setMessages(msgs.slice(0, 10));
-    }).catch(() => {});
+    if (!user) return;
+    let cancelled = false;
+    const loadMessages = () => {
+      api.get('/api/requests').then(data => {
+        const msgs = [];
+        data.forEach(r => {
+          if (r.comments) {
+            r.comments.forEach(c => {
+              if (c.userId !== user.id) {
+                msgs.push({ ...c, requestId: r.id, requestSubject: r.subject });
+              }
+            });
+          }
+        });
+        msgs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        if (cancelled) return;
+        setMessages(msgs);
+        const seen = messagesSeenRef.current;
+        setUnreadMessages(msgs.filter(m => new Date(m.createdAt).getTime() > seen).length);
+      }).catch(() => {});
+    };
+    loadMessages();
+    const timer = setInterval(loadMessages, 5000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [user]);
 
   // Seed the unread badge from persisted notifications so it survives page reloads
@@ -225,9 +243,13 @@ export default function Layout() {
             timestamp: data.timestamp
           };
 
-          setUnreadNotifications(prev => [notification, ...prev].slice(0, 20));
-          if (showNotificationsRef.current) {
-            setPanelNotifications(prev => [notification, ...prev].slice(0, 20));
+          const isOwnAction = notification.userId && String(notification.userId) === String(user.id);
+
+          if (!isOwnAction) {
+            setUnreadNotifications(prev => [notification, ...prev].slice(0, 20));
+            if (showNotificationsRef.current) {
+              setPanelNotifications(prev => [notification, ...prev].slice(0, 20));
+            }
           }
 
           if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
@@ -464,16 +486,25 @@ export default function Layout() {
               )}
             </div>
             <div className="topbar-icon-container">
-              <button className="topbar-icon" title={t('topbar.messages')} onClick={() => { setShowMessages(!showMessages); setShowNotifications(false); }}>
+              <button className="topbar-icon" title={t('topbar.messages')} onClick={() => {
+                const next = !showMessages;
+                setShowMessages(next);
+                setShowNotifications(false);
+                if (next) {
+                  messagesSeenRef.current = Date.now();
+                  try { localStorage.setItem('rhms_messages_seen', String(messagesSeenRef.current)); } catch (e) {}
+                  setUnreadMessages(0);
+                }
+              }}>
                 <Icon name="mail" />
-                {messages.length > 0 && <span className="badge">{messages.length}</span>}
+                {unreadMessages > 0 && <span className="badge">{unreadMessages > 99 ? '99+' : unreadMessages}</span>}
               </button>
               {showMessages && (
                 <div className="dropdown-panel">
                   <div className="dropdown-panel-header">{t('topbar.messages')}</div>
                   <div className="dropdown-panel-list">
                     {messages.length === 0 && <div className="dropdown-panel-empty">{t('topbar.noMessages')}</div>}
-                    {messages.map((m, i) => (
+                    {messages.slice(0, 10).map((m, i) => (
                       <div key={i} className="dropdown-panel-item" onClick={() => { navigate(`/requests/${m.requestId}`); setShowMessages(false); }}>
                         <div className="dropdown-panel-avatar">{m.user?.name?.charAt(0) || 'U'}</div>
                         <div className="dropdown-panel-content">

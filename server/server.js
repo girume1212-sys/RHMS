@@ -433,7 +433,9 @@ async function persistNotification(userId, message, data = {}) {
 // SSE notification helper (also persists to notifications table)
 function notifyAdmins(message, data = {}) {
   const payload = JSON.stringify({ message, data, timestamp: new Date().toISOString() });
+  const actorId = data.userId ? String(data.userId) : null;
   for (const [userId, clients] of sseClients) {
+    if (actorId && String(userId) === actorId) continue;
     for (const client of clients) {
       try {
         client.write(`data: ${payload}\n\n`);
@@ -444,13 +446,17 @@ function notifyAdmins(message, data = {}) {
   }
   persistNotification('all-admins', message, data);
   pool.query('SELECT id FROM users WHERE role = $1 OR role = $2 OR role = $3', ['admin', 'support', 'developer'])
-    .then(r => r.rows.forEach(row => persistNotification(row.id, message, data)))
+    .then(r => r.rows.forEach(row => {
+      if (!actorId || String(row.id) !== actorId) persistNotification(row.id, message, data);
+    }))
     .catch(() => {});
 }
 
 function notifyAll(message, data = {}) {
   const payload = JSON.stringify({ message, data, timestamp: new Date().toISOString() });
+  const actorId = data.userId ? String(data.userId) : null;
   for (const [userId, clients] of sseClients) {
+    if (actorId && String(userId) === actorId) continue;
     for (const client of clients) {
       try {
         client.write(`data: ${payload}\n\n`);
@@ -460,7 +466,9 @@ function notifyAll(message, data = {}) {
     }
   }
   pool.query('SELECT id FROM users')
-    .then(r => r.rows.forEach(row => persistNotification(row.id, message, data)))
+    .then(r => r.rows.forEach(row => {
+      if (!actorId || String(row.id) !== actorId) persistNotification(row.id, message, data);
+    }))
     .catch(() => {});
 }
 

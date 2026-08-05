@@ -2501,7 +2501,47 @@ body.dark-mode .info-attachment-file:hover {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
+
+.chat-unread-float {
+  position: absolute;
+  right: 16px;
+  z-index: 15;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #6B7280;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.chat-unread-float:hover { color: #2563EB; border-color: #2563EB; transform: translateY(-1px); }
+.chat-unread-float.active { color: #16A34A; border-color: #22C55E; }
+.chat-unread-float .chat-unread-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #22C55E;
+  color: #fff;
+  border-radius: 50%;
+  min-width: 18px;
+  height: 18px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  line-height: 1;
+}
+body.dark-mode .chat-unread-float { background: #1e293b; border-color: #334155; color: #94a3b8; }
+body.dark-mode .chat-unread-float:hover { color: #2563EB; border-color: #2563EB; }
 
 .chat-header {
   display: flex;
