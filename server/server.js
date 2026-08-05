@@ -1981,7 +1981,7 @@ app.post('/api/requests/:id/feedback', authMiddleware, async (req, res) => {
 app.get('/api/feedback', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT f.*, u.name AS user_name, r.subject AS request_subject
+      `SELECT f.*, u.name AS user_name, u.avatar AS user_avatar, r.subject AS request_subject
        FROM feedback f
        LEFT JOIN users u ON f.user_id = u.id
        LEFT JOIN requests r ON f.request_id = r.id

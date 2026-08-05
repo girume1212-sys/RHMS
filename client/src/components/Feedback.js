@@ -5,6 +5,13 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+import { API_BASE } from '../api';
+
+const getAvatarUrl = (avatar) => {
+  if (!avatar) return null;
+  if (avatar.startsWith('http')) return avatar;
+  return `${API_BASE}${avatar}`;
+};
 
 const roleColors = {
   admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981'
@@ -241,9 +248,10 @@ export default function Feedback() {
                             width: '28px', height: '28px', borderRadius: '50%',
                             background: roleColors.client || '#6B7280',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: '#fff', fontSize: '11px', fontWeight: 600, flexShrink: 0
+                            color: '#fff', fontSize: '11px', fontWeight: 600, flexShrink: 0,
+                            overflow: 'hidden'
                           }}>
-                            {f.user_name ? f.user_name.charAt(0).toUpperCase() : '?'}
+                            {getAvatarUrl(f.user_avatar) ? <img src={getAvatarUrl(f.user_avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (f.user_name ? f.user_name.charAt(0).toUpperCase() : '?')}
                           </div>
                           <span className="truncate-cell feedback-cell-muted" style={{ fontWeight: 500 }}>
                             {f.user_name || <span className="feedback-no-comment">{t('feedback.anonymous')}</span>}

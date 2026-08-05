@@ -512,7 +512,7 @@ export default function Layout() {
                     {messages.length === 0 && <div className="dropdown-panel-empty">{t('topbar.noMessages')}</div>}
                     {messages.slice(0, 10).map((m, i) => (
                       <div key={i} className="dropdown-panel-item" onClick={() => { navigate(`/requests/${m.requestId}`); setShowMessages(false); }}>
-                        <div className="dropdown-panel-avatar">{m.user?.name?.charAt(0) || 'U'}</div>
+                        <div className="dropdown-panel-avatar" style={{ overflow: 'hidden' }}>{getAvatarUrl(m.user?.avatar) ? <img src={getAvatarUrl(m.user?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (m.user?.name?.charAt(0) || 'U')}</div>
                         <div className="dropdown-panel-content">
                           <p><strong>{m.user?.name || t('common.unknown')}</strong> {t('common.commentedOn')} <strong>#{m.requestId}</strong></p>
                           <p className="dropdown-panel-message">{m.content}</p>

@@ -1189,7 +1189,7 @@ export default function RequestDetail() {
             <h3>{t('common.assignedTo')}</h3>
             {request.assignee ? (
               <div className="assignee-info">
-                <div className="assignee-avatar-lg" style={{ background: '#3B82F6' }}>{request.assignee.name.charAt(0)}</div>
+                <div className="assignee-avatar-lg" style={{ background: '#3B82F6', overflow: 'hidden' }}>{request.assignee.avatar ? <img src={`${API_BASE}${request.assignee.avatar}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : request.assignee.name.charAt(0)}</div>
                 <div>
                   <div className="assignee-name">{request.assignee.name}</div>
                   <div className="assignee-role">{request.assignee.role === 'support' ? t('role.support') : t('role.developer')}</div>

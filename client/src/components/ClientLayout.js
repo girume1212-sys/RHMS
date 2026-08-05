@@ -426,7 +426,7 @@ export default function ClientLayout() {
               }} title={t('topbar.messages')} style={{ position: 'relative' }}>
                 <span className="toggle-icon"><Icon name="mail" /></span>
                 {unreadMessages > 0 && (
-                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#22C55E', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                     {unreadMessages > 99 ? '99+' : unreadMessages}
                   </span>
                 )}
@@ -442,7 +442,7 @@ export default function ClientLayout() {
                     <div className="dropdown-panel-list">
                       {messages.slice(0, 10).map((m, i) => (
                         <div key={i} className="dropdown-panel-item" onClick={() => { navigate(`/client/requests/${m.requestId}`); setShowMessages(false); }}>
-                          <div className="dropdown-panel-avatar">{m.user?.name?.charAt(0) || 'U'}</div>
+                          <div className="dropdown-panel-avatar" style={{ overflow: 'hidden' }}>{getAvatarUrl(m.user?.avatar) ? <img src={getAvatarUrl(m.user?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (m.user?.name?.charAt(0) || 'U')}</div>
                           <div className="dropdown-panel-content">
                             <p><strong>{m.user?.name || t('common.unknown')}</strong> {t('common.commentedOn')} <strong>#{m.requestId}</strong></p>
                             <p className="dropdown-panel-message">{m.content}</p>
