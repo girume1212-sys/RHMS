@@ -9,6 +9,7 @@ import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+import { usePageBack } from '../utils/sidebarNav';
 
 export default function ClientDashboard() {
   const { t } = useTranslation();
@@ -24,6 +25,7 @@ export default function ClientDashboard() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const goBack = usePageBack('/client');
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
 
@@ -171,6 +173,7 @@ export default function ClientDashboard() {
       </div>
       <div className="page-header">
         <div>
+          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
           <h1>{t('common.myDashboard')}</h1>
           <p>{t('common.welcomeBackRequests', { name: user?.name?.split(' ')[0] })}</p>
         </div>

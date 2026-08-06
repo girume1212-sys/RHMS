@@ -1,6 +1,7 @@
 ﻿import React, { useState, useRef, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
+import { usePageBack } from '../utils/sidebarNav';
 import RequestsTable from './RequestsTable';
 import RequestCalendar from './RequestCalendar';
 import Icon from './Icon';
@@ -8,6 +9,7 @@ import Icon from './Icon';
 export default function DeveloperDashboard() {
   const { user } = useAuth();
   const { t } = useTranslation();
+  const goBack = usePageBack('/');
   const tableRef = useRef();
   const [shared, setShared] = useState({ requests: [], statuses: [], showMyTasks: false, filter: { status: '' } });
 
@@ -59,8 +61,9 @@ export default function DeveloperDashboard() {
 
   return (
     <div className="dashboard">
-      <div className="page-header">
+<div className="page-header">
         <div>
+          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
           <h1>{t('dashboard.developerWorkspace')}</h1>
           <p>{t('dashboard.developerWelcome', { name: user?.name?.split(' ')[0] })}</p>
           <h3 style={{ marginTop: '8px', marginBottom: 0 }}>{t('common.allRequests')}</h3>

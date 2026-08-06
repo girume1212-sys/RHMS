@@ -7,6 +7,7 @@ import GlobalSearch from './GlobalSearch';
 import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
 import Icon from './Icon';
+import { SIDEBAR_MENUS, useTrackPrevMenu } from '../utils/sidebarNav';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -19,6 +20,7 @@ export default function Layout() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  useTrackPrevMenu(SIDEBAR_MENUS);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);

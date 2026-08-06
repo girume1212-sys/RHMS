@@ -8,6 +8,7 @@ import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+import { usePageBack } from '../utils/sidebarNav';
 import { API_BASE } from '../api';
 
 const getAvatarUrl = (avatar) => {
@@ -35,6 +36,7 @@ export default function EscalationDashboard() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const goBack = usePageBack('/');
 
   useEffect(() => {
     loadData();
@@ -272,6 +274,7 @@ if (statusName === 'New') {
     <div className="dashboard">
       <div className="page-header">
         <div>
+          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
           <h1>{t('dashboard.escalationDashboard')}</h1>
           <p>{t('dashboard.escalationWelcome', { name: user?.name?.split(' ')[0] })}</p>
         </div>

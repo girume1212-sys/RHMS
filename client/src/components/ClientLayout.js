@@ -7,6 +7,9 @@ import GlobalSearch from './GlobalSearch';
 import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
 import Icon from './Icon';
+import { useTrackPrevMenu } from '../utils/sidebarNav';
+
+const CLIENT_MENUS = ['/client', '/client/requests', '/client/activity', '/client/profile'];
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -19,6 +22,7 @@ export default function ClientLayout() {
   const { user, logout, darkMode, toggleDarkMode, systemName, systemLogo } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  useTrackPrevMenu(CLIENT_MENUS);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);

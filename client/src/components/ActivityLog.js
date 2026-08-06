@@ -9,8 +9,8 @@ import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 
 export default function ActivityLog() {
   const navigate = useNavigate();
-  const goBack = useBackNavigation(getMenuAbove('/activity'));
   const { user } = useAuth();
+  const goBack = useBackNavigation(user?.role === 'client' ? '/client/requests' : getMenuAbove('/activity'));
   const { t } = useTranslation();
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
