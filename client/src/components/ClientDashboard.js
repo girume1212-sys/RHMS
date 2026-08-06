@@ -200,7 +200,10 @@ export default function ClientDashboard() {
         <div className="table-header-bar">
           <h3>{t('common.myRequestsCount', { count: filteredRequests.length })}</h3>
           <div className="table-header-actions">
-            <input type="text" className="filter-search" placeholder={t('common.searchMyRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+            <div className="table-search-box">
+              <span className="search-icon"><Icon name="search" size={14} /></span>
+              <input type="text" className="filter-search" placeholder={t('common.searchMyRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+            </div>
           </div>
         </div>
 

@@ -303,7 +303,7 @@ export default function Groups() {
             <h3>{t('common.groupsCount', { count: filteredGroups.length })}</h3>
             <div className="table-header-actions">
               <div className="table-search-box">
-                <span className="search-icon"></span>
+                <span className="search-icon"><Icon name="search" size={14} /></span>
                 <input type="text" placeholder={t('common.searchGroups')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
               </div>
             </div>
@@ -440,7 +440,7 @@ export default function Groups() {
                           </div>
                         )}
                         <div className="table-search-box" style={{ marginBottom: '12px' }}>
-                          <span className="search-icon"></span>
+                          <span className="search-icon"><Icon name="search" size={14} /></span>
                           <input type="text" placeholder={t('common.searchUsersToAdd')} value={addMemberSearch} onChange={(e) => setAddMemberSearch(e.target.value)} />
                         </div>
                         <div className="member-checkbox-list">
@@ -487,7 +487,7 @@ export default function Groups() {
                     {!showAddMember && members.length > 0 && (
                       <>
                         <div className="table-search-box" style={{ marginBottom: '12px' }}>
-                          <span className="search-icon"></span>
+                          <span className="search-icon"><Icon name="search" size={14} /></span>
                           <input type="text" placeholder={t('common.searchMembers')} value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} />
                         </div>
                         {filteredMembers.length === 0 ? (

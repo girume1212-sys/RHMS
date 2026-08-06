@@ -333,7 +333,7 @@ if (statusName === 'New') {
               <option value="Low">{t('priority.Low')}</option>
             </select>
             <div className="table-search-box">
-              <span className="search-icon"></span>
+              <span className="search-icon"><Icon name="search" size={14} /></span>
               <input type="text" placeholder={t('common.searchRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
             </div>
           </div>

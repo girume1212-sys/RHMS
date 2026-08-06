@@ -334,7 +334,7 @@ export default function Dashboard() {
           <h3>{t('dashboard.latestRequests')}</h3>
           <div className="table-header-actions">
             <div className="table-search-box">
-              <span className="search-icon"></span>
+              <span className="search-icon"><Icon name="search" size={14} /></span>
               <input
                 type="text"
                 placeholder={t('common.searchRequests')}
