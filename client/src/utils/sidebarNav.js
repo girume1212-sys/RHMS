@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 export const SIDEBAR_MENUS = [
@@ -14,18 +14,37 @@ export const SIDEBAR_MENUS = [
   '/settings'
 ];
 
-const PREV_MENU_KEY = 'rhms_prevMenu';
+const HISTORY_KEY = 'rhms_menuHistory';
 
-function setPrevMenu(path) {
-  try { sessionStorage.setItem(PREV_MENU_KEY, path); } catch (e) {}
+function getHistory() {
+  try {
+    const raw = sessionStorage.getItem(HISTORY_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter(p => typeof p === 'string') : [];
+  } catch (e) { return []; }
 }
 
-function clearPrevMenu() {
-  try { sessionStorage.removeItem(PREV_MENU_KEY); } catch (e) {}
+function setHistory(arr) {
+  try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(arr)); } catch (e) {}
 }
 
-function getPrevMenu() {
-  try { return sessionStorage.getItem(PREV_MENU_KEY); } catch (e) { return null; }
+/**
+ * Keeps a stack of visited menus (in sessionStorage) so Back buttons climb one
+ * level at a time, remembering the previously active menu and rising back to
+ * the dashboard (/ = bottom of the stack).
+ */
+export function useTrackPrevMenu(menuPaths) {
+  const location = useLocation();
+
+  useEffect(() => {
+    const menuPath = isMenuPath(location.pathname, menuPaths);
+    if (menuPath) {
+      const history = getHistory();
+      if (history[history.length - 1] !== menuPath) {
+        setHistory([...history, menuPath]);
+      }
+    }
+  }, [location.pathname, menuPaths]);
 }
 
 function isMenuPath(pathname, menuPaths) {
@@ -36,25 +55,9 @@ function isMenuPath(pathname, menuPaths) {
 }
 
 /**
- * Tracks the sidebar menu that was active before the current one and stores it
- * in sessionStorage so the Back buttons can return to the previously opened
- * menu (and the sidebar highlight follows along).
+ * Fallback / static parent used either as the final rise above a deep link or
+ * the same deterministic target previously relied on.
  */
-export function useTrackPrevMenu(menuPaths) {
-  const location = useLocation();
-  const prevActiveRef = useRef(null);
-
-  useEffect(() => {
-    const menuPath = isMenuPath(location.pathname, menuPaths);
-    if (menuPath) {
-      if (prevActiveRef.current && prevActiveRef.current !== menuPath) {
-        setPrevMenu(prevActiveRef.current);
-      }
-      prevActiveRef.current = menuPath;
-    }
-  }, [location.pathname, menuPaths]);
-}
-
 export function getMenuAbove(menuPath) {
   const idx = SIDEBAR_MENUS.indexOf(menuPath);
   if (idx <= 0) return '/';
@@ -62,18 +65,20 @@ export function getMenuAbove(menuPath) {
 }
 
 /**
- * Back button that remembers the previously active menu and navigates upward
- * to that parent page (so the sidebar highlight follows). Falls back to a
- * deterministic target when no active menu was recorded (direct URL entry).
+ * Back button that climbs the stored menu stack: it remembers the previously
+ * active menu, navigates upward to it, and continues upward to the dashboard
+ * on repeated clicks (loops are impossible because each click pops the stack).
  */
 export function useBackNavigation(targetPath) {
   const navigate = useNavigate();
   return () => {
-    const prev = getPrevMenu();
-    if (prev) {
-      clearPrevMenu();
-      navigate(prev);
+    const history = getHistory();
+    if (history.length >= 2) {
+      const parent = history[history.length - 2];
+      setHistory(history.slice(0, -1));
+      navigate(parent);
     } else {
+      setHistory([targetPath]);
       navigate(targetPath);
     }
   };
@@ -85,11 +90,13 @@ export function useBackNavigation(targetPath) {
 export function usePageBack(fallbackPath) {
   const navigate = useNavigate();
   return () => {
-    const prev = getPrevMenu();
-    if (prev) {
-      clearPrevMenu();
-      navigate(prev);
+    const history = getHistory();
+    if (history.length >= 2) {
+      const parent = history[history.length - 2];
+      setHistory(history.slice(0, -1));
+      navigate(parent);
     } else {
+      setHistory([fallbackPath]);
       navigate(fallbackPath);
     }
   };
