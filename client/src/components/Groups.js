@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import Toast from './Toast';
@@ -6,6 +7,7 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 import { API_BASE } from '../api';
 
 const getAvatarUrl = (avatar) => {
@@ -15,6 +17,8 @@ const getAvatarUrl = (avatar) => {
 };
 
 export default function Groups() {
+  const navigate = useNavigate();
+  const goBack = useBackNavigation(getMenuAbove('/groups'));
   const { t } = useTranslation();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -286,7 +290,7 @@ export default function Groups() {
 
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
           <h1>{t('sidebar.groups')}</h1>
           <p>{t('common.manageGroups')}</p>
         </div>

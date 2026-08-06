@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTranslation } from '../i18n/useTranslation';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
+import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 
 const TIMEZONES = [
   'Africa/Addis_Ababa', 'Africa/Nairobi', 'Africa/Cairo', 'Africa/Lagos',
@@ -27,6 +29,8 @@ const DAYS_OF_WEEK = [
 const FILE_TYPE_OPTIONS = ['jpg', 'png', 'gif', 'svg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'mp4', 'csv'];
 
 export default function Settings() {
+  const navigate = useNavigate();
+  const goBack = useBackNavigation(getMenuAbove('/settings'));
   const { applyTheme } = useAuth();
   const { changeLanguage } = useLanguage();
   const { t } = useTranslation();
@@ -232,7 +236,7 @@ export default function Settings() {
 
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>{t('common.back')}</button>
+          <button className="back-link" onClick={goBack}>{t('common.back')}</button>
           <h1>{t('settings.title')}</h1>
           <p>{t('settings.subtitle')}</p>
         </div>

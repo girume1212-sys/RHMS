@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import Icon from './Icon';
 import PageNumbers from './PageNumbers';
+import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 import { API_BASE } from '../api';
 
 const getAvatarUrl = (avatar) => {
@@ -14,6 +16,8 @@ const getAvatarUrl = (avatar) => {
 };
 
 export default function Company() {
+  const navigate = useNavigate();
+  const goBack = useBackNavigation(getMenuAbove('/company'));
   const { t } = useTranslation();
   const [companies, setCompanies] = useState([]);
   const [users, setUsers] = useState([]);
@@ -241,7 +245,7 @@ export default function Company() {
       </div>
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
           <h1>{t('sidebar.company')}</h1>
           <p>{t('company.manageSubtitle')}</p>
         </div>

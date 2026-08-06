@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
 import { translateActivityMessage } from '../i18n/translateServer';
 import Icon from './Icon';
+import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 
 export default function ActivityLog() {
+  const navigate = useNavigate();
+  const goBack = useBackNavigation(getMenuAbove('/activity'));
   const { user } = useAuth();
   const { t } = useTranslation();
   const [activities, setActivities] = useState([]);
@@ -31,7 +35,7 @@ export default function ActivityLog() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
           <h1>{t('common.activityLog')}</h1>
           <p>{t('common.activityLogSubtitle')}</p>
         </div>

@@ -6,6 +6,7 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
 import PageNumbers from './PageNumbers';
+import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -15,6 +16,7 @@ const getAvatarUrl = (avatar) => {
 
 export default function Reports() {
   const navigate = useNavigate();
+  const goBack = useBackNavigation(getMenuAbove('/reports'));
   const { t } = useTranslation();
   const [report, setReport] = useState(null);
   const [tasksPage, setTasksPage] = useState(1);
@@ -121,7 +123,7 @@ export default function Reports() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
           <h1>{t('sidebar.reportsAnalytics')}</h1>
           <p>{t('dashboard.reportsSubtitle')}</p>
         </div>

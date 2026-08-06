@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useTranslation } from '../i18n/useTranslation';
+import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 import Icon from './Icon';
 
 export default function Categories() {
@@ -10,6 +11,7 @@ export default function Categories() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const goBack = useBackNavigation(getMenuAbove('/categories'));
 
   const categoryMeta = [
     { id: '1', name: 'Hardware', icon: 'monitor', color: '#3B82F6', description: 'Computer, printer, peripherals' },
@@ -41,7 +43,7 @@ export default function Categories() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
           <h1>{t('sidebar.categories')}</h1>
           <p>{t('category.manageSubtitle')}</p>
         </div>

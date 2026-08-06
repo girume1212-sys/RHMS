@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 import { API_BASE } from '../api';
 
 const getAvatarUrl = (avatar) => {
@@ -18,6 +20,8 @@ const roleColors = {
 };
 
 export default function Feedback() {
+  const navigate = useNavigate();
+  const goBack = useBackNavigation(getMenuAbove('/feedback'));
   const [feedback, setFeedback] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -131,7 +135,7 @@ export default function Feedback() {
 
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
           <h1>{t('feedback.title')}</h1>
           <p>{t('feedback.subtitle')}</p>
         </div>

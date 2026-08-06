@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 import { API_BASE } from '../api';
 
 const getAvatarUrl = (avatar) => {
@@ -14,6 +16,8 @@ const getAvatarUrl = (avatar) => {
 };
 
 export default function Users() {
+  const navigate = useNavigate();
+  const goBack = useBackNavigation(getMenuAbove('/users'));
   const { t } = useTranslation();
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -223,7 +227,7 @@ export default function Users() {
 
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => window.history.back()}>← {t('common.back')}</button>
+          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
           <h1>{t('sidebar.users')}</h1>
           <p>{t('common.manageUsers')}</p>
         </div>
