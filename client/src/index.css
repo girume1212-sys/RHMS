@@ -5287,21 +5287,22 @@ body.dark-mode .logo-upload-btn:hover {
   height: 96px;
   object-fit: cover;
   object-position: center;
-  border-radius: 12px;
+  border-radius: 50%;
   flex-shrink: 0;
   display: block;
   overflow: hidden;
+  background: #f9fafb;
 }
 .sidebar.collapsed .sidebar-logo {
   width: 44px;
   height: 44px;
-  border-radius: 10px;
+  border-radius: 50%;
 }
 @media (max-width: 768px) {
   .sidebar-logo {
     width: 72px;
     height: 72px;
-    border-radius: 10px;
+    border-radius: 50%;
   }
   .sidebar.collapsed .sidebar-logo {
     width: 40px;

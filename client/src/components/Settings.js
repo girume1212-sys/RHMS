@@ -7,6 +7,7 @@ import { useTranslation } from '../i18n/useTranslation';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
+import { cropLogoImage } from '../utils/logoCrop';
 
 const TIMEZONES = [
   'Africa/Addis_Ababa', 'Africa/Nairobi', 'Africa/Cairo', 'Africa/Lagos',
@@ -325,14 +326,20 @@ export default function Settings() {
                 onChange={async (e) => {
                   const file = e.target.files[0];
                   if (!file) return;
-                  setLogoPreview(URL.createObjectURL(file));
+                  const firstUrl = URL.createObjectURL(file);
+                  setLogoPreview(firstUrl);
                   setLogoUploading(true);
                   try {
+                    const processed = await cropLogoImage(file);
+                    const processedUrl = URL.createObjectURL(processed);
+                    setLogoPreview(processedUrl);
+                    URL.revokeObjectURL(firstUrl);
                     const fd = new FormData();
-                    fd.append('logo', file);
+                    fd.append('logo', processed, 'logo.png');
                     const res = await api.upload('/api/settings/logo', fd);
                     handleChange('systemLogo', res.logo);
                     setLogoPreview(null);
+                    URL.revokeObjectURL(processedUrl);
                     addToast(t('settings.logoUploaded'), 'success');
                   } catch (err) {
                     console.error('Logo upload error:', err);
