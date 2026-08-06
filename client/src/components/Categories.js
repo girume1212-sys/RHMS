@@ -56,7 +56,7 @@ export default function Categories() {
             {categoryMeta.map(c => {
               const count = requests.filter(r => r.categoryId === c.id).length;
               return (
-                <div key={c.id} className="category-manage-card" style={{ '--cat-color': c.color }}>
+                <div key={c.id} className="category-manage-card" style={{ '--cat-color': c.color, cursor: 'pointer' }} onClick={() => handleViewDetails(c.id)}>
                   <div className="category-manage-card-top">
                     <div className="category-manage-icon"><Icon name={c.icon} size={32} /></div>
                     <span className="category-manage-count">{t('category.requestsCount', { count })}</span>

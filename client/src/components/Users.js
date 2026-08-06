@@ -4,6 +4,7 @@ import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
+import Icon from './Icon';
 import { API_BASE } from '../api';
 
 const getAvatarUrl = (avatar) => {
@@ -232,13 +233,16 @@ export default function Users() {
       {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{error}</div>}
 
       <div className="filters-bar">
-        <input
-          type="text"
-          placeholder={t('common.searchUsers')}
-          className="filter-search"
-          value={searchQuery}
-          onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-        />
+        <div className="filter-search-wrap">
+          <span className="search-icon"><Icon name="search" size={14} /></span>
+          <input
+            type="text"
+            placeholder={t('common.searchUsers')}
+            className="filter-search"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+          />
+        </div>
         <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}>
           <option value="">{t('common.allRoles')}</option>
           <option value="admin">{t('role.admin')}</option>

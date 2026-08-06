@@ -1965,6 +1965,26 @@ body.dark-mode .req-cal-legend-item { color: #94a3b8; }
   box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.1);
   background: white;
 }
+.filter-search-wrap {
+  position: relative;
+}
+.filter-search-wrap .search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: 0;
+  color: #9ca3af;
+  display: flex;
+  pointer-events: none;
+}
+.filter-search-wrap .search-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.filter-search-wrap input {
+  padding-left: 38px;
+}
 .filters-bar select {
   padding: 10px 12px;
   border: 1px solid rgba(0, 180, 216, 0.25);
