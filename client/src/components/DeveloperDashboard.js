@@ -36,18 +36,13 @@ export default function DeveloperDashboard() {
   };
 
   const DevStatCard = ({ icon, value, label, color, onClick }) => {
-    const [h, setH] = useState(false);
     return (
-      <div className="stat-card"
+      <div className={`stat-card${onClick ? ' stat-card-interactive' : ''}`}
         style={{
           cursor: 'pointer',
-          transform: h ? 'translateY(-4px)' : '',
-          boxShadow: h ? `0 8px 25px ${color}30` : '',
-          borderLeft: h ? `4px solid ${color}` : '4px solid transparent',
-          transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s'
+          '--stat-accent': color,
+          '--stat-shadow': `${color}30`
         }}
-        onMouseEnter={() => setH(true)}
-        onMouseLeave={() => setH(false)}
         onClick={onClick}
       >
         <div className="stat-icon" style={{ background: color + '15', color }}>{icon}</div>
@@ -75,7 +70,7 @@ export default function DeveloperDashboard() {
 
       <div className="stats-grid">
         <DevStatCard icon={<Icon name="new" />} value={stats.newCount} label={t('common.new')} color="#3B82F6" onClick={() => toggleStatusFilter('New')} />
-        <DevStatCard icon={<Icon name="assigned" />} value={stats.assigned} label={t('common.newlyAssigned')} color="#8B5CF6" onClick={() => toggleStatusFilter('Assigned')} />
+        <DevStatCard icon={<Icon name="assigned" />} value={stats.assigned} label={t('common.assigned')} color="#8B5CF6" onClick={() => toggleStatusFilter('Assigned')} />
         <DevStatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => toggleStatusFilter('In Progress')} />
         <DevStatCard icon={<Icon name="waiting" />} value={stats.waiting} label={t('common.awaitingClient')} color="#F97316" onClick={() => toggleStatusFilter('Waiting for Client')} />
         <DevStatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} color="#EF4444" onClick={() => toggleStatusFilter('Escalated')} />

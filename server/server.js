@@ -2033,6 +2033,12 @@ app.post('/api/upload', authMiddleware, async (req, res, next) => {
 });
 
 // Dashboard Stats
+// Render an ISO 'YYYY-MM-DD' day as a short axis label without timezone drift
+const formatDayLabel = (isoDate) => {
+  const [y, m, d] = String(isoDate).split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
 app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
   try {
     let whereClause = 'WHERE 1=1';
@@ -2068,6 +2074,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     statusCounts.rows.forEach(row => { statusMap[row.status_id] = parseInt(row.count); });
 
     const open = statusMap['1'] || 0;
+    const assigned = statusMap['2'] || 0;
     const inProgress = statusMap['3'] || 0;
     const waiting = statusMap['4'] || 0;
     const resolved = statusMap['5'] || 0;
@@ -2115,38 +2122,71 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     );
     const byCompany = companyCounts.rows.map(r => ({ ...r, count: parseInt(r.count) }));
 
-    const dailyData = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      const dayName = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-      const dayParams = [...params];
-      let dayQuery = `SELECT COUNT(*) FROM requests r ${whereClause} AND r.created_at::date = $${paramIndex}`;
-      dayParams.push(dateStr);
-      const createdResult = await pool.query(dayQuery, dayParams);
-
-      const resolvedResult = await pool.query(
-        `SELECT COUNT(*) FROM requests r ${whereClause} AND r.status_id = '5' AND r.updated_at::date = $${paramIndex}`,
-        dayParams
-      );
-      const closedResult = await pool.query(
-        `SELECT COUNT(*) FROM requests r ${whereClause} AND r.status_id = '6' AND r.updated_at::date = $${paramIndex}`,
-        dayParams
-      );
-
-      dailyData.push({
-        date: dayName,
-        created: parseInt(createdResult.rows[0].count),
-        resolved: parseInt(resolvedResult.rows[0].count),
-        closed: parseInt(closedResult.rows[0].count)
-      });
+    // Daily created/resolved/closed series across the requested window.
+    // `?days=all` stretches the window back to the oldest request so the whole
+    // history is charted; a numeric value plots that many days ending today.
+    // Either way a single statement fills every day in the range, so days without
+    // activity render as 0 instead of collapsing the x-axis spacing.
+    const daysParam = params.length + 1;
+    const requestedDays = String(req.query.days ?? '30').toLowerCase();
+    const todayResult = await pool.query('SELECT CURRENT_DATE::text AS today');
+    const todayIso = todayResult.rows[0].today;
+    let rangeDays = null;
+    let startDay;
+    if (requestedDays === 'all') {
+      const oldestResult = await pool.query('SELECT MIN(created_at)::date::text AS oldest FROM requests');
+      startDay = oldestResult.rows[0].oldest || todayIso;
+    } else {
+      rangeDays = Math.min(Math.max(parseInt(requestedDays, 10) || 30, 1), 365);
+      const start = new Date(`${todayIso}T00:00:00Z`);
+      start.setUTCDate(start.getUTCDate() - (rangeDays - 1));
+      startDay = start.toISOString().slice(0, 10);
     }
+    if (startDay > todayIso) startDay = todayIso;
+
+    const dailyResult = await pool.query(
+      `WITH span AS (
+         SELECT generate_series($${daysParam}::date, CURRENT_DATE, INTERVAL '1 day')::date AS day
+       ),
+       created AS (
+         SELECT r.created_at::date AS day, COUNT(*) AS count
+         FROM requests r
+         ${whereClause} AND r.created_at::date >= $${daysParam}::date
+         GROUP BY 1
+       ),
+       activity AS (
+         SELECT r.updated_at::date AS day,
+                COUNT(*) FILTER (WHERE r.status_id = '5') AS resolved,
+                COUNT(*) FILTER (WHERE r.status_id = '6') AS closed
+         FROM requests r
+         ${whereClause}
+           AND r.status_id IN ('5', '6')
+           AND r.updated_at::date >= $${daysParam}::date
+         GROUP BY 1
+       )
+       SELECT span.day::text AS day,
+              COALESCE(created.count, 0) AS created,
+              COALESCE(activity.resolved, 0) AS resolved,
+              COALESCE(activity.closed, 0) AS closed
+       FROM span
+       LEFT JOIN created ON created.day = span.day
+       LEFT JOIN activity ON activity.day = span.day
+       ORDER BY span.day`,
+      [...params, startDay]
+    );
+
+    const dailyData = dailyResult.rows.map(row => ({
+      date: formatDayLabel(row.day),
+      day: row.day,
+      created: parseInt(row.created) || 0,
+      resolved: parseInt(row.resolved) || 0,
+      closed: parseInt(row.closed) || 0
+    }));
 
     res.json({
       total,
       open,
+      assigned,
       inProgress,
       waiting,
       resolved,
@@ -2158,8 +2198,10 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       byCategory,
       byCompany,
       dailyData,
+      rangeDays,
       totalLastWeek: Math.floor(total * 0.88),
       openLastWeek: Math.floor(open * 0.92),
+      assignedLastWeek: Math.floor(assigned * 0.9),
       inProgressLastWeek: Math.floor(inProgress * 0.95),
       waitingLastWeek: Math.floor(waiting * 0.9),
       resolvedLastWeek: Math.floor(resolved * 0.85),
@@ -2285,6 +2327,187 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
     }));
 
     res.json({ labels, byCompany, byDeveloper, companyStats, developerStats });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Escalation Performance
+// Read-only aggregate of how escalated requests were handled. An "escalated
+// request" is any request that entered the 'Escalated' status at some point:
+// the transition is recorded in activity_log as a 'status_update' whose message
+// ends in "to Escalated" (a request can leave that status and be resolved, so the
+// current status alone is not enough to identify escalations). Requests that sit
+// in the 'Escalated' status without a matching log row (e.g. seeded/imported data)
+// are folded in as a fallback.
+// 'Resolved' and 'Closed' count as resolved; every other status is still pending.
+// There is no resolved_at column on requests, so average resolution time is
+// measured from the first escalation to the request's last update, which is when
+// a status change to Resolved/Closed writes updated_at.
+// The same response also carries two additive breakdowns over read-only data:
+//  - `team`: the same escalations grouped by the Support/Escalation member the
+//    request is assigned to, using the identical escalations CTE, 'Resolved' /
+//    'Closed' rule and range filter as the aggregate, so member rows sum exactly
+//    to the aggregate totals.
+//  - `developers`: per-developer assigned/resolved work and resolution time,
+//    restricted to the developer and support roles.
+// A missing or non-numeric `days` means "all time".
+app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res) => {
+  try {
+    const parsedDays = parseInt(req.query.days, 10);
+    const days = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : null;
+
+    // Per-developer workload, taken from the same request/assignee/status joins
+    // the rest of the performance endpoint uses. Restricted to the developer and
+    // support roles, which is the population that can be assigned work.
+    const devResult = await pool.query(`
+      SELECT
+        u.name AS name,
+        COUNT(*)::int AS assigned,
+        COUNT(*) FILTER (WHERE s.name IN ('Resolved', 'Closed'))::int AS resolved,
+        COUNT(*) FILTER (WHERE s.name IN ('New', 'Assigned', 'In Progress', 'Waiting for Client'))::int AS in_progress,
+        AVG(EXTRACT(EPOCH FROM (r.updated_at - r.created_at)) / 3600.0)
+          FILTER (WHERE s.name IN ('Resolved', 'Closed') AND r.updated_at >= r.created_at)
+          AS avg_resolution_hours
+      FROM requests r
+      JOIN users u ON r.assigned_to = u.id
+      LEFT JOIN statuses s ON r.status_id = s.id
+      WHERE u.role IN ('developer', 'support')
+        AND ($1::int IS NULL OR r.created_at::date >= (CURRENT_DATE - ($1::int || ' days')::interval))
+      GROUP BY u.name
+      ORDER BY assigned DESC, u.name
+    `, [days]);
+
+    const developers = devResult.rows.map(row => {
+      const assigned = row.assigned || 0;
+      const resolved = row.resolved || 0;
+      const inProgress = row.in_progress || 0;
+      return {
+        name: row.name,
+        assigned,
+        resolved,
+        inProgress,
+        successRate: assigned ? Math.round((resolved / assigned) * 1000) / 10 : 0,
+        avgResolutionHours: row.avg_resolution_hours === null || row.avg_resolution_hours === undefined
+          ? null
+          : Math.round(parseFloat(row.avg_resolution_hours) * 100) / 100
+      };
+    });
+
+    const result = await pool.query(`
+      WITH escalations AS (
+        SELECT al.request_id, MIN(al.created_at) AS escalated_at
+        FROM activity_log al
+        WHERE al.type = 'status_update'
+          AND al.message LIKE '%to Escalated'
+          AND al.request_id IS NOT NULL
+        GROUP BY al.request_id
+        UNION ALL
+        SELECT r.id, r.updated_at
+        FROM requests r
+        WHERE r.status_id = '9'
+          AND NOT EXISTS (
+            SELECT 1 FROM activity_log al
+            WHERE al.request_id = r.id
+              AND al.type = 'status_update'
+              AND al.message LIKE '%to Escalated'
+          )
+      )
+      SELECT
+        COUNT(*)::int AS total_escalated,
+        COUNT(*) FILTER (WHERE s.name IN ('Resolved', 'Closed'))::int AS resolved_escalated,
+        COUNT(*) FILTER (WHERE s.name IS NULL OR s.name NOT IN ('Resolved', 'Closed'))::int AS pending_escalated,
+        AVG(EXTRACT(EPOCH FROM (r.updated_at - e.escalated_at)) / 3600.0)
+          FILTER (WHERE s.name IN ('Resolved', 'Closed') AND r.updated_at >= e.escalated_at)
+          AS avg_resolution_hours
+      FROM escalations e
+      JOIN requests r ON r.id = e.request_id
+      LEFT JOIN statuses s ON r.status_id = s.id
+      WHERE ($1::int IS NULL OR e.escalated_at >= NOW() - ($1::int || ' days')::interval)
+    `, [days]);
+
+    const row = result.rows[0] || {};
+    const totalEscalated = row.total_escalated || 0;
+    const resolvedEscalated = row.resolved_escalated || 0;
+    const pendingEscalated = row.pending_escalated || 0;
+    const avgResolutionHours = row.avg_resolution_hours === null || row.avg_resolution_hours === undefined
+      ? null
+      : Math.round(parseFloat(row.avg_resolution_hours) * 100) / 100;
+
+    // Per-team-member breakdown of the same escalations, using the identical
+    // escalations CTE, the same 'Resolved'/'Closed' rule and the same range
+    // filter as the aggregate above, so the member rows always add up exactly to
+    // totalEscalated / resolvedEscalated / pendingEscalated. The name comes from
+    // users.name via requests.assigned_to, i.e. whoever the request is actually
+    // assigned to for handling. Escalated requests with no assignee are kept in a
+    // single trailing bucket so the totals still reconcile.
+    const teamResult = await pool.query(`
+      WITH escalations AS (
+        SELECT al.request_id, MIN(al.created_at) AS escalated_at
+        FROM activity_log al
+        WHERE al.type = 'status_update'
+          AND al.message LIKE '%to Escalated'
+          AND al.request_id IS NOT NULL
+        GROUP BY al.request_id
+        UNION ALL
+        SELECT r.id, r.updated_at
+        FROM requests r
+        WHERE r.status_id = '9'
+          AND NOT EXISTS (
+            SELECT 1 FROM activity_log al
+            WHERE al.request_id = r.id
+              AND al.type = 'status_update'
+              AND al.message LIKE '%to Escalated'
+          )
+      )
+      SELECT
+        r.assigned_to AS user_id,
+        u.name AS name,
+        u.role AS role,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE s.name IN ('Resolved', 'Closed'))::int AS resolved,
+        COUNT(*) FILTER (WHERE s.name IS NULL OR s.name NOT IN ('Resolved', 'Closed'))::int AS pending,
+        AVG(EXTRACT(EPOCH FROM (r.updated_at - e.escalated_at)) / 3600.0)
+          FILTER (WHERE s.name IN ('Resolved', 'Closed') AND r.updated_at >= e.escalated_at)
+          AS avg_resolution_hours
+      FROM escalations e
+      JOIN requests r ON r.id = e.request_id
+      LEFT JOIN users u ON u.id = r.assigned_to
+      LEFT JOIN statuses s ON r.status_id = s.id
+      WHERE ($1::int IS NULL OR e.escalated_at >= NOW() - ($1::int || ' days')::interval)
+      GROUP BY r.assigned_to, u.name, u.role
+      ORDER BY total DESC, name NULLS LAST
+    `, [days]);
+
+    const team = teamResult.rows.map(r => {
+      const total = r.total || 0;
+      return {
+        userId: r.user_id || null,
+        name: r.name || null,
+        role: r.role || null,
+        total,
+        resolved: r.resolved || 0,
+        pending: r.pending || 0,
+        successRate: total ? Math.round((r.resolved || 0) / total * 1000) / 10 : 0,
+        avgResolutionHours: r.avg_resolution_hours === null || r.avg_resolution_hours === undefined
+          ? null
+          : Math.round(parseFloat(r.avg_resolution_hours) * 100) / 100
+      };
+    });
+
+    res.json({
+      rangeDays: days,
+      metrics: {
+        totalEscalated,
+        resolvedEscalated,
+        pendingEscalated,
+        avgResolutionHours,
+        successRate: totalEscalated ? Math.round((resolvedEscalated / totalEscalated) * 1000) / 10 : 0
+      },
+      team,
+      developers
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

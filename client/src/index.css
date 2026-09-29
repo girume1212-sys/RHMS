@@ -883,7 +883,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 20px 16px;
   margin-bottom: 24px;
 }
 .stat-card {
@@ -911,6 +911,29 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 .stat-change { font-size: 12px; margin-top: 4px; display: block; }
 .stat-change.up { color: #10B981; }
 .stat-change.down { color: #EF4444; }
+
+/* Admin request stat card hover — same treatment as the performance stat cards:
+   12px lift, accent-tinted glow, accent left border. The left border is
+   transparent at rest so it never shifts the layout on hover. Confined to
+   devices with a real cursor so touch screens don't get a stuck highlight. */
+.stat-card {
+  border-left: 4px solid transparent;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .stat-card-interactive:hover,
+  body.dark-mode .stat-card-interactive:hover {
+    transform: translateY(-12px);
+    box-shadow: 0 20px 38px var(--stat-shadow, var(--rhms-stat-hover-shadow)),
+      var(--rhms-stat-hover-contact);
+    border-left-color: var(--stat-accent, var(--rhms-stat-hover-border));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stat-card { transition: none; }
+  .stat-card-interactive:hover,
+  body.dark-mode .stat-card-interactive:hover { transform: none; }
+}
 
 .stat-card-simple {
   background: white;
@@ -984,6 +1007,245 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+
+/* Escalation Performance Chart */
+/* Five KPI cards: four across on the first row, the leftover card centred on the
+   second. Flexbox rather than grid so trailing cards centre themselves at every
+   breakpoint instead of needing per-breakpoint orphan placement; the media
+   queries only ever change --esc-kpi-cols. Card width is derived from the
+   column count and the real column gap, so every card stays exactly equal at any
+   row count, orphan included. */
+.esc-kpi-grid {
+  --esc-kpi-cols: 4;
+  --esc-kpi-gap-x: 12px;
+  --esc-kpi-gap-y: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--esc-kpi-gap-y) var(--esc-kpi-gap-x);
+  margin-bottom: 20px;
+}
+.esc-kpi {
+  flex: 0 0 calc((100% - (var(--esc-kpi-cols) - 1) * var(--esc-kpi-gap-x)) / var(--esc-kpi-cols));
+  background: #f9fafb;
+  border: 1px solid #f1f5f9;
+  border-left: 4px solid var(--esc-kpi-accent, #3b82f6);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-radius: 10px;
+  padding: 14px 16px;
+  min-width: 0;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+/* Five cards don't divide evenly into three, so the last two centre as a pair. */
+@media (max-width: 1200px) {
+  .esc-kpi-grid { --esc-kpi-cols: 3; }
+}
+.esc-kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--esc-kpi-accent, #3b82f6);
+  overflow-wrap: anywhere;
+}
+.esc-kpi-label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+  font-weight: 500;
+}
+.esc-kpi-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+/* Performance stat card hover — mirrors the admin request StatCard: lift 4px,
+   accent-tinted glow (0 8px 25px at the card's own color + '30'), accent left
+   border. Confined to devices with a real cursor so touch screens don't get a
+   card stuck in the highlighted state. */
+@media (hover: hover) and (pointer: fine) {
+  .esc-kpi:hover,
+  body.dark-mode .esc-kpi:hover {
+    transform: translateY(-12px);
+    box-shadow: 0 20px 38px var(--esc-kpi-shadow, var(--rhms-stat-hover-shadow)),
+      var(--rhms-stat-hover-contact);
+    border-left-color: var(--esc-kpi-accent, var(--rhms-stat-hover-border));
+  }
+}
+
+/* Keep the effect, drop the motion, for users who ask for less animation. */
+@media (prefers-reduced-motion: reduce) {
+  .esc-kpi,
+  .esc-kpi-value {
+    transition: none;
+  }
+  .esc-kpi:hover,
+  body.dark-mode .esc-kpi:hover,
+  .esc-kpi:hover .esc-kpi-value {
+    transform: none;
+  }
+}
+.esc-axis-label {
+  font-size: 12px;
+  font-weight: 600;
+  fill: #6b7280;
+}
+.esc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 20px;
+  text-align: center;
+  color: #6b7280;
+}
+.esc-empty svg { opacity: 0.6; }
+.esc-legend-note {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 12px 0 0;
+  text-align: center;
+}
+.esc-tooltip {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 10px 12px;
+  min-width: 190px;
+}
+.esc-tooltip-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+.esc-tooltip-subtitle {
+  font-size: 11px;
+  color: #9ca3af;
+  margin: -4px 0 6px;
+}
+.perf-rate-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.perf-rate-badge {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.perf-rate-caption {
+  font-size: 11px;
+  color: #9ca3af;
+}
+.perf-rate-counts .esc-tooltip-row:first-child { margin-top: 0; }
+.esc-team-roster {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+}
+.esc-team-roster-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+.esc-team-roster-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.esc-team-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #f9fafb;
+}
+.esc-team-chip-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+.esc-team-chip-role {
+  font-size: 11px;
+  color: #6b7280;
+}
+.esc-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4b5563;
+  padding: 2px 0;
+}
+.esc-tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.esc-tooltip-label { flex: 1; }
+.esc-tooltip-value { font-weight: 600; }
+.esc-tooltip-footer {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #f1f5f9;
+}
+
+@media (max-width: 768px) {
+  .esc-kpi-grid {
+    --esc-kpi-cols: 2;
+    --esc-kpi-gap-x: 10px;
+    --esc-kpi-gap-y: 10px;
+  }
+  .esc-kpi { padding: 12px; }
+  .esc-kpi-value { font-size: 20px; }
+}
+
+body.dark-mode .esc-kpi {
+  background: #0f172a;
+  border-color: #334155;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+body.dark-mode .esc-kpi-label { color: #cbd5e1; }
+body.dark-mode .esc-kpi-hint { color: #94a3b8; }
+body.dark-mode .esc-axis-label { fill: #cbd5e1; }
+body.dark-mode .esc-empty { color: #cbd5e1; }
+body.dark-mode .esc-legend-note { color: #94a3b8; }
+body.dark-mode .esc-tooltip {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+body.dark-mode .esc-tooltip-title { color: #e2e8f0; }
+body.dark-mode .esc-tooltip-subtitle { color: #94a3b8; }
+body.dark-mode .perf-rate-row { border-bottom-color: #334155; }
+body.dark-mode .perf-rate-caption { color: #94a3b8; }
+body.dark-mode .esc-team-roster { border-top-color: #334155; }
+body.dark-mode .esc-team-chip {
+  background: #0f172a;
+  border-color: #334155;
+}
+body.dark-mode .esc-team-chip-name { color: #e2e8f0; }
+body.dark-mode .esc-team-chip-role { color: #94a3b8; }
+body.dark-mode .esc-tooltip-row { color: #cbd5e1; }
+body.dark-mode .esc-tooltip-footer { border-top-color: #334155; }
 
 /* Bottom Row */
 .bottom-row {
@@ -3645,6 +3907,74 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
   color: #9ca3af;
   font-size: 14px;
 }
+
+/* Shaded line graph (Requests Overview) */
+.chart-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.chart-card-header h3 { margin-bottom: 2px; }
+.chart-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+.range-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+.range-toggle-btn {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.range-toggle-btn:hover { color: #111827; }
+.range-toggle-btn.active {
+  background: #3B82F6;
+  color: #fff;
+}
+.chart-container.overview-chart {
+  flex-wrap: nowrap;
+  width: 100%;
+}
+.overview-chart .chart-empty {
+  width: 100%;
+  text-align: center;
+  padding: 40px 0;
+  color: #9ca3af;
+  font-size: 14px;
+}
+.chart-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+.chart-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.chart-summary-label { color: #6b7280; }
+.chart-summary-value { font-weight: 700; color: #111827; }
 
 /* ========== RESPONSIVE ========== */
 @media (max-width: 1200px) {
@@ -7077,6 +7407,21 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
   --rhms-row-alt: #F8FAFC;
   --rhms-border: #E5E7EB;
   --rhms-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.05);
+
+  /* Shared hover treatment for stat cards (.stat-card / .esc-kpi).
+     One deliberate brand-blue accent instead of each card's own color: the raw
+     accents include alarm-red for Escalated/Success Rate, and a red glow reads
+     as an error state rather than a pointer affordance. Deepened blue keeps
+     the depth cue, and the layered slate beneath keeps the card grounded on
+     light backgrounds where a blue-only shadow can look washed out. */
+  --rhms-stat-hover-border: #1D4ED8;
+  --rhms-stat-hover-shadow: 0 20px 38px rgba(29, 78, 216, 0.28), 0 4px 12px rgba(15, 23, 42, 0.10);
+
+  /* Admin request cards tint their hover glow with the card's own status color
+     (--stat-shadow, set inline per card) instead of one shared brand blue, so
+     Resolved reads green and Escalated reads red. The contact layer underneath
+     stays neutral slate — a second tinted layer muddies the hue. */
+  --rhms-stat-hover-contact: 0 4px 12px rgba(15, 23, 42, 0.10);
 }
 
 /* ================= TABLES ================= */
@@ -8069,6 +8414,32 @@ body.dark-mode .requests-table-card h3 {
 }
 body.dark-mode .stat-card-simple h3 {
   color: #60a5fa;
+}
+
+/* Dark mode: requests overview chart header, toggle and totals */
+body.dark-mode .chart-subtitle,
+body.dark-mode .chart-summary-label {
+  color: #94a3b8;
+}
+body.dark-mode .chart-summary-value {
+  color: #f1f5f9;
+}
+body.dark-mode .chart-summary {
+  border-top-color: #334155;
+}
+body.dark-mode .range-toggle {
+  background: #0f172a;
+  border-color: #334155;
+}
+body.dark-mode .range-toggle-btn {
+  color: #94a3b8;
+}
+body.dark-mode .range-toggle-btn:hover {
+  color: #f1f5f9;
+}
+body.dark-mode .range-toggle-btn.active {
+  background: #3B82F6;
+  color: #fff;
 }
 
 /* Dark mode: primary-colored links/ids brighten to blue-300 for contrast */

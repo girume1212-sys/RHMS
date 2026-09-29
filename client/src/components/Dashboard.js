@@ -1,8 +1,8 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api, API_BASE } from '../api';
-import { PieChart, Pie, Cell, LineChart, Line, BarChart, Bar, Rectangle, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
@@ -16,31 +16,31 @@ const getAvatarUrl = (avatar) => {
   return `${API_BASE}${avatar}`;
 };
 
+// Performance is a percentage, so its axis is pinned to 0-100 with a fixed tick
+// set. Recharts therefore cannot auto-fit the scale, and a 70% point sits
+// exactly on the 70% tick while 90% sits on the 90% tick: the series is never
+// stretched or compressed to fit the data.
+const RATE_AXIS = { domain: [0, 100], ticks: [0, 25, 50, 75, 100] };
+
+// Two soft, low-saturation tones so the two performance series stay readable
+// side by side: muted indigo for the Escalation Team, muted teal for
+// Developers. Each is paired with a vertical gradient that fades to almost
+// nothing, keeping the shaded area light rather than a saturated block.
+const PERF_TONES = {
+  escalation: { line: '#818CF8', fillFrom: '#818CF8', fillTo: '#C7D2FE' },
+  developer: { line: '#5EEAD4', fillFrom: '#5EEAD4', fillTo: '#CCFBF1' }
+};
+
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
-const STATUS_CONFIG = [
-  { key: 'New', color: '#3B82F6' },
-  { key: 'Assigned', color: '#8B5CF6' },
-  { key: 'In Progress', color: '#F59E0B' },
-  { key: 'Waiting for Client', color: '#F97316' },
-  { key: 'Resolved', color: '#10B981' },
-  { key: 'Closed', color: '#6B7280' },
-  { key: 'Escalated', color: '#EF4444' },
-];
-
 function StatCard({ icon, value, label, change, changeType, color, onClick, changeLabel }) {
-  const [hover, setHover] = useState(false);
   return (
-    <div className="stat-card"
+    <div className={`stat-card${onClick ? ' stat-card-interactive' : ''}`}
       style={{
         cursor: onClick ? 'pointer' : 'default',
-        transform: hover ? 'translateY(-4px)' : '',
-        boxShadow: hover ? `0 8px 25px ${color}30` : '',
-        borderLeft: hover ? `4px solid ${color}` : '4px solid transparent',
-        transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s'
+        '--stat-accent': color,
+        '--stat-shadow': `${color}30`
       }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       onClick={onClick}
     >
       <div className="stat-icon" style={{ background: color + '15', color }}>{icon}</div>
@@ -55,7 +55,56 @@ function StatCard({ icon, value, label, change, changeType, color, onClick, chan
   );
 }
 
-const PERF_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16'];
+// Tooltip for the shaded performance trend charts. It leads with the exact
+// performance percentage, then lists the underlying counts that produced it so
+// the rate is never a number without context. `rows` describes the count rows
+// to show, `tone` tints the percentage badge to match that chart's line.
+function PerfTooltip({ active, payload, t, rows, tone, rateLabelKey, formatHours, sublabel, showHours }) {
+  if (!active || !payload || !payload.length) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+  const sublabelText = typeof sublabel === 'function' ? sublabel(row) : sublabel;
+  const rate = Number(row.successRate) || 0;
+  return (
+    <div className="esc-tooltip">
+      <div className="esc-tooltip-title">{row.label || row.name}</div>
+      {sublabelText && <div className="esc-tooltip-subtitle">{sublabelText}</div>}
+      <div className="perf-rate-row">
+        <span className="perf-rate-badge" style={{ color: tone }}>{rate}%</span>
+        <span className="perf-rate-caption">{t(rateLabelKey)}</span>
+      </div>
+      <div className="perf-rate-counts">
+        {rows.map(r => (
+          <div className="esc-tooltip-row" key={r.dataKey}>
+            <span className="esc-tooltip-dot" style={{ background: r.color }} />
+            <span className="esc-tooltip-label">{t(r.labelKey)}</span>
+            <span className="esc-tooltip-value">{Number(row[r.dataKey]) || 0}</span>
+          </div>
+        ))}
+        {showHours && (
+          <div className="esc-tooltip-row esc-tooltip-footer">
+            <span className="esc-tooltip-dot" style={{ background: tone }} />
+            <span className="esc-tooltip-label">{t('dashboard.avgResolutionTime')}</span>
+            <span className="esc-tooltip-value">{formatHours(row.avgResolutionHours)}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const WEEK_SERIES = [
+  { key: 'created', labelKey: 'common.new', color: '#3B82F6' },
+  { key: 'resolved', labelKey: 'common.resolved', color: '#10B981' },
+  { key: 'closed', labelKey: 'common.closed', color: '#8B5CF6' },
+];
+
+const RANGE_OPTIONS = [
+  { days: 7, labelKey: 'dashboard.range7' },
+  { days: 30, labelKey: 'dashboard.range30' },
+  { days: 90, labelKey: 'dashboard.range90' },
+  { days: 'all', labelKey: 'dashboard.rangeAll' },
+];
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -65,17 +114,22 @@ export default function Dashboard() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [perfData, setPerfData] = useState(null);
-  const [perfView, setPerfView] = useState('company');
+  const [escPerfData, setEscPerfData] = useState(null);
+  const [perfView, setPerfView] = useState('escalation');
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [rangeDays, setRangeDays] = useState('all');
   const { user } = useAuth();
   const navigate = useNavigate();
   const changeLabel = t('common.fromLastWeek');
 
   useEffect(() => {
-    api.get('/api/dashboard/stats').then(setStats).catch(err => setError(t('common.failedToLoadDashboard') + ' ' + err.message));
+    api.get(`/api/dashboard/stats?days=${rangeDays}`).then(setStats).catch(err => setError(t('common.failedToLoadDashboard') + ' ' + err.message));
+  }, [user, rangeDays]);
+
+  useEffect(() => {
     api.get('/api/requests').then(data => {
       let filtered = data;
       if (user?.role === 'developer' || user?.role === 'support') {
@@ -85,6 +139,193 @@ export default function Dashboard() {
     }).catch(err => setError(t('common.failedToLoadRequests') + ' ' + err.message));
     api.get('/api/dashboard/performance?days=30').then(setPerfData).catch(err => console.error('Perf fetch error:', err));
   }, [user]);
+
+  useEffect(() => {
+    api.get(`/api/dashboard/escalation-performance?days=${rangeDays}`)
+      .then(setEscPerfData)
+      .catch(err => console.error('Escalation perf fetch error:', err));
+  }, [user, rangeDays]);
+
+  const weekData = useMemo(() => (stats?.dailyData || []).map(d => ({
+    ...d,
+    created: Number(d.created) || 0,
+    resolved: Number(d.resolved) || 0,
+    closed: Number(d.closed) || 0
+  })), [stats?.dailyData]);
+
+  const weekTotals = useMemo(() => weekData.reduce((acc, d) => ({
+    created: acc.created + d.created,
+    resolved: acc.resolved + d.resolved,
+    closed: acc.closed + d.closed
+  }), { created: 0, resolved: 0, closed: 0 }), [weekData]);
+
+  // Count rows shown underneath the percentage in each performance tooltip.
+  // These are the same numbers the series is computed from, so the rate always
+  // has its inputs visible.
+  const ESC_COUNT_ROWS = useMemo(() => ([
+    { dataKey: 'totalEscalated', labelKey: 'dashboard.totalEscalated', color: '#3B82F6' },
+    { dataKey: 'resolvedEscalated', labelKey: 'dashboard.resolvedEscalated', color: '#10B981' },
+    { dataKey: 'pendingEscalated', labelKey: 'dashboard.pendingEscalated', color: '#F59E0B' }
+  ]), []);
+
+  const escMetrics = escPerfData?.metrics || null;
+
+  const DEV_COUNT_ROWS = useMemo(() => ([
+    { dataKey: 'assigned', labelKey: 'dashboard.assignedToDev', color: '#8B5CF6' },
+    { dataKey: 'inProgress', labelKey: 'dashboard.inProgressDev', color: '#F59E0B' },
+    { dataKey: 'resolved', labelKey: 'dashboard.resolvedDev', color: '#10B981' }
+  ]), []);
+
+  const devChartData = useMemo(() => {
+    const rows = escPerfData?.developers;
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    return rows
+      .map(row => ({
+        name: row.name,
+        label: row.name,
+        assigned: Number(row.assigned) || 0,
+        inProgress: Number(row.inProgress) || 0,
+        resolved: Number(row.resolved) || 0,
+        avgResolutionHours: row.avgResolutionHours ?? null,
+        successRate: Number(row.successRate) || 0
+      }))
+      .sort((a, b) => b.assigned - a.assigned || a.name.localeCompare(b.name));
+  }, [escPerfData?.developers]);
+
+  const devTotalAssigned = useMemo(
+    () => devChartData.reduce((sum, d) => sum + d.assigned, 0),
+    [devChartData]
+  );
+
+  // Team-wide success rate, weighted by workload, rather than an unweighted
+  // mean of per-developer percentages.
+  const devSuccessRate = useMemo(() => {
+    if (devTotalAssigned === 0) return 0;
+    const resolved = devChartData.reduce((s, d) => s + d.resolved, 0);
+    return Math.round((resolved / devTotalAssigned) * 1000) / 10;
+  }, [devChartData, devTotalAssigned]);
+
+  const devKpis = useMemo(() => {
+    if (devChartData.length === 0) return [];
+    const sum = key => devChartData.reduce((s, d) => s + d[key], 0);
+    return [
+      { key: 'developers', labelKey: 'role.developers', color: '#3B82F6', value: devChartData.length },
+      { key: 'total', labelKey: 'dashboard.totalAssigned', color: '#8B5CF6', value: devTotalAssigned },
+      { key: 'open', labelKey: 'dashboard.inProgressDev', color: '#F59E0B', value: sum('inProgress') },
+      { key: 'done', labelKey: 'dashboard.resolvedDev', color: '#10B981', value: sum('resolved') },
+      { key: 'avg', labelKey: 'dashboard.developerSuccessRate', color: '#EF4444', value: `${devSuccessRate}%` }
+    ];
+  }, [devChartData, devTotalAssigned, devSuccessRate]);
+
+  const escRangeLabel = useMemo(() => {
+    if (rangeDays === 7) return t('dashboard.escalationRange7');
+    if (rangeDays === 30) return t('dashboard.escalationRange30');
+    if (rangeDays === 90) return t('dashboard.escalationRange90');
+    return t('dashboard.escalationRangeAll');
+  }, [rangeDays, t]);
+
+  // One bar group per Support/Escalation team member, named from the database
+  // (users.name via requests.assigned_to). The rows come from the same
+  // escalations set the KPIs above are computed from, so they always add up to
+  // the totals. Escalated requests with nobody assigned are kept as a single
+  // "unassigned" column so nothing goes missing.
+  const escTeam = useMemo(() => {
+    const rows = escPerfData?.team;
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    return rows
+      .map(row => ({
+        userId: row.userId || null,
+        name: row.name || null,
+        role: row.role || null,
+        totalEscalated: Number(row.total) || 0,
+        resolvedEscalated: Number(row.resolved) || 0,
+        pendingEscalated: Number(row.pending) || 0,
+        avgResolutionHours: row.avgResolutionHours ?? null,
+        successRate: Number(row.successRate) || 0
+      }))
+      .sort((a, b) => b.totalEscalated - a.totalEscalated
+        || String(a.name || '').localeCompare(String(b.name || '')));
+  }, [escPerfData?.team]);
+
+  // X-axis label: the real member name, or the unassigned label when the
+  // request had nobody attached. Kept short so the axis stays readable.
+  const escTeamLabel = useCallback((row) => (
+    row.name || t('dashboard.unassignedMember')
+  ), [t]);
+
+  const escTeamRoleLabel = useCallback((row) => {
+    if (!row.role) return '';
+    if (row.role === 'support') return t('role.support');
+    if (row.role === 'developer') return t('role.developer');
+    if (row.role === 'admin') return t('role.admin');
+    return row.role;
+  }, [t]);
+
+  const escChartData = useMemo(() => {
+    if (escTeam.length > 0) {
+      return escTeam.map(row => ({
+        ...row,
+        label: escTeamLabel(row)
+      }));
+    }
+    // Fallback to the single aggregate column if no per-member rows came back.
+    if (!escMetrics) return [];
+    return [{
+      userId: null,
+      name: null,
+      role: null,
+      label: escRangeLabel,
+      totalEscalated: escMetrics.totalEscalated || 0,
+      resolvedEscalated: escMetrics.resolvedEscalated || 0,
+      pendingEscalated: escMetrics.pendingEscalated || 0,
+      avgResolutionHours: escMetrics.avgResolutionHours ?? null,
+      successRate: escMetrics.successRate || 0
+    }];
+  }, [escTeam, escMetrics, escRangeLabel, escTeamLabel]);
+
+  const escKpis = useMemo(() => {
+    if (!escMetrics) return [];
+    return [
+      { key: 'totalEscalated', labelKey: 'dashboard.totalEscalated', color: '#3B82F6', value: escMetrics.totalEscalated ?? 0 },
+      { key: 'resolvedEscalated', labelKey: 'dashboard.resolvedEscalated', color: '#10B981', value: escMetrics.resolvedEscalated ?? 0 },
+      { key: 'pendingEscalated', labelKey: 'dashboard.pendingEscalated', color: '#F59E0B', value: escMetrics.pendingEscalated ?? 0 },
+      {
+        key: 'avgResolutionHours',
+        labelKey: 'dashboard.avgResolutionTime',
+        color: '#8B5CF6',
+        hintKey: 'dashboard.escalationAvgBasis',
+        value: escMetrics.avgResolutionHours === null || escMetrics.avgResolutionHours === undefined
+          ? '—'
+          : `${escMetrics.avgResolutionHours} h`
+      },
+      { key: 'successRate', labelKey: 'dashboard.escalationSuccessRate', color: '#EF4444', value: `${escMetrics.successRate ?? 0}%` }
+    ];
+  }, [escMetrics]);
+
+  const escFormatHours = useCallback((hours) => {
+    const n = Number(hours);
+    if (!Number.isFinite(n)) return '—';
+    if (n < 1) return `${Math.round(n * 60)} min`;
+    if (n < 48) return `${Math.round(n * 10) / 10} h`;
+    return `${Math.round((n / 24) * 10) / 10} d`;
+  }, []);
+
+  // Shows the member's role underneath their name in the chart tooltip.
+  const escTooltipRole = useCallback(
+    row => (row ? escTeamRoleLabel(row) : ''),
+    [escTeamRoleLabel]
+  );
+
+  // The team members rendered on the X axis, in the same order as the columns.
+  const escTeamMembers = useMemo(
+    () => escChartData.map(row => ({
+      key: row.userId || 'unassigned',
+      name: row.label,
+      role: escTeamRoleLabel(row),
+      total: row.totalEscalated
+    })),
+    [escChartData, escTeamRoleLabel]
+  );
 
   if (!stats && !error) return <div className="loading-screen"><div className="spinner"></div></div>;
   if (error && !stats) return (
@@ -192,11 +433,12 @@ export default function Dashboard() {
       </div>
 
       <div className="stats-grid">
-        <StatCard icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} changeLabel={changeLabel} color="#3B82F6" onClick={() => navigate('/requests')} />
-        <StatCard icon={<Icon name="new" />} value={stats.open} label={t('common.newRequests')} change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} changeLabel={changeLabel} color="#10B981" onClick={() => navigate('/requests?status=1')} />
+        <StatCard icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} changeLabel={changeLabel} color="#FACC15" onClick={() => navigate('/requests')} />
+        <StatCard icon={<Icon name="new" />} value={stats.open} label={t('common.newRequests')} change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} changeLabel={changeLabel} color="#3B82F6" onClick={() => navigate('/requests?status=1')} />
+        <StatCard icon={<Icon name="assigned" />} value={stats.assigned} label={t('common.assigned')} change={getChangePercent(stats.assigned, stats.assignedLastWeek).text} changeType={getChangePercent(stats.assigned, stats.assignedLastWeek).type} changeLabel={changeLabel} color="#8B5CF6" onClick={() => navigate('/requests?status=2')} />
         <StatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} change={getChangePercent(stats.inProgress, stats.inProgressLastWeek).text} changeType={getChangePercent(stats.inProgress, stats.inProgressLastWeek).type} changeLabel={changeLabel} color="#F59E0B" onClick={() => navigate('/requests?status=3')} />
         <StatCard icon={<Icon name="waiting" />} value={stats.waiting} label={t('common.waitingForClient')} change={getChangePercent(stats.waiting, stats.waitingLastWeek).text} changeType={getChangePercent(stats.waiting, stats.waitingLastWeek).type} changeLabel={changeLabel} color="#F97316" onClick={() => navigate('/requests?status=4')} />
-        <StatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} changeLabel={changeLabel} color="#8B5CF6" onClick={() => navigate('/requests?status=5')} />
+        <StatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} changeLabel={changeLabel} color="#10B981" onClick={() => navigate('/requests?status=5')} />
         <StatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} change={getChangePercent(stats.escalated, stats.escalatedLastWeek).text} changeType={getChangePercent(stats.escalated, stats.escalatedLastWeek).type} changeLabel={changeLabel} color="#EF4444" onClick={() => navigate('/requests?status=9')} />
         <StatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} changeLabel={changeLabel} color="#6B7280" onClick={() => navigate('/requests?status=6')} />
         <StatCard icon={<Icon name="rejected" />} value={stats.rejected} label={t('common.rejected')} change={getChangePercent(stats.rejected, stats.rejectedLastWeek).text} changeType={getChangePercent(stats.rejected, stats.rejectedLastWeek).type} changeLabel={changeLabel} color="#DC2626" onClick={() => navigate('/requests?status=8')} />
@@ -264,21 +506,87 @@ export default function Dashboard() {
         </div>
 
         <div className="chart-card" style={{ flex: 1 }}>
-          <h3>{t('dashboard.requestsOverviewWeek')}</h3>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={stats.dailyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
-                <YAxis stroke="#6b7280" fontSize={12} />
-                <Tooltip />
-                <Legend formatter={(value) => ({ created: t('common.new'), resolved: t('common.resolved'), closed: t('common.closed') }[value] || value)} />
-                <Line type="monotone" dataKey="created" name={t('common.new')} stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="resolved" name={t('common.resolved')} stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="closed" name={t('common.closed')} stroke="#8B5CF6" strokeWidth={2} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="chart-card-header">
+            <div>
+              <h3>{t('dashboard.requestsOverview')}</h3>
+              <p className="chart-subtitle">{t('dashboard.requestsOverviewSubtitle')}</p>
+            </div>
+            <div className="range-toggle" role="group" aria-label={t('dashboard.requestsOverview')}>
+              {RANGE_OPTIONS.map(r => (
+                <button
+                  key={r.days}
+                  type="button"
+                  className={`range-toggle-btn ${rangeDays === r.days ? 'active' : ''}`}
+                  onClick={() => setRangeDays(r.days)}
+                >
+                  {t(r.labelKey)}
+                </button>
+              ))}
+            </div>
           </div>
+          <div className="chart-container overview-chart">
+            {weekData.length === 0 ? (
+              <div className="chart-empty">{t('common.noData')}</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <AreaChart data={weekData} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
+                  <defs>
+                    {WEEK_SERIES.map(s => (
+                      <linearGradient key={s.key} id={`weekFill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={s.color} stopOpacity={0.35} />
+                        <stop offset="100%" stopColor={s.color} stopOpacity={0.02} />
+                      </linearGradient>
+                    ))}
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#6b7280"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={{ stroke: '#e5e7eb' }}
+                    tickMargin={6}
+                    interval={weekData.length > 14 ? 'preserveStartEnd' : 0}
+                    minTickGap={4}
+                  />
+                  <YAxis stroke="#6b7280" fontSize={11} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} allowDecimals={false} width={36} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                    labelStyle={{ fontWeight: 600, marginBottom: 4 }}
+                    cursor={{ stroke: '#9ca3af', strokeWidth: 1, strokeDasharray: '4 4' }}
+                    formatter={(value, name) => [value, t(WEEK_SERIES.find(s => t(s.labelKey) === name)?.labelKey || 'common.total')]}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: 12, fontSize: 12 }} iconType="circle" iconSize={10} />
+                  {WEEK_SERIES.map(s => (
+                    <Area
+                      key={s.key}
+                      type="monotone"
+                      dataKey={s.key}
+                      name={t(s.labelKey)}
+                      stroke={s.color}
+                      strokeWidth={2}
+                      fill={`url(#weekFill-${s.key})`}
+                      fillOpacity={1}
+                      connectNulls
+                      dot={weekData.length > 14 ? false : { r: 3, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                      activeDot={{ r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                    />
+                  ))}
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+          {weekData.length > 0 && (
+            <div className="chart-summary">
+              {WEEK_SERIES.map(s => (
+                <div key={s.key} className="chart-summary-item">
+                  <span className="legend-dot" style={{ background: s.color }}></span>
+                  <span className="chart-summary-label">{t(s.labelKey)}</span>
+                  <span className="chart-summary-value">{weekTotals[s.key]}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -450,14 +758,14 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {perfData && (
+      {(escPerfData || perfData) && (
         <div className="performance-section">
           <div className="perf-toggle-container">
             <button
-              className={`perf-toggle-btn ${perfView === 'company' ? 'active' : ''}`}
-              onClick={() => setPerfView('company')}
+              className={`perf-toggle-btn ${perfView === 'escalation' ? 'active' : ''}`}
+              onClick={() => setPerfView('escalation')}
             >
-              {t('dashboard.companyPerformance')}
+              {t('dashboard.escalationPerformance')}
             </button>
             <button
               className={`perf-toggle-btn ${perfView === 'developer' ? 'active' : ''}`}
@@ -467,51 +775,153 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {perfView === 'company' && (
+          {perfView === 'escalation' && (
             <div className="charts-row">
               <div className="chart-card wide">
                 <div className="perf-header">
-                  <h3>{t('dashboard.companyPerformance30')}</h3>
-                  <p className="perf-subtitle">{t('dashboard.companyPerfSubtitle')}</p>
+                  <h3>{t('dashboard.escalationPerformance')}</h3>
+                  <p className="perf-subtitle">{t('dashboard.escalationPerfSubtitle')}</p>
                 </div>
-                <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
-                  <div className="perf-chart-section">
-                    <ResponsiveContainer width="100%" height={400}>
-                      <BarChart data={perfData.companyStats || []} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                        <XAxis dataKey="name" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} angle={-20} textAnchor="end" height={60} />
-                        <YAxis stroke="#6b7280" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
-                        <Tooltip
-                          contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                          cursor={{ fill: '#f9fafb' }}
-                        />
-                        <Legend
-                          wrapperStyle={{ paddingTop: 16 }}
-                          iconType="circle"
-                          iconSize={10}
-                        />
-                        {STATUS_CONFIG.filter(s => {
-                          const data = perfData.companyStats || [];
-                          return data.some(d => d[s.key] > 0);
-                        }).map(s => (
-                          <Bar
-                            key={s.key}
-                            dataKey={s.key}
-                            name={transSeeded(s.key, 'status', t)}
-                            fill={s.color}
-                            radius={[3, 3, 0, 0]}
-                            maxBarSize={24}
-                            cursor="pointer"
-                            onClick={(data) => {
-                              const item = perfData.byCompany.find(c => c.name === data?.name);
-                              if (item) setSelectedDetail({ type: 'company', data: item });
-                            }}
-                          />
-                        ))}
-                      </BarChart>
-                    </ResponsiveContainer>
+                {!escMetrics ? (
+                  <div className="esc-empty">
+                    <div className="spinner"></div>
                   </div>
-                </div>
+                ) : escMetrics.totalEscalated === 0 ? (
+                  <div className="esc-empty">
+                    <Icon name="escalated" size={32} />
+                    <div>{t('dashboard.noEscalationData')}</div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="esc-kpi-grid">
+                      {escKpis.map(kpi => (
+                        <div
+                          key={kpi.key}
+                          className="esc-kpi"
+                          style={{ '--esc-kpi-accent': kpi.color, '--esc-kpi-shadow': `${kpi.color}30` }}
+                        >
+                          <div className="esc-kpi-value">{kpi.value}</div>
+                          <div className="esc-kpi-label">{t(kpi.labelKey)}</div>
+                          {kpi.hintKey && <div className="esc-kpi-hint">{t(kpi.hintKey)}</div>}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
+                      <div className="perf-chart-section">
+                        <ResponsiveContainer width="100%" height={400}>
+                          <AreaChart
+                            data={escChartData}
+                            margin={{ top: 24, right: 28, left: 16, bottom: 56 }}
+                          >
+                            <defs>
+                              <linearGradient id="escPerfArea" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={PERF_TONES.escalation.fillFrom} stopOpacity={0.35} />
+                                <stop offset="70%" stopColor={PERF_TONES.escalation.fillTo} stopOpacity={0.12} />
+                                <stop offset="100%" stopColor={PERF_TONES.escalation.fillTo} stopOpacity={0.02} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                            <XAxis
+                              dataKey="label"
+                              stroke="#9ca3af"
+                              fontSize={12}
+                              tickLine={false}
+                              axisLine={{ stroke: '#e5e7eb' }}
+                              angle={-20}
+                              textAnchor="end"
+                              interval={0}
+                              height={56}
+                              tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
+                            />
+                            <YAxis
+                              yAxisId="right"
+                              orientation="right"
+                              stroke="#9ca3af"
+                              fontSize={12}
+                              tickLine={false}
+                              axisLine={{ stroke: '#e5e7eb' }}
+                              domain={RATE_AXIS.domain}
+                              ticks={RATE_AXIS.ticks}
+                              allowDecimals={false}
+                              width={56}
+                              tick={{ fill: '#6b7280', fontSize: 12 }}
+                              tickFormatter={value => `${value}%`}
+                              label={{
+                                value: t('dashboard.successRateAxis'),
+                                angle: 90,
+                                position: 'insideRight',
+                                offset: 12,
+                                className: 'esc-axis-label'
+                              }}
+                            />
+                            <Tooltip
+                              cursor={{ stroke: PERF_TONES.escalation.line, strokeWidth: 1, strokeDasharray: '4 4' }}
+                              content={(
+                                <PerfTooltip
+                                  rows={ESC_COUNT_ROWS}
+                                  tone={PERF_TONES.escalation.line}
+                                  rateLabelKey="dashboard.escalationSuccessRate"
+                                  sublabel={escTooltipRole}
+                                  showHours
+                                  formatHours={escFormatHours}
+                                  t={t}
+                                />
+                              )}
+                            />
+                            <Legend
+                              verticalAlign="top"
+                              align="left"
+                              height={28}
+                              iconType="plainline"
+                              iconSize={22}
+                              wrapperStyle={{ fontSize: 12, color: '#4b5563' }}
+                            />
+                            <Area
+                              yAxisId="right"
+                              type="monotone"
+                              dataKey="successRate"
+                              name={t('dashboard.escalationPerformance')}
+                              stroke={PERF_TONES.escalation.line}
+                              strokeWidth={2.5}
+                              fill="url(#escPerfArea)"
+                              dot={{ r: 4.5, fill: PERF_TONES.escalation.line, stroke: '#fff', strokeWidth: 2 }}
+                              activeDot={{ r: 7, fill: PERF_TONES.escalation.line, stroke: '#fff', strokeWidth: 2 }}
+                              connectNulls
+                              isAnimationActive={false}
+                              label={(
+                                <LabelList
+                                  dataKey="successRate"
+                                  position="top"
+                                  offset={10}
+                                  formatter={value => `${value}%`}
+                                  fill="#4b5563"
+                                  fontSize={12}
+                                  fontWeight={700}
+                                />
+                              )}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                        {escTeamMembers.length > 0 && (
+                          <div className="esc-team-roster">
+                            <span className="esc-team-roster-label">{t('dashboard.escalationTeamMembers')}</span>
+                            <div className="esc-team-roster-list">
+                              {escTeamMembers.map(member => (
+                                <span className="esc-team-chip" key={member.key}>
+                                  <span className="esc-team-chip-name">{member.name}</span>
+                                  {member.role && (
+                                    <span className="esc-team-chip-role">{member.role}</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <p className="esc-legend-note">{t('dashboard.escalationAvgBasis')}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -520,47 +930,138 @@ export default function Dashboard() {
             <div className="charts-row">
               <div className="chart-card wide">
                 <div className="perf-header">
-                  <h3>{t('dashboard.developerPerformance30')}</h3>
-                  <p className="perf-subtitle">{t('dashboard.developerPerfSubtitle')}</p>
+                  <h3>{t('dashboard.developerPerformanceBar')}</h3>
+                  <p className="perf-subtitle">{t('dashboard.developerPerfBarSubtitle', { range: escRangeLabel })}</p>
                 </div>
-                <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
-                  <div className="perf-chart-section">
-                    <ResponsiveContainer width="100%" height={400}>
-                      <BarChart data={perfData.developerStats || []} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                        <XAxis dataKey="name" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} angle={-20} textAnchor="end" height={60} />
-                        <YAxis stroke="#6b7280" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
-                        <Tooltip
-                          contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                          cursor={{ fill: '#f9fafb' }}
-                        />
-                        <Legend
-                          wrapperStyle={{ paddingTop: 16 }}
-                          iconType="circle"
-                          iconSize={10}
-                        />
-                        {STATUS_CONFIG.filter(s => {
-                          const data = perfData.developerStats || [];
-                          return data.some(d => d[s.key] > 0);
-                        }).map(s => (
-                          <Bar
-                            key={s.key}
-                            dataKey={s.key}
-                            name={transSeeded(s.key, 'status', t)}
-                            fill={s.color}
-                            radius={[3, 3, 0, 0]}
-                            maxBarSize={24}
-                            cursor="pointer"
-                            onClick={(data) => {
-                              const item = perfData.byDeveloper.find(d => d.name === data?.name);
+                {!escPerfData ? (
+                  <div className="esc-empty">
+                    <div className="spinner"></div>
+                  </div>
+                ) : devChartData.length === 0 ? (
+                  <div className="esc-empty">
+                    <Icon name="escalated" size={32} />
+                    <div>{t('dashboard.noDeveloperPerfData')}</div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="esc-kpi-grid">
+                      {devKpis.map(kpi => (
+                        <div
+                          key={kpi.key}
+                          className="esc-kpi"
+                          style={{ '--esc-kpi-accent': kpi.color, '--esc-kpi-shadow': `${kpi.color}30` }}
+                        >
+                          <div className="esc-kpi-value">{kpi.value}</div>
+                          <div className="esc-kpi-label">{t(kpi.labelKey)}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
+                      <div className="perf-chart-section">
+                        <ResponsiveContainer width="100%" height={400}>
+                          <AreaChart
+                            data={devChartData}
+                            margin={{ top: 24, right: 28, left: 16, bottom: 60 }}
+                            onClick={(state) => {
+                              // preserve the existing per-developer drilldown
+                              const name = state?.activePayload?.[0]?.payload?.name;
+                              const item = (perfData?.byDeveloper || []).find(d => d.name === name);
                               if (item) setSelectedDetail({ type: 'developer', data: item });
                             }}
-                          />
-                        ))}
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <defs>
+                              <linearGradient id="devPerfArea" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={PERF_TONES.developer.fillFrom} stopOpacity={0.35} />
+                                <stop offset="70%" stopColor={PERF_TONES.developer.fillTo} stopOpacity={0.12} />
+                                <stop offset="100%" stopColor={PERF_TONES.developer.fillTo} stopOpacity={0.02} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                            <XAxis
+                              dataKey="label"
+                              stroke="#9ca3af"
+                              fontSize={12}
+                              tickLine={false}
+                              axisLine={{ stroke: '#e5e7eb' }}
+                              angle={-20}
+                              textAnchor="end"
+                              height={60}
+                              interval={0}
+                              tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
+                            />
+                            <YAxis
+                              yAxisId="right"
+                              orientation="right"
+                              stroke="#9ca3af"
+                              fontSize={12}
+                              tickLine={false}
+                              axisLine={{ stroke: '#e5e7eb' }}
+                              domain={RATE_AXIS.domain}
+                              ticks={RATE_AXIS.ticks}
+                              allowDecimals={false}
+                              width={56}
+                              tick={{ fill: '#6b7280', fontSize: 12 }}
+                              tickFormatter={value => `${value}%`}
+                              label={{
+                                value: t('dashboard.successRateAxis'),
+                                angle: 90,
+                                position: 'insideRight',
+                                offset: 12,
+                                className: 'esc-axis-label'
+                              }}
+                            />
+                            <Tooltip
+                              cursor={{ stroke: PERF_TONES.developer.line, strokeWidth: 1, strokeDasharray: '4 4' }}
+                              content={(
+                                <PerfTooltip
+                                  rows={DEV_COUNT_ROWS}
+                                  tone={PERF_TONES.developer.line}
+                                  rateLabelKey="dashboard.developerPerformance"
+                                  showHours
+                                  formatHours={escFormatHours}
+                                  t={t}
+                                />
+                              )}
+                            />
+                            <Legend
+                              verticalAlign="top"
+                              align="left"
+                              height={28}
+                              iconType="plainline"
+                              iconSize={22}
+                              wrapperStyle={{ fontSize: 12, color: '#4b5563' }}
+                            />
+                            <Area
+                              yAxisId="right"
+                              type="monotone"
+                              dataKey="successRate"
+                              name={t('dashboard.developerPerformance')}
+                              stroke={PERF_TONES.developer.line}
+                              strokeWidth={2.5}
+                              fill="url(#devPerfArea)"
+                              dot={{ r: 4.5, fill: PERF_TONES.developer.line, stroke: '#fff', strokeWidth: 2 }}
+                              activeDot={{ r: 7, fill: PERF_TONES.developer.line, stroke: '#fff', strokeWidth: 2 }}
+                              connectNulls
+                              isAnimationActive={false}
+                              label={(
+                                <LabelList
+                                  dataKey="successRate"
+                                  position="top"
+                                  offset={10}
+                                  formatter={value => `${value}%`}
+                                  fill="#4b5563"
+                                  fontSize={12}
+                                  fontWeight={700}
+                                />
+                              )}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}

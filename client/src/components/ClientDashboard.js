@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
@@ -15,7 +15,6 @@ export default function ClientDashboard() {
   const { t } = useTranslation();
   const [requests, setRequests] = useState([]);
   const [statuses, setStatuses] = useState([]);
-  const [stats, setStats] = useState({ total: 0, open: 0, inProgress: 0, resolved: 0 });
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -45,17 +44,25 @@ export default function ClientDashboard() {
     ]).then(([requestsData, statusesData]) => {
       setRequests(requestsData);
       setStatuses(statusesData);
-      const total = requestsData.length;
-      const open = requestsData.filter(r => r.status?.name === 'New').length;
-      const inProgress = requestsData.filter(r => r.status?.name === 'In Progress' || r.status?.name === 'Assigned').length;
-      const resolved = requestsData.filter(r => r.status?.name === 'Resolved').length;
-      const closed = requestsData.filter(r => r.status?.name === 'Closed').length;
-      const rejected = requestsData.filter(r => r.status?.name === 'Rejected').length;
-      const waitingClient = requestsData.filter(r => r.status?.name === 'Waiting for Client').length;
-      const escalated = requestsData.filter(r => r.status?.name === 'Escalated').length;
-      setStats({ total, open, inProgress, resolved, closed, rejected, waitingClient, escalated });
     }).catch(err => setError(t('common.failedToLoadData') + ' ' + err.message));
   }, []);
+
+  // Derived from `requests` rather than snapshotted in the fetch above, so the
+  // cards stay correct when a status is changed or a request deleted inline.
+  const stats = useMemo(() => {
+    const byStatus = name => requests.filter(r => r.status?.name === name).length;
+    return {
+      total: requests.length,
+      open: byStatus('New'),
+      assigned: byStatus('Assigned'),
+      inProgress: byStatus('In Progress'),
+      resolved: byStatus('Resolved'),
+      closed: byStatus('Closed'),
+      rejected: byStatus('Rejected'),
+      waitingClient: byStatus('Waiting for Client'),
+      escalated: byStatus('Escalated')
+    };
+  }, [requests]);
 
   const getStatusColor = (status) => {
     const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Rejected: '#DC2626' };
@@ -73,9 +80,15 @@ export default function ClientDashboard() {
   };
 
   const ClientStatCard = ({ icon, value, label, color, onClick }) => {
-    const [h, setH] = useState(false);
     return (
-      <div className="stat-card" style={{ cursor: onClick ? 'pointer' : 'default', transform: h ? 'translateY(-4px)' : '', boxShadow: h ? `0 8px 25px ${color}22` : '', borderLeft: h ? `4px solid ${color}` : '4px solid transparent', transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s' }} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} onClick={onClick}>
+      <div className={`stat-card${onClick ? ' stat-card-interactive' : ''}`}
+        style={{
+          cursor: onClick ? 'pointer' : 'default',
+          '--stat-accent': color,
+          '--stat-shadow': `${color}30`
+        }}
+        onClick={onClick}
+      >
         <div className="stat-icon" style={{ background: color + '15', color: color }}>{icon}</div>
         <div className="stat-content">
           <h3>{value}</h3>
@@ -191,6 +204,7 @@ export default function ClientDashboard() {
       <div className="stats-grid">
         <ClientStatCard icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} color="#3B82F6" onClick={() => navigate('/client/requests')} />
         <ClientStatCard icon={<Icon name="new" />} value={stats.open} label={t('common.new')} color="#10B981" onClick={() => navigate('/client/requests?status=New')} />
+        <ClientStatCard icon={<Icon name="assigned" />} value={stats.assigned} label={t('common.assigned')} color="#8B5CF6" onClick={() => navigate('/client/requests?status=Assigned')} />
         <ClientStatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => navigate('/client/requests?status=In Progress')} />
         <ClientStatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} color="#8B5CF6" onClick={() => navigate('/client/requests?status=Resolved')} />
         <ClientStatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} color="#6B7280" onClick={() => navigate('/client/requests?status=Closed')} />
