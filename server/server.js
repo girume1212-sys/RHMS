@@ -2435,13 +2435,11 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
       ? null
       : Math.round(parseFloat(row.avg_resolution_hours) * 100) / 100;
 
-    // Per-team-member breakdown of the same escalations, using the identical
-    // escalations CTE, the same 'Resolved'/'Closed' rule and the same range
-    // filter as the aggregate above, so the member rows always add up exactly to
-    // totalEscalated / resolvedEscalated / pendingEscalated. The name comes from
-    // users.name via requests.assigned_to, i.e. whoever the request is actually
-    // assigned to for handling. Escalated requests with no assignee are kept in a
-    // single trailing bucket so the totals still reconcile.
+    // Per-team-member breakdown of escalations handled by the Escalation
+    // (Support) team only: same escalations CTE / range filter as the aggregate
+    // above, but restricted to assignees with users.role = 'support', using
+    // their existing users.name. Developers, other roles and unassigned
+    // requests are excluded here by design.
     const teamResult = await pool.query(`
       WITH escalations AS (
         SELECT al.request_id, MIN(al.created_at) AS escalated_at
@@ -2473,7 +2471,7 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
           AS avg_resolution_hours
       FROM escalations e
       JOIN requests r ON r.id = e.request_id
-      LEFT JOIN users u ON u.id = r.assigned_to
+      JOIN users u ON u.id = r.assigned_to AND u.role = 'support'
       LEFT JOIN statuses s ON r.status_id = s.id
       WHERE ($1::int IS NULL OR e.escalated_at >= NOW() - ($1::int || ' days')::interval)
       GROUP BY r.assigned_to, u.name, u.role

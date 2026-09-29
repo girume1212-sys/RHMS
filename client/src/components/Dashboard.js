@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api, API_BASE } from '../api';
@@ -121,6 +121,8 @@ export default function Dashboard() {
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [rangeDays, setRangeDays] = useState('all');
+  const escPerfCardRef = useRef(null);
+  const [escPerfCardHeight, setEscPerfCardHeight] = useState(0);
   const { user } = useAuth();
   const navigate = useNavigate();
   const changeLabel = t('common.fromLastWeek');
@@ -145,6 +147,26 @@ export default function Dashboard() {
       .then(setEscPerfData)
       .catch(err => console.error('Escalation perf fetch error:', err));
   }, [user, rangeDays]);
+
+  // Both performance cards share the same shell (.charts-row > .chart-card.wide,
+  // 5 KPI cards, 400px chart). The escalation card's KPI hint row and legend
+  // note are mirrored as invisible placeholders in the developer card, so both
+  // cards are naturally the same width and height. The measured min-height is
+  // kept only as a safety net for font/translation differences. Only the
+  // escalation card is observed, so resizing the developer card can never feed
+  // back into the measurement.
+  useEffect(() => {
+    const el = escPerfCardRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const measure = () => {
+      const h = el.getBoundingClientRect().height;
+      setEscPerfCardHeight(prev => (Math.abs(prev - h) < 1 ? prev : h));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [perfView, escPerfData, rangeDays]);
 
   const weekData = useMemo(() => (stats?.dailyData || []).map(d => ({
     ...d,
@@ -182,6 +204,7 @@ export default function Dashboard() {
     return rows
       .map(row => ({
         name: row.name,
+        role: row.role || null,
         label: row.name,
         assigned: Number(row.assigned) || 0,
         inProgress: Number(row.inProgress) || 0,
@@ -228,11 +251,14 @@ export default function Dashboard() {
   // (users.name via requests.assigned_to). The rows come from the same
   // escalations set the KPIs above are computed from, so they always add up to
   // the totals. Escalated requests with nobody assigned are kept as a single
-  // "unassigned" column so nothing goes missing.
+  // Escalation chart: only real Escalation/Support team members
+  // (users.role === 'support'). Anything else from the API is dropped here
+  // as a guard so Developer names can never render in this chart.
   const escTeam = useMemo(() => {
     const rows = escPerfData?.team;
     if (!Array.isArray(rows) || rows.length === 0) return [];
     return rows
+      .filter(row => row && row.role === 'support' && row.name)
       .map(row => ({
         userId: row.userId || null,
         name: row.name || null,
@@ -253,8 +279,9 @@ export default function Dashboard() {
     row.name || t('dashboard.unassignedMember')
   ), [t]);
 
-  const escTeamRoleLabel = useCallback((row) => {
-    if (!row.role) return '';
+  // Role label shared by both performance tooltips.
+  const perfRoleLabel = useCallback((row) => {
+    if (!row || !row.role) return '';
     if (row.role === 'support') return t('role.support');
     if (row.role === 'developer') return t('role.developer');
     if (row.role === 'admin') return t('role.admin');
@@ -309,23 +336,6 @@ export default function Dashboard() {
     if (n < 48) return `${Math.round(n * 10) / 10} h`;
     return `${Math.round((n / 24) * 10) / 10} d`;
   }, []);
-
-  // Shows the member's role underneath their name in the chart tooltip.
-  const escTooltipRole = useCallback(
-    row => (row ? escTeamRoleLabel(row) : ''),
-    [escTeamRoleLabel]
-  );
-
-  // The team members rendered on the X axis, in the same order as the columns.
-  const escTeamMembers = useMemo(
-    () => escChartData.map(row => ({
-      key: row.userId || 'unassigned',
-      name: row.label,
-      role: escTeamRoleLabel(row),
-      total: row.totalEscalated
-    })),
-    [escChartData, escTeamRoleLabel]
-  );
 
   if (!stats && !error) return <div className="loading-screen"><div className="spinner"></div></div>;
   if (error && !stats) return (
@@ -777,7 +787,7 @@ export default function Dashboard() {
 
           {perfView === 'escalation' && (
             <div className="charts-row">
-              <div className="chart-card wide">
+              <div className="chart-card wide" ref={escPerfCardRef}>
                 <div className="perf-header">
                   <h3>{t('dashboard.escalationPerformance')}</h3>
                   <p className="perf-subtitle">{t('dashboard.escalationPerfSubtitle')}</p>
@@ -811,7 +821,7 @@ export default function Dashboard() {
                         <ResponsiveContainer width="100%" height={400}>
                           <AreaChart
                             data={escChartData}
-                            margin={{ top: 24, right: 28, left: 16, bottom: 56 }}
+                            margin={{ top: 24, right: 28, left: 16, bottom: 60 }}
                           >
                             <defs>
                               <linearGradient id="escPerfArea" x1="0" y1="0" x2="0" y2="1">
@@ -830,7 +840,7 @@ export default function Dashboard() {
                               angle={-20}
                               textAnchor="end"
                               interval={0}
-                              height={56}
+                              height={60}
                               tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
                             />
                             <YAxis
@@ -861,7 +871,7 @@ export default function Dashboard() {
                                   rows={ESC_COUNT_ROWS}
                                   tone={PERF_TONES.escalation.line}
                                   rateLabelKey="dashboard.escalationSuccessRate"
-                                  sublabel={escTooltipRole}
+                                  sublabel={perfRoleLabel}
                                   showHours
                                   formatHours={escFormatHours}
                                   t={t}
@@ -902,21 +912,6 @@ export default function Dashboard() {
                             />
                           </AreaChart>
                         </ResponsiveContainer>
-                        {escTeamMembers.length > 0 && (
-                          <div className="esc-team-roster">
-                            <span className="esc-team-roster-label">{t('dashboard.escalationTeamMembers')}</span>
-                            <div className="esc-team-roster-list">
-                              {escTeamMembers.map(member => (
-                                <span className="esc-team-chip" key={member.key}>
-                                  <span className="esc-team-chip-name">{member.name}</span>
-                                  {member.role && (
-                                    <span className="esc-team-chip-role">{member.role}</span>
-                                  )}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                         <p className="esc-legend-note">{t('dashboard.escalationAvgBasis')}</p>
                       </div>
                     </div>
@@ -928,7 +923,7 @@ export default function Dashboard() {
 
           {perfView === 'developer' && (
             <div className="charts-row">
-              <div className="chart-card wide">
+              <div className="chart-card wide" style={escPerfCardHeight ? { minHeight: escPerfCardHeight } : undefined}>
                 <div className="perf-header">
                   <h3>{t('dashboard.developerPerformanceBar')}</h3>
                   <p className="perf-subtitle">{t('dashboard.developerPerfBarSubtitle', { range: escRangeLabel })}</p>

@@ -1009,14 +1009,12 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 }
 
 /* Escalation Performance Chart */
-/* Five KPI cards: four across on the first row, the leftover card centred on the
-   second. Flexbox rather than grid so trailing cards centre themselves at every
-   breakpoint instead of needing per-breakpoint orphan placement; the media
-   queries only ever change --esc-kpi-cols. Card width is derived from the
-   column count and the real column gap, so every card stays exactly equal at any
-   row count, orphan included. */
+/* Five KPI cards laid out side by side in a single horizontal row. Flexbox rather
+   than grid so the row stays centred at every breakpoint; the media queries only
+   ever change --esc-kpi-cols. Card width is derived from the column count and the
+   real column gap, so all five stay exactly equal. */
 .esc-kpi-grid {
-  --esc-kpi-cols: 4;
+  --esc-kpi-cols: 5;
   --esc-kpi-gap-x: 12px;
   --esc-kpi-gap-y: 20px;
   display: flex;
@@ -1146,7 +1144,10 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   color: #9ca3af;
 }
 .perf-rate-counts .esc-tooltip-row:first-child { margin-top: 0; }
-.esc-team-roster {
+/* Name strip under both shaded performance charts (PerfNameRow). Shared by the
+   escalation and developer cards so the two rows sit on the same baseline with
+   the same font, alignment, spacing and chip treatment. */
+.perf-name-row {
   display: flex;
   align-items: baseline;
   gap: 10px;
@@ -1155,7 +1156,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   padding-top: 12px;
   border-top: 1px solid #f1f5f9;
 }
-.esc-team-roster-label {
+.perf-name-row-label {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1163,12 +1164,12 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   color: #9ca3af;
   white-space: nowrap;
 }
-.esc-team-roster-list {
+.perf-name-row-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-.esc-team-chip {
+.perf-name-chip {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
@@ -1177,12 +1178,12 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   border-radius: 999px;
   background: #f9fafb;
 }
-.esc-team-chip-name {
+.perf-name-chip-name {
   font-size: 12px;
   font-weight: 600;
   color: #374151;
 }
-.esc-team-chip-role {
+.perf-name-chip-role {
   font-size: 11px;
   color: #6b7280;
 }
@@ -1237,13 +1238,13 @@ body.dark-mode .esc-tooltip-title { color: #e2e8f0; }
 body.dark-mode .esc-tooltip-subtitle { color: #94a3b8; }
 body.dark-mode .perf-rate-row { border-bottom-color: #334155; }
 body.dark-mode .perf-rate-caption { color: #94a3b8; }
-body.dark-mode .esc-team-roster { border-top-color: #334155; }
-body.dark-mode .esc-team-chip {
+body.dark-mode .perf-name-row { border-top-color: #334155; }
+body.dark-mode .perf-name-chip {
   background: #0f172a;
   border-color: #334155;
 }
-body.dark-mode .esc-team-chip-name { color: #e2e8f0; }
-body.dark-mode .esc-team-chip-role { color: #94a3b8; }
+body.dark-mode .perf-name-chip-name { color: #e2e8f0; }
+body.dark-mode .perf-name-chip-role { color: #94a3b8; }
 body.dark-mode .esc-tooltip-row { color: #cbd5e1; }
 body.dark-mode .esc-tooltip-footer { border-top-color: #334155; }
 
