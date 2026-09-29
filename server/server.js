@@ -367,7 +367,7 @@ const pool = require('./db');
 })();
 
 const app = express();
-const PORT = 5000;
+const PORT = Number(process.env.PORT) || 5000;
 const JWT_SECRET = 'rhms-secret-key-2024';
 const googleClient = new OAuth2Client();
 
@@ -2883,18 +2883,6 @@ app.delete('/api/settings/logo', authMiddleware, roleMiddleware('admin'), async 
   }
 });
 
-// Error handler for multer/file upload errors
-app.use((err, req, res, next) => {
-  if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'File too large. Max 10MB.' });
-  if (err.code === 'LIMIT_UNEXPECTED_FILE') return res.status(400).json({ error: 'Unexpected file field: ' + err.field });
-  if (err) return res.status(500).json({ error: err.message || 'Server error' });
-  next();
-});
-
-app.use('/api', (req, res) => {
-  res.status(404).json({ error: 'Not found' });
-});
-
 // ============================================================================
 // Announcements, Knowledge Base, Tags, Templates, SLA, Watchers, Attachments,
 // Notifications, Sessions, and Login Audit CRUD endpoints
@@ -3541,6 +3529,14 @@ app.delete('/api/login-audit/:id', authMiddleware, roleMiddleware('admin'), asyn
   }
 });
 
+// Error handler for multer/file upload errors
+app.use((err, req, res, next) => {
+  if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'File too large. Max 10MB.' });
+  if (err.code === 'LIMIT_UNEXPECTED_FILE') return res.status(400).json({ error: 'Unexpected file field: ' + err.field });
+  if (err) return res.status(500).json({ error: err.message || 'Server error' });
+  next();
+});
+
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
     res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
@@ -3549,6 +3545,14 @@ app.get('*', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`RHMS Server running on http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Stop the process using it, or set PORT to a free port.`);
+    process.exit(1);
+  }
+  throw err;
 });

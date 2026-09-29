@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
@@ -163,6 +163,12 @@ export default function Layout() {
     if (item.path === '/') return pathname === '/';
     return pathname === item.path || pathname.startsWith(item.path + '/');
   };
+
+  const activeMenuItem = useMemo(
+    () => menuItems.flatMap((section) => section.items).filter(hasPermission).find(isNavItemActive),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [location.pathname, location.search, user?.role, t]
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -455,6 +461,7 @@ export default function Layout() {
         <header className="topbar">
           <div className="topbar-left">
             <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}><Icon name="menu" /></button>
+            {activeMenuItem && <span className="topbar-page-title">{activeMenuItem.label}</span>}
             <GlobalSearch placeholder={t('topbar.searchPlaceholder')} />
           </div>
           <div className="topbar-right">

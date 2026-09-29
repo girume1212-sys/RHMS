@@ -1,0 +1,16 @@
+{
+  "name": "rhms",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RHMS Support Request & Issue Tracking System",
+  "scripts": {
+    "start": "npm --prefix client start",
+    "dev": "npm --prefix server run dev",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client start",
+    "dev:all": "node scripts/dev.js",
+    "build": "npm --prefix client run build",
+    "serve": "npm --prefix client run serve",
+    "seed": "node server/seed.js"
+  }
+}

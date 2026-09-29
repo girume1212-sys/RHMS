@@ -288,6 +288,9 @@ export default function ClientLayout() {
     { path: '/client/profile', label: t('common.myProfile'), icon: 'user' },
   ];
 
+  const activeMenuItem = menuItems.find((item) => location.pathname === item.path)
+    || menuItems.find((item) => item.path !== '/client' && location.pathname.startsWith(item.path + '/'));
+
   return (
     <div className="layout">
       <aside className={`sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
@@ -370,6 +373,7 @@ export default function ClientLayout() {
         <header className="topbar">
           <div className="topbar-left">
             <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}><Icon name="menu" /></button>
+            {activeMenuItem && <span className="topbar-page-title">{activeMenuItem.label}</span>}
             <GlobalSearch clientMode placeholder={t('common.searchRequests')} />
           </div>
           <div className="topbar-right">
