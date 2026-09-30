@@ -136,7 +136,7 @@ export default function Reports() {
         <div className="stat-card-simple"><h3>{report.clientSatisfaction}</h3><p>{t('dashboard.clientSatisfaction')}</p></div>
       </div>
 
-      <div className="charts-row">
+      <div className="charts-row-2">
         <div className="chart-card">
           <h3>{t('dashboard.requestsByStatus')}</h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -161,18 +161,9 @@ export default function Reports() {
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <div className="chart-card">
-          <h3>{t('dashboard.requestsByCategory')}</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={(report.byCategory || []).map(c => ({ ...c, name: transSeeded(c.name, 'category', t), count: Number(c.count) }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
-              <YAxis stroke="#9ca3af" fontSize={12} />
-              <Tooltip />
-              <Bar dataKey="count" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      </div>
+
+      <div className="charts-row-2">
         <div className="chart-card">
           <h3>{t('dashboard.requestsByCompany')}</h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -182,6 +173,18 @@ export default function Reports() {
               <YAxis stroke="#9ca3af" fontSize={12} />
               <Tooltip />
               <Bar dataKey="count" fill="#06B6D4" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="chart-card">
+          <h3>{t('dashboard.requestsByCategory')}</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={(report.byCategory || []).map(c => ({ ...c, name: transSeeded(c.name, 'category', t), count: Number(c.count) }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
+              <YAxis stroke="#9ca3af" fontSize={12} />
+              <Tooltip />
+              <Bar dataKey="count" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

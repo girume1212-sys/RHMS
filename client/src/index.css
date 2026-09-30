@@ -959,6 +959,12 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   gap: 16px;
   margin-bottom: 24px;
 }
+.charts-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
 .chart-card {
   background: white;
   border-radius: 12px;
@@ -3988,6 +3994,7 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
 @media (max-width: 1200px) {
   .stats-grid { grid-template-columns: repeat(3, 1fr); }
   .charts-row { grid-template-columns: 1fr; }
+  .charts-row-2 { grid-template-columns: 1fr; }
   .bottom-row { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
