@@ -1497,7 +1497,7 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       }
     }
 
-    const { status, priority, category, search } = req.query;
+    const { status, priority, category, search, startDate, endDate } = req.query;
     if (status) {
       let statusId = status;
       if (isNaN(status)) {
@@ -1519,6 +1519,16 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       query += ` AND (LOWER(r.subject) LIKE $${paramIndex} OR LOWER(r.id) LIKE $${paramIndex} OR LOWER(r.description) LIKE $${paramIndex})`;
       params.push(`%${search.toLowerCase()}%`);
       paramIndex++;
+    }
+    // Optional created_at window, used by dashboards to compare a status count
+    // against the same scope one week earlier.
+    if (startDate) {
+      query += ` AND r.created_at >= $${paramIndex++}`;
+      params.push(startDate);
+    }
+    if (endDate) {
+      query += ` AND r.created_at < $${paramIndex++}`;
+      params.push(endDate);
     }
 
     query += ' ORDER BY r.created_at DESC';
@@ -2288,28 +2298,37 @@ const formatDayLabel = (isoDate) => {
 
 app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
   try {
-    let whereClause = 'WHERE 1=1';
-    const params = [];
-    let paramIndex = 1;
+    // Built as a helper so the week-over-week comparison can reuse the exact same
+    // visibility rules (plus its own date bounds) as the current counts below.
+    const buildRbacWhere = (startIndex) => {
+      let clause = 'WHERE 1=1';
+      const clauseParams = [];
+      let i = startIndex;
 
-    if (req.user.role === 'client') {
-      whereClause += ` AND r.client_id = $${paramIndex++}`;
-      params.push(req.user.id);
-    }
-    if (req.user.role === 'developer' || req.user.role === 'support') {
-      const myRequests = req.query.myRequests === 'true';
-      if (myRequests) {
-        whereClause += ` AND r.assigned_to = $${paramIndex++}`;
-        params.push(req.user.id);
-      } else {
-        whereClause += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++})`;
-        if (req.user.role === 'support') {
-          whereClause += ` OR r.status_id = '9'`;
-        }
-        whereClause += `)`;
-        params.push(req.user.id, req.user.id);
+      if (req.user.role === 'client') {
+        clause += ` AND r.client_id = $${i++}`;
+        clauseParams.push(req.user.id);
       }
-    }
+      if (req.user.role === 'developer' || req.user.role === 'support') {
+        const myRequests = req.query.myRequests === 'true';
+        if (myRequests) {
+          clause += ` AND r.assigned_to = $${i++}`;
+          clauseParams.push(req.user.id);
+        } else {
+          clause += ` AND (r.assigned_to = $${i++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${i++})`;
+          if (req.user.role === 'support') {
+            clause += ` OR r.status_id = '9'`;
+          }
+          clause += `)`;
+          clauseParams.push(req.user.id, req.user.id);
+        }
+      }
+      return { clause, params: clauseParams };
+    };
+
+    const currentScope = buildRbacWhere(1);
+    const whereClause = currentScope.clause;
+    const params = currentScope.params;
 
     const totalResult = await pool.query(`SELECT COUNT(*) FROM requests r ${whereClause}`, params);
     const total = parseInt(totalResult.rows[0].count);
@@ -2324,17 +2343,18 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     lastWeekStart.setDate(lastWeekStart.getDate() - 14);
     const lastWeekEnd = new Date();
     lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
-    const lastWeekStartIso = lastWeekStart.toISOString().slice(0, 10);
-    const lastWeekEndIso = lastWeekEnd.toISOString().slice(0, 10);
+
+    const lastWeekParams = [...params];
+    const lastWeekWhereClause = `${whereClause} AND r.created_at >= $${lastWeekParams.length + 1} AND r.created_at < $${lastWeekParams.length + 2}`;
+    lastWeekParams.push(lastWeekStart.toISOString(), lastWeekEnd.toISOString());
 
     const lastWeekStatusCounts = await pool.query(
-      `SELECT r.status_id, COUNT(*) as count FROM requests r
-       WHERE r.created_at::date >= $1 AND r.created_at::date < $2
-       GROUP BY r.status_id`,
-      [lastWeekStartIso, lastWeekEndIso]
+      `SELECT r.status_id, COUNT(*) as count FROM requests r ${lastWeekWhereClause} GROUP BY r.status_id`,
+      lastWeekParams
     );
     const lastWeekStatusMap = {};
     lastWeekStatusCounts.rows.forEach(row => { lastWeekStatusMap[row.status_id] = parseInt(row.count); });
+    const lastWeekTotal = Object.values(lastWeekStatusMap).reduce((sum, n) => sum + n, 0);
 
     const open = statusMap['1'] || 0;
     const assigned = statusMap['2'] || 0;
@@ -2350,12 +2370,16 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     const byStatus = statuses.map(s => {
       const currentCount = statusMap[s.id] || 0;
       const lastWeekCount = lastWeekStatusMap[s.id] || 0;
-      const changePercent = lastWeekCount > 0 ? (((currentCount - lastWeekCount) / lastWeekCount) * 100).toFixed(1) : (currentCount > 0 ? '100.0' : '0.0');
+      // No baseline last week means no real percentage to report, so show 0%
+      // rather than inventing a jump.
+      const changePercent = lastWeekCount > 0
+        ? Number((((currentCount - lastWeekCount) / lastWeekCount) * 100).toFixed(1))
+        : 0;
       return {
         ...s,
         count: currentCount,
         lastWeekCount,
-        changePercent: parseFloat(changePercent),
+        changePercent,
         percentage: total > 0 ? ((currentCount / total) * 100).toFixed(1) : 0
       };
     });
@@ -2487,7 +2511,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
         }));
       })(),
       rangeDays,
-      totalLastWeek: lastWeekStatusMap['1'] || 0 + (lastWeekStatusMap['2'] || 0) + (lastWeekStatusMap['3'] || 0) + (lastWeekStatusMap['4'] || 0) + (lastWeekStatusMap['5'] || 0) + (lastWeekStatusMap['6'] || 0) + (lastWeekStatusMap['8'] || 0) + (lastWeekStatusMap['9'] || 0),
+      totalLastWeek: lastWeekTotal,
       openLastWeek: lastWeekStatusMap['1'] || 0,
       assignedLastWeek: lastWeekStatusMap['2'] || 0,
       inProgressLastWeek: lastWeekStatusMap['3'] || 0,

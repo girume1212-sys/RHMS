@@ -1,6 +1,8 @@
-﻿import React, { useState, useRef, useCallback } from 'react';
+﻿import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { getStatusIcon } from '../utils/statusIcons';
+import { getLastWeekWindow, weekOverWeekPercent } from '../utils/weekOverWeek';
 import { useAuth } from '../AuthContext';
+import { api } from '../api';
 import { useTranslation } from '../i18n/useTranslation';
 import { usePageBack } from '../utils/sidebarNav';
 import RequestsTable from './RequestsTable';
@@ -10,15 +12,35 @@ import Icon from './Icon';
 export default function DeveloperDashboard() {
   const { user } = useAuth();
   const { t } = useTranslation();
+  const changeLabel = t('common.fromLastWeek');
   const goBack = usePageBack('/');
   const tableRef = useRef();
   const [shared, setShared] = useState({ requests: [], statuses: [], showMyTasks: false, filter: { status: '' } });
+  const [lastWeekRequests, setLastWeekRequests] = useState([]);
 
   const handleDataChange = useCallback((data) => setShared(data), []);
 
-  const displayRequests = shared.showMyTasks
-    ? shared.requests.filter(r => r.assignedTo === user.id && r.status?.name !== 'New')
-    : shared.requests;
+  // Previous-week rows for the same visibility scope, so the card percentages
+  // come from the database rather than being estimated.
+  useEffect(() => {
+    const { start, end } = getLastWeekWindow();
+    const params = new URLSearchParams({ startDate: start, endDate: end });
+    if (shared.showMyTasks) params.set('myRequests', 'true');
+    api.get(`/api/requests?${params.toString()}`)
+      .then(data => setLastWeekRequests(Array.isArray(data) ? data : []))
+      .catch(() => setLastWeekRequests([]));
+  }, [shared.showMyTasks]);
+
+  const countInScope = (list) => (
+    shared.showMyTasks
+      ? list.filter(r => r.assignedTo === user.id && r.status?.name !== 'New')
+      : list
+  );
+
+  const displayRequests = countInScope(shared.requests);
+  const displayLastWeek = countInScope(lastWeekRequests);
+
+  const countByStatusId = (list, id) => list.filter(r => r.status?.id === id).length;
 
   const stats = {
     total: displayRequests.length,
@@ -36,7 +58,7 @@ export default function DeveloperDashboard() {
     tableRef.current?.setStatusFilter(shared.filter.status === name ? '' : name);
   };
 
-  const DevStatCard = ({ icon, value, label, color, onClick, change }) => {
+  const DevStatCard = ({ icon, value, label, color, onClick, change, changeLabel }) => {
     const changeNum = parseFloat(change) || 0;
     const arrow = changeNum > 0 ? '↑' : changeNum < 0 ? '↓' : '→';
     const type = changeNum > 0 ? 'up' : changeNum < 0 ? 'down' : 'flat';
@@ -54,7 +76,7 @@ export default function DeveloperDashboard() {
           <h3>{value}</h3>
           <p>{label}</p>
           <span className={`stat-change ${type}`}>
-            {arrow} {Math.abs(changeNum)}%
+            {arrow} {Math.abs(changeNum)}% {changeLabel}
           </span>
         </div>
       </div>
@@ -80,10 +102,12 @@ export default function DeveloperDashboard() {
           <DevStatCard
             key={s.id}
             icon={<Icon name={getStatusIcon(s.name)} />}
-            value={displayRequests.filter(r => r.status?.id === s.id).length}
+            value={countByStatusId(displayRequests, s.id)}
             label={s.name}
             color={s.color || '#6B7280'}
             onClick={() => toggleStatusFilter(s.name)}
+            change={weekOverWeekPercent(countByStatusId(displayRequests, s.id), countByStatusId(displayLastWeek, s.id))}
+            changeLabel={changeLabel}
           />
         ))}
       </div>
