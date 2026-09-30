@@ -447,17 +447,24 @@ body {
   font-size: 12px;
   padding: 4px;
 }
+:root {
+  --activity-separator: rgba(0,0,0,0.15);
+}
+body.dark-mode {
+  --activity-separator: rgba(255,255,255,0.2);
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 3px;
+  height: 3px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;

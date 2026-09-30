@@ -826,6 +826,18 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json(mapUser(req.user));
 });
 
+app.post('/api/auth/logout', authMiddleware, async (req, res) => {
+  try {
+    const user = req.user;
+    await pool.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash = $2', [user.id, require('crypto').createHash('sha256').update(req.headers.authorization?.split(' ')[1] || '').digest('hex')]);
+    await logAuthActivity('logout', user, req);
+    res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.post('/api/auth/google', async (req, res) => {
   try {
     const { credential } = req.body;
@@ -1147,7 +1159,7 @@ app.patch('/api/users/:id/approve', authMiddleware, roleMiddleware('admin'), asy
     const result = await pool.query('UPDATE users SET approved = $1, moderated = $1 WHERE id = $2 RETURNING *', [approved, req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = mapUser(result.rows[0]);
-    await logUserActivity(approved ? 'user_approved' : 'user_blocked', user, req.user, req);
+    await logUserActivity(approved ? 'user_unblocked' : 'user_blocked', user, req.user, req);
     try {
       const groupResult = await pool.query(`
         SELECT g.id AS group_id, g.name AS group_name, g.color AS group_color
@@ -1202,7 +1214,10 @@ app.put('/api/profile', authMiddleware, upload.single('avatar'), async (req, res
     const result = await pool.query(query, params);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = mapUser(result.rows[0]);
-    await logUserActivity('profile_updated', user, req.user, req, { changes: { name, email, companyName, language, avatar: !!avatarPath } });
+    await logUserActivity('profile_updated', user, req.user, req, { changes: { name, email, companyName, language, avatar: !!avatarPath, password: !!password } });
+    if (password) {
+      await logAuthActivity('password_changed', user, req);
+    }
     try {
       const groupResult = await pool.query(`
         SELECT g.id AS group_id, g.name AS group_name, g.color AS group_color
@@ -1969,6 +1984,11 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
         [uuidv4(), 'status_update', req.params.id, req.user.id, `Changed status from ${oldStatusName} to ${newStatusName}`, now]
       );
       await logRequestActivity('status_changed', { id: req.params.id }, req.user, req, { oldStatus: oldStatusName, newStatus: newStatusName });
+      const lifecycleMap = { '5': 'resolved', '6': 'closed', '8': 'rejected', '9': 'escalated', '7': 'reopened' };
+      const lifecycleAction = lifecycleMap[statusId];
+      if (lifecycleAction) {
+        await logRequestActivity(lifecycleAction, { id: req.params.id }, req.user, req, { oldStatus: oldStatusName, newStatus: newStatusName });
+      }
       const statusName = newStatusName;
       const clientId = existing.rows[0].client_id;
       notifyAdmins(`Request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
@@ -1993,6 +2013,17 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       if (clientId && clientId !== req.user.id) {
         notifyUser(clientId, `Your request #${req.params.id} has been assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
       }
+    }
+
+    const changes = [];
+    if (subject && subject !== existing.rows[0].subject) changes.push('subject');
+    if (description && description !== existing.rows[0].description) changes.push('description');
+    if (categoryId && categoryId !== existing.rows[0].category_id) { changes.push('category'); await logRequestActivity('category_changed', { id: req.params.id }, req.user, req, { from: existing.rows[0].category_id, to: categoryId }); }
+    if (priorityId && priorityId !== existing.rows[0].priority_id) { changes.push('priority'); await logRequestActivity('priority_changed', { id: req.params.id }, req.user, req, { from: existing.rows[0].priority_id, to: priorityId }); }
+    if (attachments !== undefined) changes.push('attachments');
+    if (assignedGroup && assignedGroup !== existing.rows[0].assigned_group) { await logRequestActivity('assigned_group_changed', { id: req.params.id }, req.user, req, { from: existing.rows[0].assigned_group, to: assignedGroup }); }
+    if (changes.length > 0) {
+      await logRequestActivity('updated', { id: req.params.id }, req.user, req, { changes });
     }
 
     res.json({ id: req.params.id, subject: subject || existing.rows[0].subject, description: description || existing.rows[0].description, clientId: existing.rows[0].client_id, categoryId: categoryId || existing.rows[0].category_id, priorityId: priorityId || existing.rows[0].priority_id, statusId: newStatusId, assignedTo: newAssignedTo, assignedGroup: assignedGroup || existing.rows[0].assigned_group, attachments: newAttachments, createdAt: existing.rows[0].created_at, updatedAt: now });
@@ -2289,6 +2320,22 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     const statusMap = {};
     statusCounts.rows.forEach(row => { statusMap[row.status_id] = parseInt(row.count); });
 
+    const lastWeekStart = new Date();
+    lastWeekStart.setDate(lastWeekStart.getDate() - 14);
+    const lastWeekEnd = new Date();
+    lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
+    const lastWeekStartIso = lastWeekStart.toISOString().slice(0, 10);
+    const lastWeekEndIso = lastWeekEnd.toISOString().slice(0, 10);
+
+    const lastWeekStatusCounts = await pool.query(
+      `SELECT r.status_id, COUNT(*) as count FROM requests r
+       WHERE r.created_at::date >= $1 AND r.created_at::date < $2
+       GROUP BY r.status_id`,
+      [lastWeekStartIso, lastWeekEndIso]
+    );
+    const lastWeekStatusMap = {};
+    lastWeekStatusCounts.rows.forEach(row => { lastWeekStatusMap[row.status_id] = parseInt(row.count); });
+
     const open = statusMap['1'] || 0;
     const assigned = statusMap['2'] || 0;
     const inProgress = statusMap['3'] || 0;
@@ -2300,11 +2347,18 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
 
     const statusesResult = await pool.query('SELECT * FROM statuses ORDER BY id');
     const statuses = statusesResult.rows.filter(s => s.name.toLowerCase() !== 'reopened');
-    const byStatus = statuses.map(s => ({
-      ...s,
-      count: statusMap[s.id] || 0,
-      percentage: total > 0 ? (((statusMap[s.id] || 0) / total) * 100).toFixed(1) : 0
-    }));
+    const byStatus = statuses.map(s => {
+      const currentCount = statusMap[s.id] || 0;
+      const lastWeekCount = lastWeekStatusMap[s.id] || 0;
+      const changePercent = lastWeekCount > 0 ? (((currentCount - lastWeekCount) / lastWeekCount) * 100).toFixed(1) : (currentCount > 0 ? '100.0' : '0.0');
+      return {
+        ...s,
+        count: currentCount,
+        lastWeekCount,
+        changePercent: parseFloat(changePercent),
+        percentage: total > 0 ? ((currentCount / total) * 100).toFixed(1) : 0
+      };
+    });
 
     const priorityCounts = await pool.query(
       `SELECT r.priority_id, COUNT(*) as count FROM requests r ${whereClause} GROUP BY r.priority_id`, params
@@ -2415,16 +2469,33 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       byCategory,
       byCompany,
       dailyData,
+      monthlyData: await (async () => {
+        const monthlyResult = await pool.query(
+          `SELECT TO_CHAR(DATE_TRUNC('month', r.created_at), 'YYYY-MM') AS month,
+                 COUNT(*) FILTER (WHERE r.status_id != '6') AS created,
+                 COUNT(*) FILTER (WHERE r.status_id = '5') AS resolved,
+                 COUNT(*) FILTER (WHERE r.status_id = '6') AS closed
+          FROM requests r
+          GROUP BY 1
+          ORDER BY 1`
+        );
+        return monthlyResult.rows.map(row => ({
+          month: row.month,
+          created: parseInt(row.created) || 0,
+          resolved: parseInt(row.resolved) || 0,
+          closed: parseInt(row.closed) || 0
+        }));
+      })(),
       rangeDays,
-      totalLastWeek: Math.floor(total * 0.88),
-      openLastWeek: Math.floor(open * 0.92),
-      assignedLastWeek: Math.floor(assigned * 0.9),
-      inProgressLastWeek: Math.floor(inProgress * 0.95),
-      waitingLastWeek: Math.floor(waiting * 0.9),
-      resolvedLastWeek: Math.floor(resolved * 0.85),
-      closedLastWeek: Math.floor(closed * 1.05),
-      escalatedLastWeek: Math.floor(escalated * 0.9),
-      rejectedLastWeek: Math.floor(rejected * 0.9)
+      totalLastWeek: lastWeekStatusMap['1'] || 0 + (lastWeekStatusMap['2'] || 0) + (lastWeekStatusMap['3'] || 0) + (lastWeekStatusMap['4'] || 0) + (lastWeekStatusMap['5'] || 0) + (lastWeekStatusMap['6'] || 0) + (lastWeekStatusMap['8'] || 0) + (lastWeekStatusMap['9'] || 0),
+      openLastWeek: lastWeekStatusMap['1'] || 0,
+      assignedLastWeek: lastWeekStatusMap['2'] || 0,
+      inProgressLastWeek: lastWeekStatusMap['3'] || 0,
+      waitingLastWeek: lastWeekStatusMap['4'] || 0,
+      resolvedLastWeek: lastWeekStatusMap['5'] || 0,
+      closedLastWeek: lastWeekStatusMap['6'] || 0,
+      escalatedLastWeek: lastWeekStatusMap['9'] || 0,
+      rejectedLastWeek: lastWeekStatusMap['8'] || 0
     });
   } catch (err) {
     console.error(err);

@@ -2,7 +2,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api, API_BASE } from '../api';
-import { PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
+import { getStatusIcon } from '../utils/statusIcons';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
@@ -34,6 +35,9 @@ const PERF_TONES = {
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
 function StatCard({ icon, value, label, change, changeType, color, onClick, changeLabel }) {
+  const changeNum = parseFloat(change) || 0;
+  const arrow = changeNum > 0 ? '↑' : changeNum < 0 ? '↓' : '→';
+  const type = changeNum > 0 ? 'up' : changeNum < 0 ? 'down' : 'flat';
   return (
     <div className={`stat-card${onClick ? ' stat-card-interactive' : ''}`}
       style={{
@@ -47,8 +51,8 @@ function StatCard({ icon, value, label, change, changeType, color, onClick, chan
       <div className="stat-content">
         <h3>{value}</h3>
         <p>{label}</p>
-        <span className={`stat-change ${changeType}`}>
-          {'↑'} {change} {changeLabel}
+        <span className={`stat-change ${type}`}>
+          {arrow} {Math.abs(changeNum)}% {changeLabel}
         </span>
       </div>
     </div>
@@ -121,6 +125,7 @@ export default function Dashboard() {
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [rangeDays, setRangeDays] = useState('all');
+  const [monthOffset, setMonthOffset] = useState(0);
   const escPerfCardRef = useRef(null);
   const [escPerfCardHeight, setEscPerfCardHeight] = useState(0);
   const { user } = useAuth();
@@ -168,12 +173,16 @@ export default function Dashboard() {
     return () => ro.disconnect();
   }, [perfView, escPerfData, rangeDays]);
 
-  const weekData = useMemo(() => (stats?.dailyData || []).map(d => ({
-    ...d,
-    created: Number(d.created) || 0,
-    resolved: Number(d.resolved) || 0,
-    closed: Number(d.closed) || 0
-  })), [stats?.dailyData]);
+  const weekData = useMemo(() => (stats?.monthlyData || []).map(m => {
+    const [y, mo] = m.month.split('-').map(Number);
+    const d = new Date(y, mo - 1, 1);
+    return {
+      date: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      created: Number(m.created) || 0,
+      resolved: Number(m.resolved) || 0,
+      closed: Number(m.closed) || 0
+    };
+  }), [stats?.monthlyData]);
 
   const weekTotals = useMemo(() => weekData.reduce((acc, d) => ({
     created: acc.created + d.created,
@@ -445,17 +454,27 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="stats-grid">
-        <StatCard icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} change={getChangePercent(stats.total, stats.totalLastWeek).text} changeType={getChangePercent(stats.total, stats.totalLastWeek).type} changeLabel={changeLabel} color="#FACC15" onClick={() => navigate('/requests')} />
-        <StatCard icon={<Icon name="new" />} value={stats.open} label={t('common.newRequests')} change={getChangePercent(stats.open, stats.openLastWeek).text} changeType={getChangePercent(stats.open, stats.openLastWeek).type} changeLabel={changeLabel} color="#3B82F6" onClick={() => navigate('/requests?status=1')} />
-        <StatCard icon={<Icon name="assigned" />} value={stats.assigned} label={t('common.assigned')} change={getChangePercent(stats.assigned, stats.assignedLastWeek).text} changeType={getChangePercent(stats.assigned, stats.assignedLastWeek).type} changeLabel={changeLabel} color="#8B5CF6" onClick={() => navigate('/requests?status=2')} />
-        <StatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} change={getChangePercent(stats.inProgress, stats.inProgressLastWeek).text} changeType={getChangePercent(stats.inProgress, stats.inProgressLastWeek).type} changeLabel={changeLabel} color="#F59E0B" onClick={() => navigate('/requests?status=3')} />
-        <StatCard icon={<Icon name="waiting" />} value={stats.waiting} label={t('common.waitingForClient')} change={getChangePercent(stats.waiting, stats.waitingLastWeek).text} changeType={getChangePercent(stats.waiting, stats.waitingLastWeek).type} changeLabel={changeLabel} color="#F97316" onClick={() => navigate('/requests?status=4')} />
-        <StatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} change={getChangePercent(stats.resolved, stats.resolvedLastWeek).text} changeType={getChangePercent(stats.resolved, stats.resolvedLastWeek).type} changeLabel={changeLabel} color="#10B981" onClick={() => navigate('/requests?status=5')} />
-        <StatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} change={getChangePercent(stats.escalated, stats.escalatedLastWeek).text} changeType={getChangePercent(stats.escalated, stats.escalatedLastWeek).type} changeLabel={changeLabel} color="#EF4444" onClick={() => navigate('/requests?status=9')} />
-        <StatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} change={getChangePercent(stats.closed, stats.closedLastWeek).text} changeType={getChangePercent(stats.closed, stats.closedLastWeek).type} changeLabel={changeLabel} color="#6B7280" onClick={() => navigate('/requests?status=6')} />
-        <StatCard icon={<Icon name="rejected" />} value={stats.rejected} label={t('common.rejected')} change={getChangePercent(stats.rejected, stats.rejectedLastWeek).text} changeType={getChangePercent(stats.rejected, stats.rejectedLastWeek).type} changeLabel={changeLabel} color="#DC2626" onClick={() => navigate('/requests?status=8')} />
-      </div>
+      {(() => {
+        const statusCards = (stats.byStatus || []).filter(s => s.is_active !== false);
+        const totalCards = statusCards.length + 1;
+        const perRow = Math.ceil(totalCards / 2);
+        const row1 = [<StatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} change={getChangePercent(stats.total, stats.totalLastWeek)} changeLabel={changeLabel} color="#FACC15" onClick={() => navigate('/requests')} />, ...statusCards.slice(0, perRow - 1).map(s => (
+          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} change={s.changePercent} changeLabel={changeLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
+        ))];
+        const row2 = statusCards.slice(perRow - 1).map(s => (
+          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} change={s.changePercent} changeLabel={changeLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
+        ));
+        return (
+          <>
+            <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${perRow}, 1fr)`, marginBottom: '12px' }}>
+              {row1}
+            </div>
+            <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${row2.length}, 1fr)` }}>
+              {row2}
+            </div>
+          </>
+        );
+      })()}
 
       <div className="charts-row">
         <div className="chart-card" style={{ flex: 1 }}>
@@ -524,52 +543,43 @@ export default function Dashboard() {
               <h3>{t('dashboard.requestsOverview')}</h3>
               <p className="chart-subtitle">{t('dashboard.requestsOverviewSubtitle')}</p>
             </div>
-            <div className="range-toggle" role="group" aria-label={t('dashboard.requestsOverview')}>
-              {RANGE_OPTIONS.map(r => (
-                <button
-                  key={r.days}
-                  type="button"
-                  className={`range-toggle-btn ${rangeDays === r.days ? 'active' : ''}`}
-                  onClick={() => setRangeDays(r.days)}
-                >
-                  {t(r.labelKey)}
-                </button>
-              ))}
-            </div>
+
           </div>
           <div className="chart-container overview-chart">
             {weekData.length === 0 ? (
               <div className="chart-empty">{t('common.noData')}</div>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
-                <AreaChart data={weekData} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
+                <AreaChart data={weekData} margin={{ top: 16, right: 20, left: 0, bottom: 30 }}>
                   <defs>
                     {WEEK_SERIES.map(s => (
-                      <linearGradient key={s.key} id={`weekFill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient key={s.key} id={`weekLineFill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor={s.color} stopOpacity={0.35} />
+                        <stop offset="70%" stopColor={s.color} stopOpacity={0.12} />
                         <stop offset="100%" stopColor={s.color} stopOpacity={0.02} />
                       </linearGradient>
                     ))}
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
                   <XAxis
                     dataKey="date"
-                    stroke="#6b7280"
-                    fontSize={11}
+                    stroke="#9ca3af"
+                    fontSize={12}
                     tickLine={false}
                     axisLine={{ stroke: '#e5e7eb' }}
-                    tickMargin={6}
-                    interval={weekData.length > 14 ? 'preserveStartEnd' : 0}
-                    minTickGap={4}
+                    angle={-20}
+                    textAnchor="end"
+                    interval={0}
+                    height={80}
+                    tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
                   />
-                  <YAxis stroke="#6b7280" fontSize={11} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} allowDecimals={false} width={36} />
+                  <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} allowDecimals={false} width={40} tick={{ fill: '#6b7280', fontSize: 12 }} />
                   <Tooltip
-                    contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                    labelStyle={{ fontWeight: 600, marginBottom: 4 }}
+                    contentStyle={{ borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}
+                    labelStyle={{ fontWeight: 600, marginBottom: 6 }}
                     cursor={{ stroke: '#9ca3af', strokeWidth: 1, strokeDasharray: '4 4' }}
                     formatter={(value, name) => [value, t(WEEK_SERIES.find(s => t(s.labelKey) === name)?.labelKey || 'common.total')]}
                   />
-                  <Legend wrapperStyle={{ paddingTop: 12, fontSize: 12 }} iconType="circle" iconSize={10} />
                   {WEEK_SERIES.map(s => (
                     <Area
                       key={s.key}
@@ -577,12 +587,12 @@ export default function Dashboard() {
                       dataKey={s.key}
                       name={t(s.labelKey)}
                       stroke={s.color}
-                      strokeWidth={2}
-                      fill={`url(#weekFill-${s.key})`}
-                      fillOpacity={1}
+                      strokeWidth={2.5}
+                      fill={`url(#weekLineFill-${s.key})`}
+                      dot={{ r: 4.5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                      activeDot={{ r: 7, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
                       connectNulls
-                      dot={weekData.length > 14 ? false : { r: 3, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
-                      activeDot={{ r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                      isAnimationActive={false}
                     />
                   ))}
                 </AreaChart>
@@ -590,12 +600,12 @@ export default function Dashboard() {
             )}
           </div>
           {weekData.length > 0 && (
-            <div className="chart-summary">
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', padding: '4px 0 0', marginTop: '-8px' }}>
               {WEEK_SERIES.map(s => (
-                <div key={s.key} className="chart-summary-item">
-                  <span className="legend-dot" style={{ background: s.color }}></span>
-                  <span className="chart-summary-label">{t(s.labelKey)}</span>
-                  <span className="chart-summary-value">{weekTotals[s.key]}</span>
+                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: s.color, display: 'inline-block' }}></span>
+                  <span style={{ fontSize: 13, color: '#6b7280' }}>{t(s.labelKey)}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1f2937' }}>{weekTotals[s.key]}</span>
                 </div>
               ))}
             </div>
@@ -608,7 +618,7 @@ export default function Dashboard() {
           <h3>{t('dashboard.requestsByCompany')}</h3>
           <div className="chart-container pie-chart-layout">
             <div className="pie-chart-area">
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie data={(stats.byCompany || []).filter(c => c.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
                     {(stats.byCompany || []).filter(c => c.count > 0).map((entry, i) => (
@@ -633,7 +643,7 @@ export default function Dashboard() {
         <div className="chart-card" style={{ gridColumn: '2 / -1' }}>
           <h3>{t('dashboard.requestsByCategory')}</h3>
           <div className="chart-container">
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={300}>
               <BarChart data={(stats.byCategory || []).filter(c => c.count > 0)}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="name" stroke="#6b7280" fontSize={11} tickLine={false} tickFormatter={(value) => transSeeded(value, 'category', t)} />

@@ -109,6 +109,8 @@ export default function Settings() {
   const [statusForm, setStatusForm] = useState({ name: '', color: '#6B7280' });
   const [statusSaving, setStatusSaving] = useState(false);
   const [allStatuses, setAllStatuses] = useState([]);
+  const [statusPage, setStatusPage] = useState(1);
+  const [statusPerPage, setStatusPerPage] = useState(10);
 
   useEffect(() => {
     Promise.all([
@@ -561,7 +563,7 @@ export default function Settings() {
                 </tr>
               </thead>
               <tbody>
-                {allStatuses.map((status, index) => (
+                {allStatuses.slice((statusPage - 1) * statusPerPage, statusPage * statusPerPage).map((status, index) => (
                   <tr key={status.id} style={{ borderBottom: '1px solid #f3f4f6', opacity: status.is_active === false ? 0.6 : 1 }}>
                     <td style={{ padding: '10px 12px' }}>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -630,6 +632,29 @@ export default function Settings() {
                 ))}
               </tbody>
             </table>
+            {allStatuses.length > statusPerPage && (
+              <div className="table-footer">
+                <div className="table-footer-info">
+                  <span>{t('common.show')}</span>
+                  <select value={statusPerPage} onChange={(e) => { setStatusPerPage(Number(e.target.value)); setStatusPage(1); }}>
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
+                  <span>{t('common.of')} {allStatuses.length} {t('common.statuses')}</span>
+                </div>
+                <div className="table-pagination">
+                  <button className="page-btn" disabled={statusPage === 1} onClick={() => setStatusPage(1)}>«</button>
+                  <button className="page-btn" disabled={statusPage === 1} onClick={() => setStatusPage(statusPage - 1)}>‹</button>
+                  {Array.from({ length: Math.ceil(allStatuses.length / statusPerPage) }, (_, i) => i + 1).map(p => (
+                    <button key={p} className={`page-btn ${p === statusPage ? 'active' : ''}`} onClick={() => setStatusPage(p)}>{p}</button>
+                  ))}
+                  <button className="page-btn" disabled={statusPage === Math.ceil(allStatuses.length / statusPerPage)} onClick={() => setStatusPage(statusPage + 1)}>›</button>
+                  <button className="page-btn" disabled={statusPage === Math.ceil(allStatuses.length / statusPerPage)} onClick={() => setStatusPage(Math.ceil(allStatuses.length / statusPerPage))}>»</button>
+                </div>
+              </div>
+            )}
           </div>
           </div>
           </div>

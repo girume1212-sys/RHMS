@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getStatusIcon } from '../utils/statusIcons';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { showStatusToast } from '../notify';
@@ -286,14 +287,16 @@ if (statusName === 'New') {
       )}
 
       <div className="stats-grid">
-        <DevStatCard icon={<Icon name="new" />} value={stats.newCount} label={t('common.new')} color="#3B82F6" onClick={() => setStatusFilter(statusFilter === 'New' ? '' : 'New')} />
-        <DevStatCard icon={<Icon name="assigned" />} value={stats.assigned} label={t('common.assigned')} color="#8B5CF6" onClick={() => setStatusFilter(statusFilter === 'Assigned' ? '' : 'Assigned')} />
-        <DevStatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => setStatusFilter(statusFilter === 'In Progress' ? '' : 'In Progress')} />
-        <DevStatCard icon={<Icon name="waiting" />} value={stats.waiting} label={t('common.awaitingClient')} color="#F97316" onClick={() => setStatusFilter(statusFilter === 'Waiting for Client' ? '' : 'Waiting for Client')} />
-        <DevStatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} color="#EF4444" onClick={() => setStatusFilter(statusFilter === 'Escalated' ? '' : 'Escalated')} />
-        <DevStatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} color="#10B981" onClick={() => setStatusFilter(statusFilter === 'Resolved' ? '' : 'Resolved')} />
-        <DevStatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} color="#6B7280" onClick={() => setStatusFilter(statusFilter === 'Closed' ? '' : 'Closed')} />
-        <DevStatCard icon={<Icon name="rejected" />} value={stats.rejected} label={t('common.rejected')} color="#DC2626" onClick={() => setStatusFilter(statusFilter === 'Rejected' ? '' : 'Rejected')} />
+        {(statuses || []).filter(s => s.is_active !== false && s.name.toLowerCase() !== 'reopened').map(s => (
+          <DevStatCard
+            key={s.id}
+            icon={<Icon name={getStatusIcon(s.name)} />}
+            value={displayRequests.filter(r => r.status?.id === s.id).length}
+            label={s.name}
+            color={s.color || '#6B7280'}
+            onClick={() => setStatusFilter(statusFilter === s.name ? '' : s.name)}
+          />
+        ))}
       </div>
 
       <div className="chart-card" style={{ marginTop: '24px' }}>

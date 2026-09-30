@@ -46,6 +46,8 @@ export default function Groups() {
   const [removeTarget, setRemoveTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [memberSort, setMemberSort] = useState({ key: '', dir: 'asc' });
+  const [memberPage, setMemberPage] = useState(1);
+  const [memberPerPage, setMemberPerPage] = useState(10);
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -508,7 +510,7 @@ export default function Groups() {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredMembers.map(m => (
+                          {filteredMembers.slice((memberPage - 1) * memberPerPage, memberPage * memberPerPage).map(m => (
                             <tr key={m.id}>
                               <td>
                                 <div className="user-cell">
@@ -533,13 +535,36 @@ export default function Groups() {
                           ))}
                         </tbody>
                       </table>
+                      {filteredMembers.length > memberPerPage && (
+                        <div className="table-footer">
+                          <div className="table-footer-info">
+                            <span>{t('common.show')}</span>
+                            <select value={memberPerPage} onChange={(e) => { setMemberPerPage(Number(e.target.value)); setMemberPage(1); }}>
+                              <option value={5}>5</option>
+                              <option value={10}>10</option>
+                              <option value={25}>25</option>
+                              <option value={50}>50</option>
+                            </select>
+                            <span>{t('common.of')} {filteredMembers.length} {t('common.members')}</span>
+                          </div>
+                          <div className="table-pagination">
+                            <button className="page-btn" disabled={memberPage === 1} onClick={() => setMemberPage(1)}>«</button>
+                            <button className="page-btn" disabled={memberPage === 1} onClick={() => setMemberPage(memberPage - 1)}>‹</button>
+                            {Array.from({ length: Math.ceil(filteredMembers.length / memberPerPage) }, (_, i) => i + 1).map(p => (
+                              <button key={p} className={`page-btn ${p === memberPage ? 'active' : ''}`} onClick={() => setMemberPage(p)}>{p}</button>
+                            ))}
+                            <button className="page-btn" disabled={memberPage === Math.ceil(filteredMembers.length / memberPerPage)} onClick={() => setMemberPage(memberPage + 1)}>›</button>
+                            <button className="page-btn" disabled={memberPage === Math.ceil(filteredMembers.length / memberPerPage)} onClick={() => setMemberPage(Math.ceil(filteredMembers.length / memberPerPage))}>»</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                         )}
                       </>
-                  )}
-                </>
-              )}
-            </div>
+                    )}
+                  </>
+                )}
+              </div>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => { setMemberGroup(null); setShowAddMember(false); }}>{t('common.close')}</button>
             </div>

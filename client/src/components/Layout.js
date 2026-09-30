@@ -542,7 +542,7 @@ export default function Layout() {
               )}
             </div>
             <div className="user-menu-container">
-              <button className="user-menu-btn" onClick={() => { setShowUserMenu(!showUserMenu); if (!showUserMenu) navigate('/profile'); }}>
+              <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
                 <div className="user-avatar-tiny" style={{ overflow: 'hidden' }}>{getAvatarUrl(user?.avatar) ? <img src={getAvatarUrl(user?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (user?.name?.charAt(0) || 'U')}</div>
                 <span>{user?.name}</span>
                 <span className="dropdown-arrow">▾</span>

@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { getStatusIcon } from '../utils/statusIcons';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import Toast from './Toast';
@@ -79,7 +80,10 @@ export default function ClientDashboard() {
     setPage(1);
   };
 
-  const ClientStatCard = ({ icon, value, label, color, onClick }) => {
+  const ClientStatCard = ({ icon, value, label, color, onClick, change }) => {
+    const changeNum = parseFloat(change) || 0;
+    const arrow = changeNum > 0 ? '↑' : changeNum < 0 ? '↓' : '→';
+    const type = changeNum > 0 ? 'up' : changeNum < 0 ? 'down' : 'flat';
     return (
       <div className={`stat-card${onClick ? ' stat-card-interactive' : ''}`}
         style={{
@@ -93,6 +97,9 @@ export default function ClientDashboard() {
         <div className="stat-content">
           <h3>{value}</h3>
           <p>{label}</p>
+          <span className={`stat-change ${type}`}>
+            {arrow} {Math.abs(changeNum)}%
+          </span>
         </div>
       </div>
     );
@@ -201,17 +208,34 @@ export default function ClientDashboard() {
         </div>
       )}
 
-      <div className="stats-grid">
-        <ClientStatCard icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} color="#3B82F6" onClick={() => navigate('/client/requests')} />
-        <ClientStatCard icon={<Icon name="new" />} value={stats.open} label={t('common.new')} color="#10B981" onClick={() => navigate('/client/requests?status=New')} />
-        <ClientStatCard icon={<Icon name="assigned" />} value={stats.assigned} label={t('common.assigned')} color="#8B5CF6" onClick={() => navigate('/client/requests?status=Assigned')} />
-        <ClientStatCard icon={<Icon name="inProgress" />} value={stats.inProgress} label={t('common.inProgress')} color="#F59E0B" onClick={() => navigate('/client/requests?status=In Progress')} />
-        <ClientStatCard icon={<Icon name="resolved" />} value={stats.resolved} label={t('common.resolved')} color="#8B5CF6" onClick={() => navigate('/client/requests?status=Resolved')} />
-        <ClientStatCard icon={<Icon name="closed" />} value={stats.closed} label={t('common.closed')} color="#6B7280" onClick={() => navigate('/client/requests?status=Closed')} />
-        <ClientStatCard icon={<Icon name="rejected" />} value={stats.rejected} label={t('common.rejected')} color="#DC2626" onClick={() => navigate('/client/requests?status=Rejected')} />
-        <ClientStatCard icon={<Icon name="waiting" />} value={stats.waitingClient} label={t('common.waitingForClient')} color="#F97316" onClick={() => navigate('/client/requests?status=Waiting for Client')} />
-        <ClientStatCard icon={<Icon name="escalated" />} value={stats.escalated} label={t('common.escalated')} color="#EF4444" onClick={() => navigate('/client/requests?status=Escalated')} />
-      </div>
+      {(() => {
+        const statusCards = (statuses || []).filter(s => s.is_active !== false && s.name.toLowerCase() !== 'reopened');
+        const totalCards = statusCards.length + 1;
+        const perRow = Math.ceil(totalCards / 2);
+        const iconFor = (name) => {
+          const n = name.toLowerCase();
+          if (n.includes('new')) return 'new';
+          if (n.includes('assign')) return 'assigned';
+          if (n.includes('progress')) return 'inProgress';
+          if (n.includes('wait')) return 'waiting';
+          if (n.includes('resolv')) return 'resolved';
+          if (n.includes('close')) return 'closed';
+          if (n.includes('reject')) return 'rejected';
+          if (n.includes('escalat')) return 'escalated';
+          return n.replace(/\s+/g, '');
+        };
+        const makeCard = (s) => (
+          <ClientStatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={requests.filter(r => r.status?.id === s.id).length} label={s.name} color={s.color || '#6B7280'} onClick={() => navigate(`/client/requests?status=${s.name}`)} />
+        );
+        const row1 = [<ClientStatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} color="#3B82F6" onClick={() => navigate('/client/requests')} />, ...statusCards.slice(0, perRow - 1).map(makeCard)];
+        const row2 = statusCards.slice(perRow - 1).map(makeCard);
+        return (
+          <>
+            <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${perRow}, 1fr)`, marginBottom: '12px' }}>{row1}</div>
+            <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${row2.length}, 1fr)` }}>{row2}</div>
+          </>
+        );
+      })()}
 
       <div className="chart-card" style={{ marginTop: '24px' }}>
         <div className="table-header-bar">
