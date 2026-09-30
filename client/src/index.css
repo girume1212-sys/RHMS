@@ -502,8 +502,18 @@ body.dark-mode {
   background: none;
   border: none;
 }
-.nav-item:hover { background: #f3f4f6; color: #111827; }
-.nav-item.active { background: #3B82F6; color: white; }
+.nav-item:hover:not(.active) {
+  background: linear-gradient(135deg, #2563EB 0%, #0D9488 100%);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+.nav-item:hover:not(.active) .nav-icon { color: #FFFFFF; }
+.nav-item.active {
+  background: linear-gradient(135deg, #166534 0%, #14532D 55%, #052E16 100%);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(5, 46, 22, 0.5), inset 0 0 0 1px rgba(187, 247, 208, 0.25);
+}
+.nav-item.active .nav-icon { color: #FFFFFF; }
 .nav-icon { font-size: 18px; width: 24px; text-align: center; }
 .nav-icon svg { width: 20px; height: 20px; vertical-align: middle; }
 .sidebar-user {
@@ -1101,6 +1111,40 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   font-size: 12px;
   font-weight: 600;
   fill: #6b7280;
+}
+/* Neon gradient performance charts — visual layer only. Dark glassmorphism
+   plot background, line glow, light-on-dark ticks. Sizes, data and tooltip
+   content are unchanged. */
+.perf-neon-chart {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.94) 55%, rgba(15, 23, 42, 0.96) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  padding: 12px 8px 4px;
+  box-shadow: 0 12px 32px rgba(2, 6, 23, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+}
+.perf-neon-chart .recharts-area-curve {
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.65)) drop-shadow(0 0 16px rgba(167, 139, 250, 0.3));
+}
+
+.perf-neon-chart .recharts-area-area { opacity: 1; }
+.perf-neon-chart .recharts-cartesian-axis-tick text { font-weight: 600; }
+.perf-neon-chart .esc-axis-label.perf-neon-axis { fill: #94A3B8; }
+.perf-neon-chart .recharts-legend-item-text { color: #E2E8F0 !important; }
+/* Basis note below the Developer Performance chart — abstract display style */
+.perf-basis-note {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  line-height: 1.6;
+  background: linear-gradient(90deg, #34D399 0%, #22D3EE 50%, #A78BFA 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  opacity: 0.95;
 }
 .esc-empty {
   display: flex;
@@ -2285,6 +2329,82 @@ body.dark-mode .req-cal-legend-item { color: #94a3b8; }
 .filters-bar select:focus {
   outline: none;
   border-color: #00b4d8;
+}
+/* Users toolbar: search left, filters right, table starts below */
+.users-toolbar {
+  justify-content: space-between;
+}
+.users-toolbar-left {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 220px;
+}
+.users-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+@media (max-width: 640px) {
+  .users-toolbar { flex-direction: column; align-items: stretch; }
+  .users-toolbar-left { width: 100%; }
+  .users-toolbar-left .filter-search-wrap,
+  .users-toolbar-left .filter-search { width: 100%; }
+  .users-toolbar-right { width: 100%; justify-content: flex-start; }
+  .users-toolbar-right select { flex: 1 1 140px; }
+}
+/* Shared search + filter toolbar (outside/above tables).
+   Search left, filters right, table starts below. Responsive stacks. */
+.sf-toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  background: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  border: 1px solid rgba(0, 180, 216, 0.1);
+  align-items: center;
+  justify-content: space-between;
+}
+.sf-toolbar-left {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 220px;
+}
+.sf-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.sf-toolbar-right select {
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 180, 216, 0.25);
+  border-radius: 10px;
+  font-size: 14px;
+  background: #f0f9ff;
+  color: #374151;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.sf-toolbar-right select:focus {
+  outline: none;
+  border-color: #00b4d8;
+}
+@media (max-width: 640px) {
+  .sf-toolbar { flex-direction: column; align-items: stretch; }
+  .sf-toolbar-left { width: 100%; }
+  .sf-toolbar-left .filter-search-wrap,
+  .sf-toolbar-left .table-search-box,
+  .sf-toolbar-left input { width: 100%; }
+  .sf-toolbar-right { width: 100%; justify-content: flex-start; }
+  .sf-toolbar-right select { flex: 1 1 140px; }
 }
 
 /* Table Card - Colored Accent */
@@ -4080,15 +4200,17 @@ body.dark-mode .nav-item,
 body.dark-sidebar .nav-item {
   color: #cbd5e1;
 }
-body.dark-mode .sidebar-nav .nav-item:hover,
-body.dark-sidebar .sidebar-nav .nav-item:hover {
-  background: #334155;
-  color: #f1f5f9;
+body.dark-mode .sidebar-nav .nav-item:hover:not(.active),
+body.dark-sidebar .sidebar-nav .nav-item:hover:not(.active) {
+  background: linear-gradient(135deg, #2563EB 0%, #0D9488 100%);
+  color: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 body.dark-mode .sidebar-nav .nav-item.active,
 body.dark-sidebar .sidebar-nav .nav-item.active {
-  background: linear-gradient(135deg, rgba(0, 119, 182, 0.3), rgba(0, 180, 216, 0.2));
-  color: white;
+  background: linear-gradient(135deg, #166534 0%, #14532D 55%, #052E16 100%);
+  color: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(5, 46, 22, 0.6), inset 0 0 0 1px rgba(187, 247, 208, 0.28);
 }
 body.dark-mode .sidebar-user,
 body.dark-sidebar .sidebar-user {

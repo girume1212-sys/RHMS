@@ -24,13 +24,13 @@ const getAvatarUrl = (avatar) => {
 // stretched or compressed to fit the data.
 const RATE_AXIS = { domain: [0, 100], ticks: [0, 25, 50, 75, 100] };
 
-// Two soft, low-saturation tones so the two performance series stay readable
-// side by side: muted indigo for the Escalation Team, muted teal for
-// Developers. Each is paired with a vertical gradient that fades to almost
-// nothing, keeping the shaded area light rather than a saturated block.
+// Recommended neon tones for dark glassmorphism (visual only):
+// Developer = sky blue → cyan (trust, productivity),
+// Escalation = violet → soft pink (attention, urgency).
+// Data, calculations and ordering are unchanged — only line/fill colors.
 const PERF_TONES = {
-  escalation: { line: '#818CF8', fillFrom: '#818CF8', fillTo: '#C7D2FE' },
-  developer: { line: '#5EEAD4', fillFrom: '#5EEAD4', fillTo: '#CCFBF1' }
+  escalation: { line: '#A78BFA', lineTo: '#F472B6', fillFrom: '#A78BFA', fillTo: '#F472B6' },
+  developer: { line: '#38BDF8', lineTo: '#22D3EE', fillFrom: '#38BDF8', fillTo: '#22D3EE' }
 };
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
@@ -653,20 +653,24 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="chart-card" style={{ marginTop: '24px' }}>
+      <div className="filters-bar sf-toolbar" style={{ marginTop: '24px' }}>
+        <div className="sf-toolbar-left">
+          <div className="table-search-box">
+            <span className="search-icon"><Icon name="search" size={14} /></span>
+            <input
+              type="text"
+              placeholder={t('common.searchRequests')}
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+            />
+          </div>
+        </div>
+        <div className="sf-toolbar-right" />
+      </div>
+
+      <div className="chart-card" style={{ marginTop: '16px' }}>
         <div className="table-header-bar">
           <h3>{t('dashboard.latestRequests')}</h3>
-          <div className="table-header-actions">
-            <div className="table-search-box">
-              <span className="search-icon"><Icon name="search" size={14} /></span>
-              <input
-                type="text"
-                placeholder={t('common.searchRequests')}
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-              />
-            </div>
-          </div>
         </div>
         <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>
           <table className="data-table">
@@ -825,51 +829,55 @@ export default function Dashboard() {
                       ))}
                     </div>
                     <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
-                      <div className="perf-chart-section">
+                      <div className="perf-chart-section perf-neon-chart">
                         <ResponsiveContainer width="100%" height={530}>
                           <AreaChart
                             data={escChartData}
                             margin={{ top: 24, right: 28, left: 60, bottom: 100 }}
                           >
                             <defs>
+                              <linearGradient id="escPerfLine" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0%" stopColor={PERF_TONES.escalation.line} />
+                                <stop offset="100%" stopColor={PERF_TONES.escalation.lineTo} />
+                              </linearGradient>
                               <linearGradient id="escPerfArea" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor={PERF_TONES.escalation.fillFrom} stopOpacity={0.35} />
-                                <stop offset="70%" stopColor={PERF_TONES.escalation.fillTo} stopOpacity={0.12} />
-                                <stop offset="100%" stopColor={PERF_TONES.escalation.fillTo} stopOpacity={0.02} />
+                                <stop offset="0%" stopColor={PERF_TONES.escalation.fillFrom} stopOpacity={0.55} />
+                                <stop offset="55%" stopColor={PERF_TONES.escalation.fillTo} stopOpacity={0.22} />
+                                <stop offset="100%" stopColor={PERF_TONES.escalation.fillTo} stopOpacity={0} />
                               </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.18)" vertical={false} />
                             <XAxis
                               dataKey="label"
-                              stroke="#9ca3af"
+                              stroke="#94A3B8"
                               fontSize={12}
                               tickLine={false}
-                              axisLine={{ stroke: '#e5e7eb' }}
+                              axisLine={{ stroke: 'rgba(148,163,184,0.35)' }}
                               angle={-20}
                               textAnchor="end"
                               interval={0}
                               height={100}
-                              tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
+                              tick={{ fill: '#E2E8F0', fontSize: 12, fontWeight: 600 }}
                             />
                             <YAxis
                               yAxisId="right"
                               orientation="right"
-                              stroke="#9ca3af"
+                              stroke="#94A3B8"
                               fontSize={12}
                               tickLine={false}
-                              axisLine={{ stroke: '#e5e7eb' }}
+                              axisLine={{ stroke: 'rgba(148,163,184,0.35)' }}
                               domain={RATE_AXIS.domain}
                               ticks={RATE_AXIS.ticks}
                               allowDecimals={false}
                               width={56}
-                              tick={{ fill: '#6b7280', fontSize: 12 }}
+                              tick={{ fill: '#CBD5E1', fontSize: 12 }}
                               tickFormatter={value => `${value}%`}
                               label={{
                                 value: t('dashboard.successRateAxis'),
                                 angle: 90,
                                 position: 'insideRight',
                                 offset: 12,
-                                className: 'esc-axis-label'
+                                className: 'esc-axis-label perf-neon-axis'
                               }}
                             />
                             <Tooltip
@@ -892,18 +900,18 @@ export default function Dashboard() {
                               height={28}
                               iconType="plainline"
                               iconSize={22}
-                              wrapperStyle={{ fontSize: 12, color: '#4b5563' }}
+                              wrapperStyle={{ fontSize: 12, color: '#E2E8F0' }}
                             />
                             <Area
                               yAxisId="right"
                               type="monotone"
                               dataKey="successRate"
                               name={t('dashboard.escalationPerformance')}
-                              stroke={PERF_TONES.escalation.line}
-                              strokeWidth={2.5}
+                              stroke="url(#escPerfLine)"
+                              strokeWidth={3}
                               fill="url(#escPerfArea)"
-                              dot={{ r: 4.5, fill: PERF_TONES.escalation.line, stroke: '#fff', strokeWidth: 2 }}
-                              activeDot={{ r: 7, fill: PERF_TONES.escalation.line, stroke: '#fff', strokeWidth: 2 }}
+                              dot={{ r: 4, fill: PERF_TONES.escalation.line, stroke: '#fff', strokeWidth: 2 }}
+                              activeDot={{ r: 6, fill: PERF_TONES.escalation.lineTo, stroke: '#fff', strokeWidth: 2 }}
                               connectNulls
                               isAnimationActive={false}
                               label={(
@@ -912,7 +920,7 @@ export default function Dashboard() {
                                   position="top"
                                   offset={10}
                                   formatter={value => `${value}%`}
-                                  fill="#4b5563"
+                                  fill="#E2E8F0"
                                   fontSize={12}
                                   fontWeight={700}
                                 />
@@ -920,7 +928,7 @@ export default function Dashboard() {
                             />
                           </AreaChart>
                         </ResponsiveContainer>
-                        <p className="esc-legend-note">{t('dashboard.escalationAvgBasis')}</p>
+                        <p className="esc-legend-note perf-basis-note" style={{ marginTop: 4 }}>{t('dashboard.escalationAvgBasis')}</p>
                       </div>
                     </div>
                   </>
@@ -965,7 +973,7 @@ export default function Dashboard() {
                       ))}
                     </div>
                     <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
-                      <div className="perf-chart-section">
+                      <div className="perf-chart-section perf-neon-chart">
                         <ResponsiveContainer width="100%" height={530}>
                           <AreaChart
                             data={devChartData}
@@ -979,44 +987,48 @@ export default function Dashboard() {
                             style={{ cursor: 'pointer' }}
                           >
                             <defs>
+                              <linearGradient id="devPerfLine" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0%" stopColor={PERF_TONES.developer.line} />
+                                <stop offset="100%" stopColor={PERF_TONES.developer.lineTo} />
+                              </linearGradient>
                               <linearGradient id="devPerfArea" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor={PERF_TONES.developer.fillFrom} stopOpacity={0.35} />
-                                <stop offset="70%" stopColor={PERF_TONES.developer.fillTo} stopOpacity={0.12} />
-                                <stop offset="100%" stopColor={PERF_TONES.developer.fillTo} stopOpacity={0.02} />
+                                <stop offset="0%" stopColor={PERF_TONES.developer.fillFrom} stopOpacity={0.55} />
+                                <stop offset="55%" stopColor={PERF_TONES.developer.fillTo} stopOpacity={0.22} />
+                                <stop offset="100%" stopColor={PERF_TONES.developer.fillTo} stopOpacity={0} />
                               </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.18)" vertical={false} />
                             <XAxis
                               dataKey="label"
-                              stroke="#9ca3af"
+                              stroke="#94A3B8"
                               fontSize={12}
                               tickLine={false}
-                              axisLine={{ stroke: '#e5e7eb' }}
+                              axisLine={{ stroke: 'rgba(148,163,184,0.35)' }}
                               angle={-20}
                               textAnchor="end"
                               height={100}
                               interval={0}
-                              tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
+                              tick={{ fill: '#E2E8F0', fontSize: 12, fontWeight: 600 }}
                             />
                             <YAxis
                               yAxisId="right"
                               orientation="right"
-                              stroke="#9ca3af"
+                              stroke="#94A3B8"
                               fontSize={12}
                               tickLine={false}
-                              axisLine={{ stroke: '#e5e7eb' }}
+                              axisLine={{ stroke: 'rgba(148,163,184,0.35)' }}
                               domain={RATE_AXIS.domain}
                               ticks={RATE_AXIS.ticks}
                               allowDecimals={false}
                               width={56}
-                              tick={{ fill: '#6b7280', fontSize: 12 }}
+                              tick={{ fill: '#CBD5E1', fontSize: 12 }}
                               tickFormatter={value => `${value}%`}
                               label={{
                                 value: t('dashboard.successRateAxis'),
                                 angle: 90,
                                 position: 'insideRight',
                                 offset: 12,
-                                className: 'esc-axis-label'
+                                className: 'esc-axis-label perf-neon-axis'
                               }}
                             />
                             <Tooltip
@@ -1038,18 +1050,18 @@ export default function Dashboard() {
                               height={28}
                               iconType="plainline"
                               iconSize={22}
-                              wrapperStyle={{ fontSize: 12, color: '#4b5563' }}
+                              wrapperStyle={{ fontSize: 12, color: '#E2E8F0' }}
                             />
                             <Area
                               yAxisId="right"
                               type="monotone"
                               dataKey="successRate"
                               name={t('dashboard.developerPerformance')}
-                              stroke={PERF_TONES.developer.line}
-                              strokeWidth={2.5}
+                              stroke="url(#devPerfLine)"
+                              strokeWidth={3}
                               fill="url(#devPerfArea)"
-                              dot={{ r: 4.5, fill: PERF_TONES.developer.line, stroke: '#fff', strokeWidth: 2 }}
-                              activeDot={{ r: 7, fill: PERF_TONES.developer.line, stroke: '#fff', strokeWidth: 2 }}
+                              dot={{ r: 4, fill: PERF_TONES.developer.line, stroke: '#fff', strokeWidth: 2 }}
+                              activeDot={{ r: 6, fill: PERF_TONES.developer.lineTo, stroke: '#fff', strokeWidth: 2 }}
                               connectNulls
                               isAnimationActive={false}
                               label={(
@@ -1058,7 +1070,7 @@ export default function Dashboard() {
                                   position="top"
                                   offset={10}
                                   formatter={value => `${value}%`}
-                                  fill="#4b5563"
+                                  fill="#E2E8F0"
                                   fontSize={12}
                                   fontWeight={700}
                                 />
@@ -1066,8 +1078,8 @@ export default function Dashboard() {
                             />
                           </AreaChart>
                         </ResponsiveContainer>
-                        <p className="esc-legend-note" aria-hidden="true" style={{ visibility: 'hidden' }}>
-                          {t('dashboard.escalationAvgBasis')}
+                        <p className="esc-legend-note perf-basis-note" style={{ marginTop: 4 }}>
+                          Average time from assignment to resolution of resolved developer requests
                         </p>
                       </div>
                     </div>

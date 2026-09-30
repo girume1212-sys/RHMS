@@ -235,15 +235,19 @@ export default function ClientDashboard() {
         );
       })()}
 
-      <div className="chart-card" style={{ marginTop: '24px' }}>
+      <div className="filters-bar sf-toolbar" style={{ marginTop: '24px' }}>
+        <div className="sf-toolbar-left">
+          <div className="table-search-box">
+            <span className="search-icon"><Icon name="search" size={14} /></span>
+            <input type="text" className="filter-search" placeholder={t('common.searchMyRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+          </div>
+        </div>
+        <div className="sf-toolbar-right" />
+      </div>
+
+      <div className="chart-card" style={{ marginTop: '16px' }}>
         <div className="table-header-bar">
           <h3>{t('common.myRequestsCount', { count: filteredRequests.length })}</h3>
-          <div className="table-header-actions">
-            <div className="table-search-box">
-              <span className="search-icon"><Icon name="search" size={14} /></span>
-              <input type="text" className="filter-search" placeholder={t('common.searchMyRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
-            </div>
-          </div>
         </div>
 
         <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>

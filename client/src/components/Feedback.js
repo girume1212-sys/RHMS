@@ -205,16 +205,20 @@ export default function Feedback() {
             </div>
           </div>
 
+          <div className="filters-bar sf-toolbar">
+            <div className="sf-toolbar-left">
+              <div className="table-search-box">
+                <span className="search-icon"><Icon name="search" size={14} /></span>
+                <input type="text" placeholder={t('feedback.searchPlaceholder')} value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+              </div>
+            </div>
+            <div className="sf-toolbar-right" />
+          </div>
+
           <div className="chart-card">
             <div className="table-header-bar">
               <h3>{t('feedback.listCount', { count: filtered.length })}</h3>
-              <div className="table-header-actions">
-                <div className="table-search-box">
-                  <span className="search-icon"><Icon name="search" size={14} /></span>
-                  <input type="text" placeholder={t('feedback.searchPlaceholder')} value={searchQuery}
-                    onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
-                </div>
-              </div>
             </div>
 
             <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>

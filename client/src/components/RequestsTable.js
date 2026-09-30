@@ -263,9 +263,14 @@ const RequestsTable = forwardRef(function RequestsTable({
         <div className="loading-screen"><div className="spinner"></div></div>
       ) : (
         <>
-          <div className="table-header-bar">
-            <h3>{showMyTasks ? t('common.myRequests') : (title || t('common.allRequests'))} ({filteredRequests.length})</h3>
-            <div className="table-header-actions">
+          <div className="filters-bar sf-toolbar">
+            <div className="sf-toolbar-left">
+              <div className="table-search-box">
+                <span className="search-icon"><Icon name="search" size={14} /></span>
+                <input type="text" placeholder={t('common.searchRequests')} value={filter.search} onChange={(e) => { setFilter(f => ({ ...f, search: e.target.value })); setPage(1); }} />
+              </div>
+            </div>
+            <div className="sf-toolbar-right">
               {(isDeveloper || isSupport) && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
                   <span>{t('common.showMyTasks')}</span>
@@ -299,11 +304,11 @@ const RequestsTable = forwardRef(function RequestsTable({
                 <option value="">{t('common.allStatuses')}</option>
                 {statuses.map(s => <option key={s.id} value={s.name}>{transSeeded(s.name, 'status', t)}</option>)}
               </select>
-              <div className="table-search-box">
-                <span className="search-icon"><Icon name="search" size={14} /></span>
-                <input type="text" placeholder={t('common.searchRequests')} value={filter.search} onChange={(e) => { setFilter(f => ({ ...f, search: e.target.value })); setPage(1); }} />
-              </div>
             </div>
+          </div>
+
+          <div className="table-header-bar">
+            <h3>{showMyTasks ? t('common.myRequests') : (title || t('common.allRequests'))} ({filteredRequests.length})</h3>
           </div>
 
           <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>

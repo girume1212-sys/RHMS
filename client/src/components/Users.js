@@ -21,6 +21,7 @@ export default function Users() {
   const { t } = useTranslation();
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -31,6 +32,7 @@ export default function Users() {
   const [perPage, setPerPage] = useState(10);
   const [roleFilter, setRoleFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [toasts, setToasts] = useState([]);
   const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
@@ -51,6 +53,7 @@ export default function Users() {
   useEffect(() => {
     loadUsers();
     api.get('/api/groups').then(setGroups).catch(() => {});
+    api.get('/api/companies').then(setCompanies).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -81,9 +84,18 @@ export default function Users() {
     return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
   };
 
+  const companyOptions = (() => {
+    const fromDb = (Array.isArray(companies) ? companies : [])
+      .map(c => c && c.name)
+      .filter(Boolean);
+    const fromUsers = users.map(u => u.companyName).filter(Boolean);
+    return [...new Set([...fromDb, ...fromUsers])].sort((a, b) => a.localeCompare(b));
+  })();
+
   const filteredUsers = users.filter(u => {
     if (roleFilter && u.role !== roleFilter) return false;
     if (groupFilter && (!u.groupIds || !u.groupIds.includes(groupFilter))) return false;
+    if (companyFilter && (u.companyName || '') !== companyFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return (
@@ -243,30 +255,40 @@ export default function Users() {
 
       {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{error}</div>}
 
-      <div className="filters-bar">
-        <div className="filter-search-wrap">
-          <span className="search-icon"><Icon name="search" size={14} /></span>
-          <input
-            type="text"
-            placeholder={t('common.searchUsers')}
-            className="filter-search"
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-          />
+      <div className="filters-bar users-toolbar">
+        <div className="users-toolbar-left">
+          <div className="filter-search-wrap">
+            <span className="search-icon"><Icon name="search" size={14} /></span>
+            <input
+              type="text"
+              placeholder={t('common.searchUsers')}
+              className="filter-search"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+            />
+          </div>
         </div>
-        <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}>
-          <option value="">{t('common.allRoles')}</option>
-          <option value="admin">{t('role.admin')}</option>
-          <option value="support">{t('role.escalationTeam')}</option>
-          <option value="developer">{t('role.developer')}</option>
-          <option value="client">{t('role.client')}</option>
-        </select>
-        <select value={groupFilter} onChange={(e) => { setGroupFilter(e.target.value); setPage(1); }}>
-          <option value="">{t('common.allGroups')}</option>
-          {groups.map(g => (
-            <option key={g.id} value={g.id}>{g.name}</option>
-          ))}
-        </select>
+        <div className="users-toolbar-right">
+          <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}>
+            <option value="">{t('common.allRoles')}</option>
+            <option value="admin">{t('role.admin')}</option>
+            <option value="support">{t('role.escalationTeam')}</option>
+            <option value="developer">{t('role.developer')}</option>
+            <option value="client">{t('role.client')}</option>
+          </select>
+          <select value={groupFilter} onChange={(e) => { setGroupFilter(e.target.value); setPage(1); }}>
+            <option value="">{t('common.allGroups')}</option>
+            {groups.map(g => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+          <select value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setPage(1); }}>
+            <option value="">{t('common.allCompanies')}</option>
+            {companyOptions.map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {loading ? (
@@ -275,8 +297,6 @@ export default function Users() {
         <div className="chart-card">
           <div className="table-header-bar">
             <h3>{t('sidebar.users')} ({filteredUsers.length})</h3>
-            <div className="table-header-actions">
-                </div>
           </div>
 
           <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>

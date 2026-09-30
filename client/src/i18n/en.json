@@ -398,6 +398,7 @@
     "accountBlockedTitle": "Account Blocked",
     "accountBlocked": "Your account is blocked. You cannot submit requests.",
     "allGroups": "All Groups",
+    "allCompanies": "All Companies",
     "noUsersFound": "No users found",
     "failedToLoadGroups": "Failed to load groups",
     "failedToCreateGroup": "Failed to create group",

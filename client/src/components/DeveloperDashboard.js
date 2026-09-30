@@ -1,4 +1,5 @@
 ﻿import React, { useState, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getStatusIcon } from '../utils/statusIcons';
 import { shareOfTotalPercent } from '../utils/statusShare';
 import { useAuth } from '../AuthContext';
@@ -13,6 +14,7 @@ export default function DeveloperDashboard() {
   const { t } = useTranslation();
   const shareLabel = t('common.ofTotal');
   const goBack = usePageBack('/');
+  const navigate = useNavigate();
   const tableRef = useRef();
   const [shared, setShared] = useState({ requests: [], statuses: [], showMyTasks: false, filter: { status: '' } });
   const handleDataChange = useCallback((data) => setShared(data), []);
@@ -39,9 +41,7 @@ export default function DeveloperDashboard() {
     rejected: displayRequests.filter(r => r.status?.name === 'Rejected').length,
   };
 
-  const toggleStatusFilter = (name) => {
-    tableRef.current?.setStatusFilter(shared.filter.status === name ? '' : name);
-  };
+
 
   const DevStatCard = ({ icon, value, label, color, onClick, share, shareLabel }) => {
     const shareNum = parseFloat(share) || 0;
@@ -80,20 +80,49 @@ export default function DeveloperDashboard() {
         </div>
       </div>
 
-      <div className="stats-grid">
-        {(shared.statuses || []).filter(s => s.is_active !== false && s.name.toLowerCase() !== 'reopened').map(s => (
+      {(() => {
+        const activeStatuses = (shared.statuses || []).filter(s => s.is_active !== false && s.name.toLowerCase() !== 'reopened');
+        const totalCards = activeStatuses.length + 1;
+        const perRow = Math.ceil(totalCards / 2) || 1;
+        const renderCard = (s) => (
           <DevStatCard
             key={s.id}
             icon={<Icon name={getStatusIcon(s.name)} />}
             value={countByStatusId(displayRequests, s.id)}
             label={s.name}
             color={s.color || '#6B7280'}
-            onClick={() => toggleStatusFilter(s.name)}
+            onClick={() => navigate(`/requests?status=${s.id}`)}
             share={shareOfTotalPercent(countByStatusId(displayRequests, s.id), displayRequests.length)}
             shareLabel={shareLabel}
           />
-        ))}
-      </div>
+        );
+        const row1 = [
+          <DevStatCard
+            key="total"
+            icon={<Icon name="total" />}
+            value={displayRequests.length}
+            label={t('common.totalRequests')}
+            color="#FACC15"
+            onClick={() => navigate('/requests')}
+            share={shareOfTotalPercent(displayRequests.length, displayRequests.length)}
+            shareLabel={shareLabel}
+          />,
+          ...activeStatuses.slice(0, perRow - 1).map(renderCard)
+        ];
+        const row2 = activeStatuses.slice(perRow - 1).map(renderCard);
+        return (
+          <>
+            <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${perRow}, 1fr)`, marginBottom: row2.length ? '12px' : 0 }}>
+              {row1}
+            </div>
+            {row2.length > 0 && (
+              <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${perRow}, 1fr)` }}>
+                {row2}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       <div style={{ marginTop: '24px' }}>
         <RequestsTable ref={tableRef} user={user} title={t('common.allRequests')} onDataChange={handleDataChange} />

@@ -294,60 +294,94 @@ if (statusName === 'New') {
         </div>
       )}
 
-      <div className="stats-grid">
-        {(statuses || []).filter(s => s.is_active !== false && s.name.toLowerCase() !== 'reopened').map(s => (
+      {(() => {
+        const activeStatuses = (statuses || []).filter(s => s.is_active !== false && s.name.toLowerCase() !== 'reopened');
+        const totalCards = activeStatuses.length + 1;
+        const perRow = Math.ceil(totalCards / 2) || 1;
+        const renderCard = (s) => (
           <DevStatCard
             key={s.id}
             icon={<Icon name={getStatusIcon(s.name)} />}
             value={countByStatusId(displayRequests, s.id)}
             label={s.name}
             color={s.color || '#6B7280'}
-            onClick={() => setStatusFilter(statusFilter === s.name ? '' : s.name)}
+            onClick={() => navigate(`/requests?status=${s.id}`)}
             share={shareOfTotalPercent(countByStatusId(displayRequests, s.id), displayRequests.length)}
             shareLabel={shareLabel}
           />
-        ))}
+        );
+        const row1 = [
+          <DevStatCard
+            key="total"
+            icon={<Icon name="total" />}
+            value={displayRequests.length}
+            label={t('common.totalRequests')}
+            color="#FACC15"
+            onClick={() => navigate('/requests')}
+            share={shareOfTotalPercent(displayRequests.length, displayRequests.length)}
+            shareLabel={shareLabel}
+          />,
+          ...activeStatuses.slice(0, perRow - 1).map(renderCard)
+        ];
+        const row2 = activeStatuses.slice(perRow - 1).map(renderCard);
+        return (
+          <>
+            <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${perRow}, 1fr)`, marginBottom: row2.length ? '12px' : 0 }}>
+              {row1}
+            </div>
+            {row2.length > 0 && (
+              <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${perRow}, 1fr)` }}>
+                {row2}
+              </div>
+            )}
+          </>
+        );
+      })()}
+
+      <div className="filters-bar sf-toolbar" style={{ marginTop: '24px' }}>
+        <div className="sf-toolbar-left">
+          <div className="table-search-box">
+            <span className="search-icon"><Icon name="search" size={14} /></span>
+            <input type="text" placeholder={t('common.searchRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+          </div>
+        </div>
+        <div className="sf-toolbar-right">
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
+            <span>{t('common.showMyTasks')}</span>
+            <div
+              onClick={() => { setShowAssignedOnly(!showAssignedOnly); setPage(1); }}
+              style={{
+                width: '40px', height: '22px', borderRadius: '11px',
+                background: showAssignedOnly ? '#8B5CF6' : '#D1D5DB',
+                position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                flexShrink: 0
+              }}
+            >
+              <div style={{
+                width: '18px', height: '18px', borderRadius: '50%',
+                background: 'white', position: 'absolute', top: '2px',
+                left: showAssignedOnly ? '20px' : '2px',
+                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+              }} />
+            </div>
+          </label>
+          <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
+            <option value="">{t('common.allStatuses')}</option>
+            {statuses.filter(s => s.name !== 'Closed').map(s => <option key={s.id} value={s.name}>{transSeeded(s.name, 'status', t)}</option>)}
+          </select>
+          <select className="filter-select" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}>
+            <option value="">{t('common.allPriorities')}</option>
+            <option value="Critical">{t('priority.Critical')}</option>
+            <option value="High">{t('priority.High')}</option>
+            <option value="Medium">{t('priority.Medium')}</option>
+            <option value="Low">{t('priority.Low')}</option>
+          </select>
+        </div>
       </div>
 
-      <div className="chart-card" style={{ marginTop: '24px' }}>
+      <div className="chart-card" style={{ marginTop: '16px' }}>
         <div className="table-header-bar">
           <span style={{ fontSize: '16px', fontWeight: 700 }}>{t('common.allRequestsCount', { count: filteredRequests.length })}</span>
-          <div className="table-header-actions">
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
-              <span>{t('common.showMyTasks')}</span>
-              <div
-                onClick={() => { setShowAssignedOnly(!showAssignedOnly); setPage(1); }}
-                style={{
-                  width: '40px', height: '22px', borderRadius: '11px',
-                  background: showAssignedOnly ? '#8B5CF6' : '#D1D5DB',
-                  position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-                  flexShrink: 0
-                }}
-              >
-                <div style={{
-                  width: '18px', height: '18px', borderRadius: '50%',
-                  background: 'white', position: 'absolute', top: '2px',
-                  left: showAssignedOnly ? '20px' : '2px',
-                  transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
-                }} />
-              </div>
-            </label>
-            <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-              <option value="">{t('common.allStatuses')}</option>
-              {statuses.filter(s => s.name !== 'Closed').map(s => <option key={s.id} value={s.name}>{transSeeded(s.name, 'status', t)}</option>)}
-            </select>
-            <select className="filter-select" value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}>
-              <option value="">{t('common.allPriorities')}</option>
-              <option value="Critical">{t('priority.Critical')}</option>
-              <option value="High">{t('priority.High')}</option>
-              <option value="Medium">{t('priority.Medium')}</option>
-              <option value="Low">{t('priority.Low')}</option>
-            </select>
-            <div className="table-search-box">
-              <span className="search-icon"><Icon name="search" size={14} /></span>
-              <input type="text" placeholder={t('common.searchRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
-            </div>
-          </div>
         </div>
 
         <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>
