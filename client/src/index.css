@@ -502,18 +502,18 @@ body.dark-mode {
   background: none;
   border: none;
 }
-.nav-item:hover:not(.active) {
-  background: linear-gradient(135deg, #2563EB 0%, #0D9488 100%);
+.nav-item:hover {
+  background: linear-gradient(135deg, #2563EB 0%, #14B8A6 100%);
   color: #FFFFFF;
-  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 14px rgba(20, 184, 166, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
-.nav-item:hover:not(.active) .nav-icon { color: #FFFFFF; }
+.nav-item:hover .nav-icon { color: #FFFFFF; }
 .nav-item.active {
-  background: linear-gradient(135deg, #166534 0%, #14532D 55%, #052E16 100%);
-  color: #FFFFFF;
-  box-shadow: 0 4px 14px rgba(5, 46, 22, 0.5), inset 0 0 0 1px rgba(187, 247, 208, 0.25);
+  background: #DBEAFE;
+  color: #1E40AF;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25);
 }
-.nav-item.active .nav-icon { color: #FFFFFF; }
+.nav-item.active .nav-icon { color: #1E40AF; }
 .nav-icon { font-size: 18px; width: 24px; text-align: center; }
 .nav-icon svg { width: 20px; height: 20px; vertical-align: middle; }
 .sidebar-user {
@@ -2329,31 +2329,6 @@ body.dark-mode .req-cal-legend-item { color: #94a3b8; }
 .filters-bar select:focus {
   outline: none;
   border-color: #00b4d8;
-}
-/* Users toolbar: search left, filters right, table starts below */
-.users-toolbar {
-  justify-content: space-between;
-}
-.users-toolbar-left {
-  display: flex;
-  align-items: center;
-  flex: 1 1 auto;
-  min-width: 220px;
-}
-.users-toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-@media (max-width: 640px) {
-  .users-toolbar { flex-direction: column; align-items: stretch; }
-  .users-toolbar-left { width: 100%; }
-  .users-toolbar-left .filter-search-wrap,
-  .users-toolbar-left .filter-search { width: 100%; }
-  .users-toolbar-right { width: 100%; justify-content: flex-start; }
-  .users-toolbar-right select { flex: 1 1 140px; }
 }
 /* Shared search + filter toolbar (outside/above tables).
    Search left, filters right, table starts below. Responsive stacks. */
@@ -4200,17 +4175,17 @@ body.dark-mode .nav-item,
 body.dark-sidebar .nav-item {
   color: #cbd5e1;
 }
-body.dark-mode .sidebar-nav .nav-item:hover:not(.active),
-body.dark-sidebar .sidebar-nav .nav-item:hover:not(.active) {
-  background: linear-gradient(135deg, #2563EB 0%, #0D9488 100%);
+body.dark-mode .sidebar-nav .nav-item:hover,
+body.dark-sidebar .sidebar-nav .nav-item:hover {
+  background: linear-gradient(135deg, #2563EB 0%, #14B8A6 100%);
   color: #FFFFFF;
-  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  box-shadow: 0 4px 16px rgba(20, 184, 166, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 body.dark-mode .sidebar-nav .nav-item.active,
 body.dark-sidebar .sidebar-nav .nav-item.active {
-  background: linear-gradient(135deg, #166534 0%, #14532D 55%, #052E16 100%);
+  background: rgba(37, 99, 235, 0.25);
   color: #FFFFFF;
-  box-shadow: 0 4px 16px rgba(5, 46, 22, 0.6), inset 0 0 0 1px rgba(187, 247, 208, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.35);
 }
 body.dark-mode .sidebar-user,
 body.dark-sidebar .sidebar-user {
@@ -7293,6 +7268,14 @@ body.dark-mode .feedback-link {
 }
 body.dark-mode .feedback-link:hover {
   color: #93c5fd !important;
+}
+.feedback-rating-num {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2937;
+}
+body.dark-mode .feedback-rating-num {
+  color: #ffffff !important;
 }
 .feedback-label {
   font-size: 13px;

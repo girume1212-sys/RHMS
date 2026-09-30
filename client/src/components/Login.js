@@ -5,7 +5,7 @@ import { validateEmail } from '../utils/validation';
 import ValidationError from './ValidationError';
 import { useTranslation } from '../i18n/useTranslation';
 import LanguageSelector from './LanguageSelector';
-import { API_BASE } from '../api';
+import { API_BASE, api } from '../api';
 
 const GOOGLE_G_ICON = `
   <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true" focusable="false">
@@ -27,7 +27,13 @@ export default function Login() {
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotMsg, setForgotMsg] = useState('');
-  const [errors, setErrors] = useState({ forgotEmail: '' });
+  const [forgotStep, setForgotStep] = useState('email');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [errors, setErrors] = useState({ forgotEmail: '', otp: '', newPassword: '', confirmPassword: '' });
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleBtnReady, setGoogleBtnReady] = useState(false);
   const googleScriptRef = useRef(null);
@@ -162,12 +168,95 @@ export default function Login() {
     }
   };
 
-  const handleForgotPassword = (e) => {
-    e.preventDefault();
-    const err = validateField('forgotEmail', forgotEmail);
+  const closeForgot = () => {
+    setShowForgot(false);
+    setForgotMsg('');
+    setForgotError('');
+    setForgotEmail('');
+    setOtp('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setForgotStep('email');
+    setErrors({ forgotEmail: '', otp: '', newPassword: '', confirmPassword: '' });
+  };
+
+  // Step 1: check the email against the users database and send a 6-digit OTP.
+  const handleSendOtp = async (e, isResend = false) => {
+    if (e) e.preventDefault();
+    const targetEmail = forgotEmail;
+    const err = validateField('forgotEmail', targetEmail);
     if (err) return;
-    setForgotMsg(t('common.resetLinkSent'));
-    setTimeout(() => { setShowForgot(false); setForgotMsg(''); setForgotEmail(''); }, 3000);
+    setForgotLoading(true);
+    setForgotError('');
+    setForgotMsg('');
+    try {
+      await api.post('/api/auth/forgot-password-otp', { email: targetEmail });
+      setForgotMsg(t('common.otpSent'));
+      if (!isResend) setForgotStep('otp');
+    } catch (err) {
+      setForgotError(err.message);
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  // Step 2: verify the OTP and its expiration.
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    const code = otp.trim();
+    if (!/^\d{6}$/.test(code)) {
+      setErrors(prev => ({ ...prev, otp: t('common.otpMustBe6Digits') }));
+      return;
+    }
+    setErrors(prev => ({ ...prev, otp: '' }));
+    setForgotLoading(true);
+    setForgotError('');
+    try {
+      const data = await api.post('/api/auth/verify-otp', { email: forgotEmail, otp: code });
+      if (data.valid) {
+        setForgotStep('password');
+        setForgotMsg('');
+      } else if (data.reason === 'expired') {
+        setForgotError(t('common.otpExpired'));
+      } else if (data.reason === 'locked') {
+        setForgotError(t('common.otpLocked'));
+      } else {
+        setForgotError(t('common.invalidOtp'));
+      }
+    } catch (err) {
+      setForgotError(err.message);
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  // Step 3: validate with the existing password rules and reset.
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (!newPassword) {
+      setErrors(prev => ({ ...prev, newPassword: t('validation.passwordRequired') }));
+      return;
+    }
+    if (newPassword.length < 6) {
+      setErrors(prev => ({ ...prev, newPassword: t('validation.passwordMin', { min: 6 }) }));
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setErrors(prev => ({ ...prev, confirmPassword: t('validation.passwordMismatch') }));
+      return;
+    }
+    setErrors(prev => ({ ...prev, newPassword: '', confirmPassword: '' }));
+    setForgotLoading(true);
+    setForgotError('');
+    try {
+      await api.post('/api/auth/reset-password-otp', { email: forgotEmail, otp: otp.trim(), password: newPassword });
+      setForgotMsg(t('common.passwordResetSuccess'));
+      setTimeout(closeForgot, 2500);
+    } catch (err) {
+      setForgotError(err.message);
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
@@ -267,34 +356,106 @@ export default function Login() {
       </div>
 
       {showForgot && (
-        <div className="modal-overlay" onClick={() => setShowForgot(false)}>
+        <div className="modal-overlay" onClick={closeForgot}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h3>{t('common.resetPassword')}</h3>
-            <p>{t('common.resetLinkSent')}</p>
-            {forgotMsg && <div className="login-error" style={{ marginBottom: '16px' }}>{forgotMsg}</div>}
-            <form onSubmit={handleForgotPassword}>
-              <div className="login-field">
-                <div className="login-input-wrapper">
-                  <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                    <polyline points="22,6 12,13 2,6"/>
-                  </svg>
-                  <input
-                    type="email"
-                    value={forgotEmail}
-                    onChange={(e) => { setForgotEmail(e.target.value); validateField('forgotEmail', e.target.value); }}
-                    placeholder={t('common.enterEmail')}
-                    className={errors.forgotEmail ? 'input-error' : ''}
-                    required
-                  />
+            {forgotStep === 'email' && <p>{t('common.enterEmail')}</p>}
+            {forgotStep === 'otp' && <p>{t('common.otpSent')}</p>}
+            {forgotStep === 'password' && <p>{t('common.setNewPassword')}</p>}
+            {forgotMsg && <div style={{ background: '#F0FDF4', color: '#15803D', padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{forgotMsg}</div>}
+            {forgotError && <div className="login-error" style={{ marginBottom: '16px' }}>{forgotError}</div>}
+            {forgotStep === 'email' && (
+              <form onSubmit={handleSendOtp}>
+                <div className="login-field">
+                  <div className="login-input-wrapper">
+                    <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                      <polyline points="22,6 12,13 2,6"/>
+                    </svg>
+                    <input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => { setForgotEmail(e.target.value); validateField('forgotEmail', e.target.value); }}
+                      placeholder={t('common.enterEmail')}
+                      className={errors.forgotEmail ? 'input-error' : ''}
+                      required
+                    />
+                  </div>
+                  <ValidationError message={errors.forgotEmail} />
                 </div>
-                <ValidationError message={errors.forgotEmail} />
-              </div>
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-outline" onClick={() => { setShowForgot(false); setForgotMsg(''); setForgotEmail(''); }}>{t('common.cancel')}</button>
-                <button type="submit" className="login-btn" style={{ width: 'auto', padding: '10px 24px' }}>{t('common.sendResetLink')}</button>
-              </div>
-            </form>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn btn-outline" onClick={closeForgot}>{t('common.cancel')}</button>
+                  <button type="submit" className="login-btn" style={{ width: 'auto', padding: '10px 24px' }} disabled={forgotLoading}>
+                    {forgotLoading ? t('common.signingIn') : t('common.sendResetLink')}
+                  </button>
+                </div>
+              </form>
+            )}
+            {forgotStep === 'otp' && (
+              <form onSubmit={handleVerifyOtp}>
+                <div className="login-field">
+                  <div className="login-input-wrapper">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setErrors(prev => ({ ...prev, otp: '' })); }}
+                      placeholder={t('common.enterOtpCode')}
+                      className={errors.otp ? 'input-error' : ''}
+                      style={{ letterSpacing: '8px', textAlign: 'center', fontWeight: 700, fontSize: '18px' }}
+                      required
+                    />
+                  </div>
+                  <ValidationError message={errors.otp} />
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <button type="button" className="forgot-link" onClick={(e) => handleSendOtp(e, true)} disabled={forgotLoading}>
+                    {t('common.resendCode')}
+                  </button>
+                  <button type="button" className="btn btn-outline" onClick={closeForgot}>{t('common.cancel')}</button>
+                  <button type="submit" className="login-btn" style={{ width: 'auto', padding: '10px 24px' }} disabled={forgotLoading}>
+                    {forgotLoading ? t('common.signingIn') : t('common.verifyCode')}
+                  </button>
+                </div>
+              </form>
+            )}
+            {forgotStep === 'password' && (
+              <form onSubmit={handleResetPassword}>
+                <div className="login-field">
+                  <div className="login-input-wrapper">
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder={t('common.newPassword')}
+                      className={errors.newPassword ? 'input-error' : ''}
+                      required
+                    />
+                  </div>
+                  <ValidationError message={errors.newPassword} />
+                </div>
+                <div className="login-field">
+                  <div className="login-input-wrapper">
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder={t('common.confirmPassword')}
+                      className={errors.confirmPassword ? 'input-error' : ''}
+                      required
+                    />
+                  </div>
+                  <ValidationError message={errors.confirmPassword} />
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn btn-outline" onClick={closeForgot}>{t('common.cancel')}</button>
+                  <button type="submit" className="login-btn" style={{ width: 'auto', padding: '10px 24px' }} disabled={forgotLoading}>
+                    {forgotLoading ? t('common.signingIn') : t('common.resetPasswordBtn')}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

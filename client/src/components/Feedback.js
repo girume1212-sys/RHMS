@@ -115,9 +115,28 @@ export default function Feedback() {
 
   const renderStars = (rating) => (
     <span style={{ display: 'inline-flex', gap: '2px', verticalAlign: 'middle' }}>
-      {[1, 2, 3, 4, 5].map(i => <Star key={i} filled={i <= rating} />)}
+      {[1, 2, 3, 4, 5].map(i => <Star key={i} filled={i <= Math.round(Number(rating) || 0)} />)}
     </span>
   );
+
+  const renderRating = (rating) => {
+    const num = Number(rating) || 0;
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+        <strong className="feedback-rating-num">{num.toFixed(1)}</strong>
+        {renderStars(num)}
+      </span>
+    );
+  };
+
+  const satisfactionFor = (rating) => {
+    const num = Number(rating) || 0;
+    if (num >= 4.5) return { key: 'verySatisfied', color: '#059669' };
+    if (num >= 3.5) return { key: 'satisfied', color: '#10B981' };
+    if (num >= 2.5) return { key: 'neutral', color: '#F59E0B' };
+    if (num >= 1.5) return { key: 'dissatisfied', color: '#F97316' };
+    return { key: 'veryDissatisfied', color: '#DC2626' };
+  };
 
   const getSortIcon = (key) => {
     const isActive = sort.key === key;
@@ -205,18 +224,17 @@ export default function Feedback() {
             </div>
           </div>
 
-          <div className="filters-bar sf-toolbar">
-            <div className="sf-toolbar-left">
-              <div className="table-search-box">
-                <span className="search-icon"><Icon name="search" size={14} /></span>
-                <input type="text" placeholder={t('feedback.searchPlaceholder')} value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
-              </div>
-            </div>
-            <div className="sf-toolbar-right" />
-          </div>
-
           <div className="chart-card">
+            <div className="filters-bar sf-toolbar">
+              <div className="sf-toolbar-left">
+                <div className="table-search-box">
+                  <span className="search-icon"><Icon name="search" size={14} /></span>
+                  <input type="text" placeholder={t('feedback.searchPlaceholder')} value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+                </div>
+              </div>
+              <div className="sf-toolbar-right" />
+            </div>
             <div className="table-header-bar">
               <h3>{t('feedback.listCount', { count: filtered.length })}</h3>
             </div>
@@ -227,6 +245,7 @@ export default function Feedback() {
                   <tr>
                     <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')} {getSortIcon('id')}</span></th>
                     <th className="sortable"><span onClick={() => handleSort('rating')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('feedback.rating')} {getSortIcon('rating')}</span></th>
+                    <th className="sortable"><span onClick={() => handleSort('rating')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('feedback.satisfaction')} {getSortIcon('rating')}</span></th>
                     <th className="sortable"><span onClick={() => handleSort('comment')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('feedback.comment')} {getSortIcon('comment')}</span></th>
                     <th className="sortable"><span onClick={() => handleSort('user_name')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.user')} {getSortIcon('user_name')}</span></th>
                     <th className="sortable"><span onClick={() => handleSort('request_subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.request')} {getSortIcon('request_subject')}</span></th>
@@ -240,7 +259,17 @@ export default function Feedback() {
                       <td><span className="feedback-cell-muted">
                         {(page - 1) * perPage + i + 1}
                       </span></td>
-                      <td>{renderStars(f.rating)}</td>
+                      <td>{renderRating(f.rating)}</td>
+                      <td>
+                        {(() => {
+                          const s = satisfactionFor(f.rating);
+                          return (
+                            <span className="role-badge" style={{ background: s.color + '20', color: s.color }}>
+                              {t('feedback.' + s.key)}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td className="feedback-cell-comment">
                         {f.comment ? (
                           <span className="feedback-comment-text">

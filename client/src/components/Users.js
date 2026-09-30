@@ -255,46 +255,44 @@ export default function Users() {
 
       {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{error}</div>}
 
-      <div className="filters-bar users-toolbar">
-        <div className="users-toolbar-left">
-          <div className="filter-search-wrap">
-            <span className="search-icon"><Icon name="search" size={14} /></span>
-            <input
-              type="text"
-              placeholder={t('common.searchUsers')}
-              className="filter-search"
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-            />
-          </div>
-        </div>
-        <div className="users-toolbar-right">
-          <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}>
-            <option value="">{t('common.allRoles')}</option>
-            <option value="admin">{t('role.admin')}</option>
-            <option value="support">{t('role.escalationTeam')}</option>
-            <option value="developer">{t('role.developer')}</option>
-            <option value="client">{t('role.client')}</option>
-          </select>
-          <select value={groupFilter} onChange={(e) => { setGroupFilter(e.target.value); setPage(1); }}>
-            <option value="">{t('common.allGroups')}</option>
-            {groups.map(g => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
-          <select value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setPage(1); }}>
-            <option value="">{t('common.allCompanies')}</option>
-            {companyOptions.map(name => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
       {loading ? (
         <div className="loading-screen"><div className="spinner"></div></div>
       ) : (
         <div className="chart-card">
+          <div className="filters-bar sf-toolbar">
+            <div className="sf-toolbar-left">
+              <div className="table-search-box">
+                <span className="search-icon"><Icon name="search" size={14} /></span>
+                <input
+                  type="text"
+                  placeholder={t('common.searchUsers')}
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+                />
+              </div>
+            </div>
+            <div className="sf-toolbar-right">
+              <select className="filter-select" value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}>
+                <option value="">{t('common.allRoles')}</option>
+                <option value="admin">{t('role.admin')}</option>
+                <option value="support">{t('role.escalationTeam')}</option>
+                <option value="developer">{t('role.developer')}</option>
+                <option value="client">{t('role.client')}</option>
+              </select>
+              <select className="filter-select" value={groupFilter} onChange={(e) => { setGroupFilter(e.target.value); setPage(1); }}>
+                <option value="">{t('common.allGroups')}</option>
+                {groups.map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+              <select className="filter-select" value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setPage(1); }}>
+                <option value="">{t('common.allCompanies')}</option>
+                {companyOptions.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div className="table-header-bar">
             <h3>{t('sidebar.users')} ({filteredUsers.length})</h3>
           </div>

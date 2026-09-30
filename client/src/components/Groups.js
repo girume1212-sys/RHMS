@@ -304,6 +304,7 @@ export default function Groups() {
       {loading ? (
         <div className="loading-screen"><div className="spinner"></div></div>
       ) : (
+        <>
         <div className="filters-bar sf-toolbar">
           <div className="sf-toolbar-left">
             <div className="table-search-box">
@@ -381,6 +382,7 @@ export default function Groups() {
             </div>
           </div>
         </div>
+        </>
       )}
 
       {(showModal || editingGroup) && (

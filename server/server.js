@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
@@ -8,6 +9,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { OAuth2Client } = require('google-auth-library');
 const pool = require('./db');
+const mailer = require('./mailer');
 const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity, logUserActivity, logGroupActivity, logCompanyActivity, logSettingsActivity, logSearchActivity } = require('./activityLogger');
 
 (async () => {
@@ -366,6 +368,22 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_token_hash ON password_reset_tokens(token_hash)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_expires ON password_reset_tokens(expires_at)`);
     console.log('password_reset_tokens table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_otps (
+        id VARCHAR(50) PRIMARY KEY,
+        user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        otp_hash VARCHAR(255) NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        used_at TIMESTAMP WITH TIME ZONE,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        created_by_ip VARCHAR(45)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_otp_user ON password_reset_otps(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_otp_expires ON password_reset_otps(expires_at)`);
+    console.log('password_reset_otps table ready');
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sla_tracking (
@@ -984,6 +1002,207 @@ app.post('/api/auth/reset-password', async (req, res) => {
     res.json({ message: 'Password has been reset. You can now sign in with your new password.' });
   } catch (err) {
     console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// ---- Forgot-password via 6-digit email OTP ----
+// No SMTP transporter is configured in this deployment; the existing RHMS email
+// configuration is the `systemEmail` system setting. The OTP is delivered from
+// that sender identity through the existing in-app notification channel
+// (notifyUser/persistNotification) and surfaced on the server console, exactly
+// like the existing reset-link flow. If an SMTP transporter is added later,
+// sendPasswordResetOtpEmail is the single place to route through it.
+async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlMinutes) {
+  let fromAddress = 'support@rhms.com';
+  try {
+    const r = await pool.query("SELECT value FROM system_settings WHERE key = 'systemEmail'");
+    if (r.rows.length > 0 && r.rows[0].value) fromAddress = r.rows[0].value;
+  } catch (e) { /* fall back to default sender */ }
+  const subject = 'RHMS password reset code';
+  const text =
+    `Hello ${userName || 'there'},\n\n` +
+    `Your RHMS password reset code is: ${otp}\n\n` +
+    `It expires in ${ttlMinutes} minutes and can be used only once. ` +
+    `If you did not request this, you can safely ignore this message.\n\n` +
+    `— ${fromAddress}`;
+  const html =
+    `<p>Hello ${userName || 'there'},</p>` +
+    `<p>Your RHMS password reset code is: <strong style="font-size:20px;letter-spacing:4px;">${otp}</strong></p>` +
+    `<p>It expires in ${ttlMinutes} minutes and can be used only once. ` +
+    `If you did not request this, you can safely ignore this message.</p>` +
+    `<p>— ${fromAddress}</p>`;
+  if (mailer.isSmtpConfigured()) {
+    try {
+      const info = await mailer.sendMail({ to: toEmail, subject, text, html });
+      console.log(`[PasswordResetOTP] Email sent to ${toEmail} via SMTP (messageId: ${info.messageId || 'n/a'})`);
+      return { channel: 'email' };
+    } catch (err) {
+      console.error('[PasswordResetOTP] SMTP send failed, falling back to in-app channel:', err.message);
+    }
+  } else {
+    console.log(`[PasswordResetOTP] SMTP not configured; using in-app fallback. From: ${fromAddress} To: ${toEmail} Subject: ${subject}\n${text}`);
+  }
+  try {
+    const u = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [String(toEmail).toLowerCase()]);
+    if (u.rows.length > 0) {
+      notifyUser(u.rows[0].id, `Your password reset code is ${otp}. It expires in ${ttlMinutes} minutes.`,
+        { type: 'password_reset_otp', title: 'Password Reset Code' });
+    }
+  } catch (e) { /* notification is best-effort */ }
+  return { channel: 'in-app' };
+}
+
+const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
+
+// Lightweight in-memory rate limiting for the OTP endpoints (per key).
+// Limits: OTP sends 5/hour + 2-minute resend cooldown; verifications 10/hour.
+const otpRateState = new Map();
+function otpRateLimit(key, maxHits, windowMs) {
+  const now = Date.now();
+  let entry = otpRateState.get(key);
+  if (!entry || now - entry.start > windowMs) {
+    entry = { start: now, hits: 0 };
+    otpRateState.set(key, entry);
+  }
+  entry.hits += 1;
+  if (entry.hits > maxHits) return false;
+  // Opportunistic cleanup so the map cannot grow without bound.
+  if (otpRateState.size > 5000) {
+    for (const [k, v] of otpRateState) {
+      if (now - v.start > windowMs) otpRateState.delete(k);
+    }
+  }
+  return true;
+}
+
+const OTP_TTL_MINUTES = 10;
+const OTP_MAX_VERIFY_ATTEMPTS = 5;
+
+async function findValidOtp(userId, otp) {
+  const result = await pool.query(
+    `SELECT id, otp_hash, expires_at, used_at, attempts
+     FROM password_reset_otps
+     WHERE user_id = $1 AND used_at IS NULL
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId]
+  );
+  const row = result.rows[0];
+  if (!row) return { ok: false, reason: 'not_found' };
+  if (new Date(row.expires_at).getTime() < Date.now()) return { ok: false, reason: 'expired', id: row.id };
+  if (row.attempts >= OTP_MAX_VERIFY_ATTEMPTS) return { ok: false, reason: 'locked', id: row.id };
+  if (hashOtp(String(otp).trim()) !== row.otp_hash) return { ok: false, reason: 'mismatch', id: row.id };
+  return { ok: true, id: row.id };
+}
+
+// Step 1: verify the account exists, generate a secure 6-digit OTP, store only
+// its hash with expiry, and send it. Generic response prevents enumeration.
+app.post('/api/auth/forgot-password-otp', async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+    if (!otpRateLimit(`send:${ip}`, 20, 60 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    }
+    if (!otpRateLimit(`sendemail:${email}`, 5, 60 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Too many reset requests for this email. Please try again later.' });
+    }
+
+    const userResult = await pool.query('SELECT id, name, email FROM users WHERE LOWER(email) = $1', [email]);
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0];
+      // Resend cooldown: reuse is prevented by invalidating, but do not spam.
+      const recent = await pool.query(
+        `SELECT created_at FROM password_reset_otps
+         WHERE user_id = $1 AND used_at IS NULL AND created_at > NOW() - INTERVAL '2 minutes'
+         ORDER BY created_at DESC LIMIT 1`,
+        [user.id]
+      );
+      if (recent.rows.length === 0) {
+        // Single-use protection: invalidate previously issued, unused OTPs.
+        await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [user.id]);
+        const otp = String(crypto.randomInt(100000, 1000000));
+        const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
+        await pool.query(
+          `INSERT INTO password_reset_otps (id, user_id, otp_hash, expires_at, created_by_ip, created_at)
+           VALUES ($1, $2, $3, $4, $5, NOW())`,
+          [uuidv4(), user.id, hashOtp(otp), expiresAt, ip]
+        );
+        auditLogin('password_reset_otp_requested', user.id, user.email, req);
+        await logAuthActivity('password_reset_requested', user, req, { email, channel: 'otp' });
+        await sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_MINUTES);
+      }
+    }
+    res.json({ message: 'If an account exists with this email, a verification code has been sent.' });
+  } catch (err) {
+    console.error('Forgot password OTP error:', err);
+    res.status(500).json({ error: 'Failed to send verification code' });
+  }
+});
+
+// Step 2: verify the OTP and expiry without consuming it.
+app.post('/api/auth/verify-otp', async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const otp = (req.body.otp || '').trim();
+    if (!email || !otp) return res.status(400).json({ error: 'Email and code are required' });
+    const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+    if (!otpRateLimit(`verify:${ip}`, 30, 60 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    }
+    const userResult = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
+    if (userResult.rows.length === 0) return res.json({ valid: false });
+    const check = await findValidOtp(userResult.rows[0].id, otp);
+    if (!check.ok) {
+      if (check.id) {
+        await pool.query('UPDATE password_reset_otps SET attempts = attempts + 1 WHERE id = $1', [check.id]);
+      }
+      return res.json({ valid: false, reason: check.reason === 'mismatch' ? 'mismatch' : check.reason });
+    }
+    res.json({ valid: true });
+  } catch (err) {
+    console.error('Verify OTP error:', err);
+    res.status(500).json({ error: 'Failed to verify code' });
+  }
+});
+
+// Step 3: consume a valid OTP and set the new password (existing password rules).
+app.post('/api/auth/reset-password-otp', async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const otp = (req.body.otp || '').trim();
+    const { password } = req.body;
+    if (!email || !otp || !password) {
+      return res.status(400).json({ error: 'Email, code and password are required' });
+    }
+    const pwResult = await pool.query("SELECT value FROM system_settings WHERE key = 'passwordLength'");
+    const minLength = pwResult.rows.length > 0 ? parseInt(pwResult.rows[0].value) || 8 : 8;
+    if (password.length < minLength) {
+      return res.status(400).json({ error: `Password must be at least ${minLength} characters` });
+    }
+    const userResult = await pool.query('SELECT id, email FROM users WHERE LOWER(email) = $1', [email]);
+    if (userResult.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired code' });
+    const userId = userResult.rows[0].id;
+    const check = await findValidOtp(userId, otp);
+    if (!check.ok) {
+      if (check.id) {
+        await pool.query('UPDATE password_reset_otps SET attempts = attempts + 1 WHERE id = $1', [check.id]);
+      }
+      if (check.reason === 'expired') return res.status(400).json({ error: 'Code has expired' });
+      return res.status(400).json({ error: 'Invalid or expired code' });
+    }
+    const hashedPassword = bcrypt.hashSync(password, 10);
+    await pool.query('UPDATE users SET password = $1, login_attempts = 0 WHERE id = $2', [hashedPassword, userId]);
+    // Invalidate the OTP after successful reset (single-use).
+    await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE id = $1', [check.id]);
+    // Revoke existing sessions so the new password takes effect everywhere.
+    await pool.query('UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
+    auditLogin('password_reset_success', userId, userResult.rows[0].email, req);
+    await logAuthActivity('password_reset_completed', { id: userId, email: userResult.rows[0].email }, req, { channel: 'otp' });
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (err) {
+    console.error('Reset password OTP error:', err);
     res.status(500).json({ error: 'Failed to reset password' });
   }
 });
