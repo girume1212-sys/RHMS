@@ -160,6 +160,12 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
         severity VARCHAR(20) DEFAULT 'info'
       )
     `);
+    await pool.query(`ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS entity_type VARCHAR(50)`);
+    await pool.query(`ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS entity_id VARCHAR(50)`);
+    await pool.query(`ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)`);
+    await pool.query(`ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS user_agent TEXT`);
+    await pool.query(`ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS details JSONB`);
+    await pool.query(`ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS severity VARCHAR(20) DEFAULT 'info'`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_log_entity_type ON activity_log(entity_type)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_log_entity_id ON activity_log(entity_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_log_severity ON activity_log(severity)`);
@@ -298,6 +304,15 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_request_id ON notifications(request_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC)`);
     console.log('notifications table ready');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS comment_read_tracking (
+        user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        last_read_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id)
+      )
+    `);
+    console.log('comment_read_tracking table ready');
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sessions (
@@ -747,6 +762,7 @@ app.post('/api/auth/signup', async (req, res) => {
 
     auditLogin('signup', id, email, req);
     await logAuthActivity('signup', { id, name, email }, req);
+    notifyAdmins(`New user registered: ${name} (${email})`, { type: 'user_registered', userId: id, userName: name });
     res.status(201).json({ message: 'Account created successfully', user: mapUser(result.rows[0]) });
   } catch (err) {
     console.error(err);
@@ -1128,7 +1144,7 @@ app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req
 app.patch('/api/users/:id/approve', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const { approved } = req.body;
-    const result = await pool.query('UPDATE users SET approved = $1, moderated = true WHERE id = $2 RETURNING *', [approved, req.params.id]);
+    const result = await pool.query('UPDATE users SET approved = $1, moderated = $1 WHERE id = $2 RETURNING *', [approved, req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = mapUser(result.rows[0]);
     await logUserActivity(approved ? 'user_approved' : 'user_blocked', user, req.user, req);
@@ -2130,10 +2146,15 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
 
     // Real-time notification
     const clientId = existing.rows[0].client_id;
+    const assignedTo = existing.rows[0].assigned_to;
     notifyAdmins(`New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     // Notify the client (if comment is not from the client)
     if (clientId && clientId !== req.user.id) {
       notifyUser(clientId, `New comment on your request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
+    }
+    // Notify the assigned developer/support (if comment is not from them)
+    if (assignedTo && assignedTo !== req.user.id) {
+      notifyUser(assignedTo, `New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     }
 
     res.status(201).json({ id, requestId: req.params.id, userId: req.user.id, content, createdAt: now, user: mapUser(req.user) });
@@ -2168,6 +2189,8 @@ app.post('/api/requests/:id/feedback', authMiddleware, async (req, res) => {
       await pool.query('INSERT INTO feedback (id, request_id, user_id, rating, comment) VALUES ($1, $2, $3, $4, $5)', [id, req.params.id, req.user.id, rating, comment || '']);
     }
     await logRequestActivity('feedback_submitted', { id: req.params.id }, req.user, req, { rating, comment });
+    const reqResult = await pool.query('SELECT subject FROM requests WHERE id = $1', [req.params.id]);
+    notifyAdmins(`New feedback on Request #${req.params.id} by ${req.user.name}`, { type: 'feedback', requestId: req.params.id, userId: req.user.id, userName: req.user.name, subject: reqResult.rows[0]?.subject });
     res.status(201).json({ rating, comment });
   } catch (err) {
     console.error(err);
@@ -2211,7 +2234,7 @@ app.post('/api/upload', authMiddleware, async (req, res, next) => {
     const maxMB = sizeResult.rows.length > 0 ? parseInt(sizeResult.rows[0].value) || 10 : 10;
     const maxBytes = maxMB * 1024 * 1024;
     const m = multer({ storage, limits: { fileSize: maxBytes } });
-    m.single('file')(req, res, (err) => {
+    m.single('file')(req, res, async (err) => {
       if (err) {
         if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `File too large. Maximum size is ${maxMB}MB` });
         return res.status(400).json({ error: err.message });
@@ -2696,6 +2719,7 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
       };
     });
 
+    await logActivity({ type: 'escalation_performance_viewed', message: `Escalation performance viewed`, userId: req.user.id, entityType: 'dashboard', req });
     res.json({
       rangeDays: days,
       metrics: {
@@ -2717,6 +2741,9 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
 // Activity Log
 app.get('/api/activity', authMiddleware, async (req, res) => {
   try {
+    const { type, entityType, severity, userId, requestId, search, startDate, endDate, page = 1, limit = 50 } = req.query;
+    const offset = (Math.max(1, parseInt(page)) - 1) * Math.min(100, Math.max(1, parseInt(limit)));
+
     let query = `
       SELECT al.*, u.name as user_name, u.email as user_email, u.role as user_role, u.avatar as user_avatar, u.created_at as user_created_at,
         r.subject as request_subject
@@ -2725,19 +2752,77 @@ app.get('/api/activity', authMiddleware, async (req, res) => {
       LEFT JOIN requests r ON al.request_id = r.id
     `;
     const params = [];
+    let whereClause = '';
+    const conditions = [];
+
     if (req.user.role === 'client') {
-      query += ` WHERE r.client_id = $1`;
+      conditions.push(`r.client_id = $${params.length + 1}`);
       params.push(req.user.id);
     } else if (req.user.role !== 'admin') {
-      query += ` WHERE (r.assigned_to = $1 OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $1)`;
+      conditions.push(`(r.assigned_to = $${params.length + 1} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${params.length + 1})`);
       if (req.user.role === 'support') {
-        query += ` OR r.status_id = '9'`;
+        conditions[conditions.length - 1] += ` OR r.status_id = '9'`;
       }
-      query += `)`;
+      conditions[conditions.length - 1] += `)`;
       params.push(req.user.id);
     }
-    query += ' ORDER BY al.created_at DESC LIMIT 20';
-    const result = await pool.query(query, params);
+
+    if (type) {
+      conditions.push(`al.type = $${params.length + 1}`);
+      params.push(type);
+    }
+    if (entityType) {
+      conditions.push(`al.entity_type = $${params.length + 1}`);
+      params.push(entityType);
+    }
+    if (severity) {
+      conditions.push(`al.severity = $${params.length + 1}`);
+      params.push(severity);
+    }
+    if (userId) {
+      conditions.push(`al.user_id = $${params.length + 1}`);
+      params.push(userId);
+    }
+    if (requestId) {
+      conditions.push(`al.request_id = $${params.length + 1}`);
+      params.push(requestId);
+    }
+    if (search) {
+      conditions.push(`(al.message ILIKE $${params.length + 1} OR u.name ILIKE $${params.length + 1} OR r.subject ILIKE $${params.length + 1})`);
+      params.push(`%${search}%`);
+    }
+    if (startDate) {
+      conditions.push(`al.created_at >= $${params.length + 1}`);
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push(`al.created_at <= $${params.length + 1}`);
+      params.push(endDate);
+    }
+
+    if (conditions.length > 0) {
+      whereClause = ' WHERE ' + conditions.join(' AND ');
+    }
+
+    query += whereClause;
+    query += ' ORDER BY al.created_at DESC';
+    query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(Math.min(100, Math.max(1, parseInt(limit))), offset);
+
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM activity_log al
+      LEFT JOIN users u ON al.user_id = u.id
+      LEFT JOIN requests r ON al.request_id = r.id
+      ${whereClause}
+    `;
+    const countParams = params.slice(0, -2);
+
+    const [result, countResult] = await Promise.all([
+      pool.query(query, params),
+      pool.query(countQuery, countParams)
+    ]);
+
     const enriched = result.rows.map(a => ({
       id: a.id,
       type: a.type,
@@ -2745,11 +2830,26 @@ app.get('/api/activity', authMiddleware, async (req, res) => {
       userId: a.user_id,
       message: a.message,
       createdAt: a.created_at,
+      entityType: a.entity_type,
+      entityId: a.entity_id,
+      ipAddress: a.ip_address,
+      userAgent: a.user_agent,
+      details: a.details,
+      severity: a.severity,
       user: a.user_name ? { id: a.user_id, name: a.user_name, email: a.user_email, role: a.user_role, avatar: a.user_avatar, createdAt: a.user_created_at } : null,
       request: a.request_subject ? { id: a.request_id, subject: a.request_subject } : null
     }));
+
     await logActivity({ type: 'activity_log_viewed', message: `Activity log viewed`, userId: req.user.id, entityType: 'activity_log', req });
-    res.json(enriched);
+    res.json({
+      activities: enriched,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: parseInt(countResult.rows[0].total),
+        totalPages: Math.ceil(parseInt(countResult.rows[0].total) / parseInt(limit))
+      }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -2809,6 +2909,12 @@ app.get('/api/requests/:id/activity', authMiddleware, async (req, res) => {
       userId: a.user_id,
       message: a.message,
       createdAt: a.created_at,
+      entityType: a.entity_type,
+      entityId: a.entity_id,
+      ipAddress: a.ip_address,
+      userAgent: a.user_agent,
+      details: a.details,
+      severity: a.severity,
       user: a.user_name ? { id: a.user_id, name: a.user_name, email: a.user_email, role: a.user_role, avatar: a.user_avatar } : null
     }));
     res.json(enriched);
@@ -3927,6 +4033,36 @@ app.delete('/api/notifications/:id', authMiddleware, async (req, res) => {
     if (result.rowCount === 0) return res.status(404).json({ error: 'Notification not found' });
     await logActivity({ type: 'notification_deleted', message: `Notification deleted`, userId: req.user.id, entityType: 'notification', entityId: req.params.id, req });
     res.json({ message: 'Notification deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Comment Read Tracking (persisted, per-user) ---
+app.get('/api/comments/read-status', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT last_read_at FROM comment_read_tracking WHERE user_id = $1',
+      [req.user.id]
+    );
+    res.json({ last_read_at: result.rows[0]?.last_read_at || null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/comments/read', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `INSERT INTO comment_read_tracking (user_id, last_read_at)
+       VALUES ($1, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET last_read_at = NOW()
+       RETURNING last_read_at`,
+      [req.user.id]
+    );
+    res.json({ last_read_at: result.rows[0].last_read_at });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

@@ -269,7 +269,7 @@ export default function Profile() {
               </>
             )}
           </div>
-          <h2 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: '700' }}>
+          <h2 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: 700 }}>
             {editing ? form.name : user?.name}
           </h2>
           <p style={{ margin: '0 0 12px', opacity: 0.8, fontSize: '14px' }}>
@@ -290,6 +290,10 @@ export default function Profile() {
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
               <span>{t('common.role')}</span>
               <span style={{ fontWeight: '600', textTransform: 'capitalize' }}>{getRoleLabel(user?.role)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+              <span>{t('common.language')}</span>
+              <span style={{ fontWeight: '600' }}>{user?.language || '-'}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
               <span>{t('common.memberSince')}</span>

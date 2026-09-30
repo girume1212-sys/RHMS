@@ -36,23 +36,15 @@ export default function Layout() {
   const eventSourceRef = useRef(null);
   const audioUnlocked = useRef(false);
   const notificationAudio = useRef(null);
-  const messagesSeenRef = useRef(Date.now());
-  const messagesSeenKey = user?.id ? `rhms_messages_seen_${user.id}` : 'rhms_messages_seen';
+  const messagesSeenRef = useRef(null);
 
-  // Load per-user messages-seen timestamp (migrate legacy shared key once)
   useEffect(() => {
     if (!user?.id) return;
-    try {
-      const perUser = localStorage.getItem(`rhms_messages_seen_${user.id}`);
-      if (perUser && !Number.isNaN(parseInt(perUser, 10))) {
-        messagesSeenRef.current = parseInt(perUser, 10);
-      } else {
-        const legacy = localStorage.getItem('rhms_messages_seen');
-        const n = legacy ? parseInt(legacy, 10) : NaN;
-        messagesSeenRef.current = Number.isNaN(n) ? Date.now() : n;
-        localStorage.setItem(`rhms_messages_seen_${user.id}`, String(messagesSeenRef.current));
-      }
-    } catch (e) {}
+    api.get('/api/comments/read-status').then(data => {
+      messagesSeenRef.current = data.last_read_at ? new Date(data.last_read_at).getTime() : Date.now();
+    }).catch(() => {
+      messagesSeenRef.current = Date.now();
+    });
   }, [user?.id]);
 
   // Unlock audio on first user interaction
@@ -523,10 +515,7 @@ export default function Layout() {
                 setShowNotifications(false);
                 if (next) {
                   messagesSeenRef.current = Date.now();
-                  try {
-                    localStorage.setItem(messagesSeenKey, String(messagesSeenRef.current));
-                    localStorage.setItem('rhms_messages_seen', String(messagesSeenRef.current));
-                  } catch (e) {}
+                  api.put('/api/comments/read').catch(() => {});
                   setUnreadMessages(0);
                 }
               }}>
@@ -553,7 +542,7 @@ export default function Layout() {
               )}
             </div>
             <div className="user-menu-container">
-              <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
+              <button className="user-menu-btn" onClick={() => { setShowUserMenu(!showUserMenu); if (!showUserMenu) navigate('/profile'); }}>
                 <div className="user-avatar-tiny" style={{ overflow: 'hidden' }}>{getAvatarUrl(user?.avatar) ? <img src={getAvatarUrl(user?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (user?.name?.charAt(0) || 'U')}</div>
                 <span>{user?.name}</span>
                 <span className="dropdown-arrow">▾</span>

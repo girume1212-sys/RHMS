@@ -37,6 +37,7 @@ export default function Users() {
   const groupDropdownRef = useRef(null);
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [viewingUser, setViewingUser] = useState(null);
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -293,16 +294,20 @@ export default function Users() {
               </thead>
               <tbody>
                 {paginated.map(u => (
-                  <tr key={u.id}>
+                  <tr key={u.id} style={{ cursor: 'pointer' }} onClick={() => setViewingUser(u)}>
                     <td>
                       <div className="user-cell">
-                         <div className="user-avatar-sm" style={{ background: getRoleColor(u.role), overflow: 'hidden' }}>
-                           {getAvatarUrl(u.avatar) ? <img src={getAvatarUrl(u.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (u.name || 'U').charAt(0)}
-                         </div>
-                         <span className="truncate-cell">{u.name}</span>
-                         {u.approved === false && u.role !== 'admin' && (
-                           <span className="role-badge" style={{ background: '#DC262620', color: '#DC2626', marginLeft: '6px' }}>{t('common.blocked')}</span>
-                         )}
+                          <div style={{ position: 'relative', display: 'inline-block' }}>
+                            <div className="user-avatar-sm" style={{ background: getRoleColor(u.role), overflow: 'hidden' }}>
+                              {getAvatarUrl(u.avatar) ? <img src={getAvatarUrl(u.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (u.name || 'U').charAt(0)}
+                            </div>
+                            {u.approved === false && u.role !== 'admin' && (
+                              <div style={{ position: 'absolute', bottom: -4, right: -4, width: 22, height: 22, borderRadius: '50%', background: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #1a1a2e' }}>
+                                <Icon name="lock" size={12} />
+                              </div>
+                            )}
+                          </div>
+                          <span className="truncate-cell">{u.name}</span>
                        </div>
                     </td>
                     <td><span className="truncate-cell">{u.email}</span></td>
@@ -322,7 +327,7 @@ export default function Users() {
                     <td>{new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td>
                         <div className="actions-cell-inline">
-                        {u.selfRegistered && u.role === 'client' && (!u.moderated || !u.approved) && (
+                        {u.selfRegistered && u.role === 'client' && (
                           u.approved ? (
                             <button className="action-btn-text delete" onClick={() => handleApprove(u.id, u.name, false)}>{t('common.blockUser')}</button>
                           ) : (
@@ -382,6 +387,79 @@ export default function Users() {
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
               <button onClick={() => setBlockTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
               <button onClick={confirmBlock} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{blockTarget.approved ? t('common.unblockUser') : t('common.blockUser')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingUser && (
+        <div className="modal-overlay" onClick={() => setViewingUser(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <h2>{t('common.userDetails')}</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '24px' }}>
+              <div style={{
+                background: 'linear-gradient(145deg, #3B82F6, #2563EB, #1D4ED8)',
+                borderRadius: '20px', padding: '32px', color: '#fff',
+                boxShadow: '0 8px 32px rgba(59,130,246,0.3)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center'
+              }}>
+                <div style={{ marginBottom: '16px', width: '100px', height: '100px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px', fontWeight: 700, border: '4px solid rgba(255,255,255,0.3)', overflow: 'hidden' }}>
+                  {getAvatarUrl(viewingUser.avatar) ? <img src={getAvatarUrl(viewingUser.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (viewingUser.name || 'U').charAt(0)}
+                </div>
+                <h3 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: 700 }}>{viewingUser.name}</h3>
+                <p style={{ margin: '0 0 12px', opacity: 0.8, fontSize: '14px' }}>{viewingUser.email}</p>
+                <div style={{ background: 'rgba(255,255,255,0.2)', padding: '6px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, backdropFilter: 'blur(10px)' }}>
+                  {t('role.' + viewingUser.role)}
+                </div>
+                <div style={{ marginTop: '20px', width: '100%', opacity: 0.9, fontSize: '13px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+                    <span>{t('common.company')}</span>
+                    <span style={{ fontWeight: 600 }}>{viewingUser.companyName || '-'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+                    <span>{t('common.role')}</span>
+                    <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{t('role.' + viewingUser.role)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+                    <span>{t('common.language')}</span>
+                    <span style={{ fontWeight: 600 }}>{viewingUser.language || '-'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                    <span>{t('common.memberSince')}</span>
+                    <span style={{ fontWeight: 600 }}>{viewingUser.createdAt ? new Date(viewingUser.createdAt).toLocaleDateString() : '-'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="account-details-card">
+                <h3 style={{ margin: '0 0 24px', fontSize: '18px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, #3B82F6, #2563EB)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '16px' }}><Icon name="user" size={16} /></span>
+                  {t('common.accountDetails')}
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                  {[
+                    { label: t('common.fullName'), value: viewingUser.name, icon: 'user', color: '#2563EB' },
+                    { label: t('common.email'), value: viewingUser.email, icon: 'mail', color: '#0284c7' },
+                    { label: t('common.company'), value: viewingUser.companyName || '-', icon: 'company', color: '#1e40af' },
+                    { label: t('common.role'), value: t('role.' + viewingUser.role), icon: 'shield', color: '#3730a3' },
+                    { label: t('common.group'), value: viewingUser.groupNames?.join(', ') || '-', icon: 'users', color: '#0e7490' },
+                    { label: t('common.language'), value: viewingUser.language || '-', icon: 'globe', color: '#047857' },
+                    { label: t('common.memberSince'), value: viewingUser.createdAt ? new Date(viewingUser.createdAt).toLocaleDateString() : '-', icon: 'calendar', color: '#1d4ed8' },
+                    { label: t('common.status'), value: viewingUser.approved ? t('common.active') : t('common.blocked'), icon: viewingUser.approved ? 'check' : 'lock', color: viewingUser.approved ? '#059669' : '#DC2626' },
+                  ].map((item, i) => (
+                    <div key={i} className={i < 7 ? 'detail-divider' : ''} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 0' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: item.color + '15', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}><Icon name={item.icon} size={18} /></div>
+                      <div style={{ flex: 1 }}>
+                        <div className="detail-label" style={{ fontSize: '12px', marginBottom: '2px' }}>{item.label}</div>
+                        <div className="detail-value" style={{ fontSize: '14px', fontWeight: 500 }}>{item.value}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="form-actions">
+              <button type="button" className="btn btn-outline" onClick={() => setViewingUser(null)}>{t('common.close')}</button>
             </div>
           </div>
         </div>

@@ -93,24 +93,6 @@ export default function CreateRequest() {
 
   const isOtherCategory = form.categoryId === '8';
 
-  if (isClient && user?.approved === false) {
-    return (
-      <div className="page-container">
-        <div className="page-header">
-          <div>
-            <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← {t('common.backToRequests')}</button>
-            <h1>{t('common.createRequest')}</h1>
-          </div>
-        </div>
-        <div className="form-card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px', color: '#DC2626' }}><Icon name="lock" size={48} /></div>
-          <h2 style={{ marginBottom: '12px', color: '#DC2626' }}>{t('common.accountBlockedTitle')}</h2>
-          <p style={{ color: '#6B7280', fontSize: '15px' }}>{t('common.accountBlocked')}</p>
-        </div>
-      </div>
-    );
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.subject.trim() || !form.description.trim() || !form.categoryId) {
@@ -132,8 +114,12 @@ export default function CreateRequest() {
       showStatusToast(t('common.newRequestCreated', { subject: form.subject }), 'request_created');
       navigate(`${basePath}/requests`);
     } catch (err) {
-      setError(err.message);
-      addToast(t('common.failedToCreateRequest') + ': ' + err.message, 'error');
+      if (err.response?.status === 403) {
+        setError('Your account is blocked. You cannot submit request.');
+      } else {
+        setError(err.message);
+        addToast(t('common.failedToCreateRequest') + ': ' + err.message, 'error');
+      }
     } finally {
       setLoading(false);
     }
