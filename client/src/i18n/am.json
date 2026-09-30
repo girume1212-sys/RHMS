@@ -366,6 +366,7 @@
     "selectDateRange": "የቀን ክልል ይምረጡ",
     "apply": "ተግብር",
     "fromLastWeek": "ካለፈው ሳምንት",
+    "ofTotal": "ከጠቅላላው",
     "failedToLoadUsers": "ተጠቃሚዎችን መጫን አልተሳካም",
     "failedToCreateUser": "ተጠቃሚ መፍጠር አልተሳካም",
     "failedToUpdateUser": "ተጠቃሚን ማዘመን አልተሳካም",

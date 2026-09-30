@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getStatusIcon } from '../utils/statusIcons';
-import { getLastWeekWindow, weekOverWeekPercent } from '../utils/weekOverWeek';
+import { shareOfTotalPercent } from '../utils/statusShare';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { showStatusToast } from '../notify';
@@ -36,7 +36,6 @@ export default function EscalationDashboard() {
   const [updatingId, setUpdatingId] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [lastWeekRequests, setLastWeekRequests] = useState([]);
   const { user } = useAuth();
   const navigate = useNavigate();
   const goBack = usePageBack('/');
@@ -66,24 +65,9 @@ export default function EscalationDashboard() {
     loadData();
   }, [showAssignedOnly]);
 
-  // Previous-week rows for the same visibility scope, so the card percentages
-  // come from the database rather than being estimated.
-  useEffect(() => {
-    const { start, end } = getLastWeekWindow();
-    const params = new URLSearchParams({ startDate: start, endDate: end, myRequests: String(showAssignedOnly) });
-    api.get(`/api/requests?${params.toString()}`)
-      .then(data => setLastWeekRequests(Array.isArray(data) ? data : []))
-      .catch(() => setLastWeekRequests([]));
-  }, [showAssignedOnly]);
-
-  const inScope = (list) => (
-    showAssignedOnly
-      ? list.filter(r => r.assignedTo === user.id && r.status?.name !== 'New')
-      : list
-  );
   const countByStatusId = (list, id) => list.filter(r => r.status?.id === id).length;
-  const changeLabel = t('common.fromLastWeek');
-  const displayLastWeek = inScope(lastWeekRequests);
+  const shareLabel = t('common.ofTotal');
+
   const developers = users.filter(u => u.role === 'developer');
   const displayRequests = showAssignedOnly
     ? requests.filter(r => r.assignedTo === user.id && r.status?.name !== 'New')
@@ -267,10 +251,8 @@ if (statusName === 'New') {
     return actions;
   };
 
-  const DevStatCard = ({ icon, value, label, color, onClick, change, changeLabel }) => {
-    const changeNum = parseFloat(change) || 0;
-    const arrow = changeNum > 0 ? '↑' : changeNum < 0 ? '↓' : '→';
-    const type = changeNum > 0 ? 'up' : changeNum < 0 ? 'down' : 'flat';
+  const DevStatCard = ({ icon, value, label, color, onClick, share, shareLabel }) => {
+    const shareNum = parseFloat(share) || 0;
     return (
       <div className={`stat-card${onClick ? ' stat-card-interactive' : ''}`}
         style={{
@@ -284,8 +266,8 @@ if (statusName === 'New') {
         <div className="stat-content">
           <h3>{value}</h3>
           <p>{label}</p>
-          <span className={`stat-change ${type}`}>
-            {arrow} {Math.abs(changeNum)}% {changeLabel}
+          <span className="stat-change up">
+            {'↑'} {shareNum}% {shareLabel}
           </span>
         </div>
       </div>
@@ -321,8 +303,8 @@ if (statusName === 'New') {
             label={s.name}
             color={s.color || '#6B7280'}
             onClick={() => setStatusFilter(statusFilter === s.name ? '' : s.name)}
-            change={weekOverWeekPercent(countByStatusId(displayRequests, s.id), countByStatusId(displayLastWeek, s.id))}
-            changeLabel={changeLabel}
+            share={shareOfTotalPercent(countByStatusId(displayRequests, s.id), displayRequests.length)}
+            shareLabel={shareLabel}
           />
         ))}
       </div>

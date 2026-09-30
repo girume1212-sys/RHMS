@@ -918,7 +918,6 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 .stat-change { font-size: 12px; margin-top: 4px; display: block; }
 .stat-change.up { color: #10B981; }
 .stat-change.down { color: #EF4444; }
-.stat-change.flat { color: #6B7280; }
 
 /* Admin request stat card hover — same treatment as the performance stat cards:
    12px lift, accent-tinted glow, accent left border. The left border is

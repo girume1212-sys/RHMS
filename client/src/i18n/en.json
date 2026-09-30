@@ -367,6 +367,7 @@
     "selectDateRange": "Select date range",
     "apply": "Apply",
     "fromLastWeek": "from last week",
+    "ofTotal": "of total",
     "failedToLoadUsers": "Failed to load users",
     "failedToCreateUser": "Failed to create user",
     "failedToUpdateUser": "Failed to update user",

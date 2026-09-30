@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { api, API_BASE } from '../api';
 import { PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
 import { getStatusIcon } from '../utils/statusIcons';
+import { shareOfTotalPercent } from '../utils/statusShare';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
@@ -34,10 +35,8 @@ const PERF_TONES = {
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
-function StatCard({ icon, value, label, change, changeType, color, onClick, changeLabel }) {
-  const changeNum = parseFloat(change) || 0;
-  const arrow = changeNum > 0 ? '↑' : changeNum < 0 ? '↓' : '→';
-  const type = changeNum > 0 ? 'up' : changeNum < 0 ? 'down' : 'flat';
+function StatCard({ icon, value, label, share, color, onClick, shareLabel }) {
+  const shareNum = parseFloat(share) || 0;
   return (
     <div className={`stat-card${onClick ? ' stat-card-interactive' : ''}`}
       style={{
@@ -51,8 +50,8 @@ function StatCard({ icon, value, label, change, changeType, color, onClick, chan
       <div className="stat-content">
         <h3>{value}</h3>
         <p>{label}</p>
-        <span className={`stat-change ${type}`}>
-          {arrow} {Math.abs(changeNum)}% {changeLabel}
+        <span className="stat-change up">
+          {'↑'} {shareNum}% {shareLabel}
         </span>
       </div>
     </div>
@@ -130,7 +129,7 @@ export default function Dashboard() {
   const [escPerfCardHeight, setEscPerfCardHeight] = useState(0);
   const { user } = useAuth();
   const navigate = useNavigate();
-  const changeLabel = t('common.fromLastWeek');
+  const shareLabel = t('common.ofTotal');
 
   useEffect(() => {
     api.get(`/api/dashboard/stats?days=${rangeDays}`).then(setStats).catch(err => setError(t('common.failedToLoadDashboard') + ' ' + err.message));
@@ -452,11 +451,11 @@ export default function Dashboard() {
         const statusCards = (stats.byStatus || []).filter(s => s.is_active !== false);
         const totalCards = statusCards.length + 1;
         const perRow = Math.ceil(totalCards / 2);
-        const row1 = [<StatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} change={getChangePercent(stats.total, stats.totalLastWeek)} changeLabel={changeLabel} color="#FACC15" onClick={() => navigate('/requests')} />, ...statusCards.slice(0, perRow - 1).map(s => (
-          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} change={s.changePercent} changeLabel={changeLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
+        const row1 = [<StatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} share={shareOfTotalPercent(stats.total, stats.total)} shareLabel={shareLabel} color="#FACC15" onClick={() => navigate('/requests')} />, ...statusCards.slice(0, perRow - 1).map(s => (
+          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
         ))];
         const row2 = statusCards.slice(perRow - 1).map(s => (
-          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} change={s.changePercent} changeLabel={changeLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
+          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
         ));
         return (
           <>

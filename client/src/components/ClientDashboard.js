@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getStatusIcon } from '../utils/statusIcons';
-import { getLastWeekWindow, weekOverWeekPercent } from '../utils/weekOverWeek';
+import { shareOfTotalPercent } from '../utils/statusShare';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import Toast from './Toast';
@@ -15,7 +15,7 @@ import { usePageBack } from '../utils/sidebarNav';
 
 export default function ClientDashboard() {
   const { t } = useTranslation();
-  const changeLabel = t('common.fromLastWeek');
+  const shareLabel = t('common.ofTotal');
   const [requests, setRequests] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [error, setError] = useState('');
@@ -40,8 +40,6 @@ export default function ClientDashboard() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const [lastWeekRequests, setLastWeekRequests] = useState([]);
-
   useEffect(() => {
     Promise.all([
       api.get('/api/requests'),
@@ -50,13 +48,6 @@ export default function ClientDashboard() {
       setRequests(requestsData);
       setStatuses(statusesData);
     }).catch(err => setError(t('common.failedToLoadData') + ' ' + err.message));
-  }, []);
-
-  useEffect(() => {
-    const { start, end } = getLastWeekWindow();
-    api.get(`/api/requests?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`)
-      .then(data => setLastWeekRequests(Array.isArray(data) ? data : []))
-      .catch(() => setLastWeekRequests([]));
   }, []);
 
   // Derived from `requests` rather than snapshotted in the fetch above, so the
@@ -91,10 +82,8 @@ export default function ClientDashboard() {
     setPage(1);
   };
 
-  const ClientStatCard = ({ icon, value, label, color, onClick, change, changeLabel }) => {
-    const changeNum = parseFloat(change) || 0;
-    const arrow = changeNum > 0 ? '↑' : changeNum < 0 ? '↓' : '→';
-    const type = changeNum > 0 ? 'up' : changeNum < 0 ? 'down' : 'flat';
+  const ClientStatCard = ({ icon, value, label, color, onClick, share, shareLabel }) => {
+    const shareNum = parseFloat(share) || 0;
     return (
       <div className={`stat-card${onClick ? ' stat-card-interactive' : ''}`}
         style={{
@@ -108,8 +97,8 @@ export default function ClientDashboard() {
         <div className="stat-content">
           <h3>{value}</h3>
           <p>{label}</p>
-          <span className={`stat-change ${type}`}>
-            {arrow} {Math.abs(changeNum)}% {changeLabel}
+          <span className="stat-change up">
+            {'↑'} {shareNum}% {shareLabel}
           </span>
         </div>
       </div>
@@ -232,11 +221,11 @@ export default function ClientDashboard() {
             label={s.name}
             color={s.color || '#6B7280'}
             onClick={() => navigate(`/client/requests?status=${s.name}`)}
-            change={weekOverWeekPercent(countByStatusId(requests, s.id), countByStatusId(lastWeekRequests, s.id))}
-            changeLabel={changeLabel}
+            share={shareOfTotalPercent(countByStatusId(requests, s.id), requests.length)}
+            shareLabel={shareLabel}
           />
         );
-        const row1 = [<ClientStatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} color="#3B82F6" onClick={() => navigate('/client/requests')} change={weekOverWeekPercent(requests.length, lastWeekRequests.length)} changeLabel={changeLabel} />, ...statusCards.slice(0, perRow - 1).map(makeCard)];
+        const row1 = [<ClientStatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} color="#3B82F6" onClick={() => navigate('/client/requests')} share={shareOfTotalPercent(stats.total, requests.length)} shareLabel={shareLabel} />, ...statusCards.slice(0, perRow - 1).map(makeCard)];
         const row2 = statusCards.slice(perRow - 1).map(makeCard);
         return (
           <>

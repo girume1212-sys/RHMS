@@ -2296,37 +2296,110 @@ const formatDayLabel = (isoDate) => {
   return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+// Builds the WHERE fragment that limits requests to what the signed-in user is
+// allowed to see. Kept at module scope so the stats endpoint and the trends
+// endpoint can never drift apart on permissions.
+const buildRequestScopeWhere = (req, startIndex = 1) => {
+  let clause = 'WHERE 1=1';
+  const clauseParams = [];
+  let i = startIndex;
+
+  if (req.user.role === 'client') {
+    clause += ` AND r.client_id = $${i++}`;
+    clauseParams.push(req.user.id);
+  }
+  if (req.user.role === 'developer' || req.user.role === 'support') {
+    const myRequests = req.query.myRequests === 'true';
+    if (myRequests) {
+      clause += ` AND r.assigned_to = $${i++}`;
+      clauseParams.push(req.user.id);
+    } else {
+      clause += ` AND (r.assigned_to = $${i++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${i++})`;
+      if (req.user.role === 'support') {
+        clause += ` OR r.status_id = '9'`;
+      }
+      clause += `)`;
+      clauseParams.push(req.user.id, req.user.id);
+    }
+  }
+  return { clause, params: clauseParams };
+};
+
+// Real week-over-week counts taken from stored request history: the current
+// 7-day window versus the 7 days before it. A previous-week baseline of zero
+// yields 0% rather than an invented jump.
+const getWeeklyStatusCounts = async (scope, now = new Date()) => {
+  const currentStart = new Date(now);
+  currentStart.setDate(currentStart.getDate() - 7);
+  const previousStart = new Date(now);
+  previousStart.setDate(previousStart.getDate() - 14);
+
+  const runWindow = async (from, to) => {
+    const windowParams = [...scope.params];
+    const where = `${scope.clause} AND r.created_at >= $${windowParams.length + 1} AND r.created_at < $${windowParams.length + 2}`;
+    windowParams.push(from.toISOString(), to.toISOString());
+    const result = await pool.query(
+      `SELECT r.status_id, COUNT(*) as count FROM requests r ${where} GROUP BY r.status_id`,
+      windowParams
+    );
+    const map = {};
+    result.rows.forEach(row => { map[row.status_id] = parseInt(row.count); });
+    return map;
+  };
+
+  const [currentMap, previousMap] = await Promise.all([
+    runWindow(currentStart, now),
+    runWindow(previousStart, currentStart)
+  ]);
+
+  const sum = (map) => Object.values(map).reduce((total, n) => total + n, 0);
+  return { currentMap, previousMap, currentTotal: sum(currentMap), previousTotal: sum(previousMap) };
+};
+
+const weeklyChangePercent = (currentCount, previousCount) => {
+  if (!(previousCount > 0)) return 0;
+  return Number((((Number(currentCount) || 0) - previousCount) / previousCount * 100).toFixed(1));
+};
+
+// Lightweight per-status week-over-week series for the role dashboards that
+// build their own stat cards from the requests list.
+app.get('/api/dashboard/trends', authMiddleware, async (req, res) => {
+  try {
+    const scope = buildRequestScopeWhere(req, 1);
+    const { currentMap, previousMap, currentTotal, previousTotal } = await getWeeklyStatusCounts(scope);
+
+    const statusesResult = await pool.query('SELECT * FROM statuses ORDER BY id');
+    const byStatus = statusesResult.rows
+      .filter(s => s.name.toLowerCase() !== 'reopened')
+      .map(s => {
+        const thisWeek = currentMap[s.id] || 0;
+        const lastWeek = previousMap[s.id] || 0;
+        return {
+          id: s.id,
+          name: s.name,
+          color: s.color,
+          is_active: s.is_active,
+          thisWeekCount: thisWeek,
+          lastWeekCount: lastWeek,
+          changePercent: weeklyChangePercent(thisWeek, lastWeek)
+        };
+      });
+
+    res.json({
+      byStatus,
+      thisWeekTotal: currentTotal,
+      lastWeekTotal: previousTotal,
+      changePercent: weeklyChangePercent(currentTotal, previousTotal)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
   try {
-    // Built as a helper so the week-over-week comparison can reuse the exact same
-    // visibility rules (plus its own date bounds) as the current counts below.
-    const buildRbacWhere = (startIndex) => {
-      let clause = 'WHERE 1=1';
-      const clauseParams = [];
-      let i = startIndex;
-
-      if (req.user.role === 'client') {
-        clause += ` AND r.client_id = $${i++}`;
-        clauseParams.push(req.user.id);
-      }
-      if (req.user.role === 'developer' || req.user.role === 'support') {
-        const myRequests = req.query.myRequests === 'true';
-        if (myRequests) {
-          clause += ` AND r.assigned_to = $${i++}`;
-          clauseParams.push(req.user.id);
-        } else {
-          clause += ` AND (r.assigned_to = $${i++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${i++})`;
-          if (req.user.role === 'support') {
-            clause += ` OR r.status_id = '9'`;
-          }
-          clause += `)`;
-          clauseParams.push(req.user.id, req.user.id);
-        }
-      }
-      return { clause, params: clauseParams };
-    };
-
-    const currentScope = buildRbacWhere(1);
+    const currentScope = buildRequestScopeWhere(req, 1);
     const whereClause = currentScope.clause;
     const params = currentScope.params;
 
@@ -2339,22 +2412,8 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     const statusMap = {};
     statusCounts.rows.forEach(row => { statusMap[row.status_id] = parseInt(row.count); });
 
-    const lastWeekStart = new Date();
-    lastWeekStart.setDate(lastWeekStart.getDate() - 14);
-    const lastWeekEnd = new Date();
-    lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
-
-    const lastWeekParams = [...params];
-    const lastWeekWhereClause = `${whereClause} AND r.created_at >= $${lastWeekParams.length + 1} AND r.created_at < $${lastWeekParams.length + 2}`;
-    lastWeekParams.push(lastWeekStart.toISOString(), lastWeekEnd.toISOString());
-
-    const lastWeekStatusCounts = await pool.query(
-      `SELECT r.status_id, COUNT(*) as count FROM requests r ${lastWeekWhereClause} GROUP BY r.status_id`,
-      lastWeekParams
-    );
-    const lastWeekStatusMap = {};
-    lastWeekStatusCounts.rows.forEach(row => { lastWeekStatusMap[row.status_id] = parseInt(row.count); });
-    const lastWeekTotal = Object.values(lastWeekStatusMap).reduce((sum, n) => sum + n, 0);
+    const { currentMap: thisWeekStatusMap, previousMap: lastWeekStatusMap, currentTotal: thisWeekTotal, previousTotal: lastWeekTotal } =
+      await getWeeklyStatusCounts(currentScope);
 
     const open = statusMap['1'] || 0;
     const assigned = statusMap['2'] || 0;
@@ -2369,17 +2428,14 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     const statuses = statusesResult.rows.filter(s => s.name.toLowerCase() !== 'reopened');
     const byStatus = statuses.map(s => {
       const currentCount = statusMap[s.id] || 0;
+      const thisWeekCount = thisWeekStatusMap[s.id] || 0;
       const lastWeekCount = lastWeekStatusMap[s.id] || 0;
-      // No baseline last week means no real percentage to report, so show 0%
-      // rather than inventing a jump.
-      const changePercent = lastWeekCount > 0
-        ? Number((((currentCount - lastWeekCount) / lastWeekCount) * 100).toFixed(1))
-        : 0;
       return {
         ...s,
         count: currentCount,
+        thisWeekCount,
         lastWeekCount,
-        changePercent,
+        changePercent: weeklyChangePercent(thisWeekCount, lastWeekCount),
         percentage: total > 0 ? ((currentCount / total) * 100).toFixed(1) : 0
       };
     });
@@ -2511,7 +2567,9 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
         }));
       })(),
       rangeDays,
+      totalThisWeek: thisWeekTotal,
       totalLastWeek: lastWeekTotal,
+      totalChangePercent: weeklyChangePercent(thisWeekTotal, lastWeekTotal),
       openLastWeek: lastWeekStatusMap['1'] || 0,
       assignedLastWeek: lastWeekStatusMap['2'] || 0,
       inProgressLastWeek: lastWeekStatusMap['3'] || 0,
