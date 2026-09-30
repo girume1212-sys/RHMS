@@ -25,6 +25,7 @@ export default function Users() {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [blockTarget, setBlockTarget] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', companyName: '', role: 'client', groupIds: [] });
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -183,16 +184,21 @@ export default function Users() {
     }
   };
 
-  const handleApprove = async (id, name, approved) => {
-    if (!window.confirm(approved ? t('common.confirmApproveUser') : t('common.confirmUnapproveUser'))) return;
+  const handleApprove = (id, name, approved) => {
+    setBlockTarget({ id, name, approved });
+  };
+
+  const confirmBlock = async () => {
+    const { id, name, approved } = blockTarget;
+    setBlockTarget(null);
     try {
       await api.patch(`/api/users/${id}/approve`, { approved });
       loadUsers();
-      addToast(approved ? t('common.userApproved', { name }) : t('common.userUnapproved', { name }));
-      showStatusToast(approved ? t('common.userApprovedShort', { name }) : t('common.userUnapprovedShort', { name }), 'status');
+      addToast(approved ? t('common.userUnblocked', { name }) : t('common.userBlocked', { name }));
+      showStatusToast(approved ? t('common.userUnblockedShort', { name }) : t('common.userBlockedShort', { name }), 'status');
     } catch (err) {
-      setError((approved ? t('common.failedToApproveUser') : t('common.failedToUnapproveUser')) + ': ' + err.message);
-      addToast((approved ? t('common.failedToApproveUser') : t('common.failedToUnapproveUser')) + ': ' + err.message, 'error');
+      setError((approved ? t('common.failedToUnblockUser') : t('common.failedToBlockUser')) + ': ' + err.message);
+      addToast((approved ? t('common.failedToUnblockUser') : t('common.failedToBlockUser')) + ': ' + err.message, 'error');
     }
   };
 
@@ -290,11 +296,14 @@ export default function Users() {
                   <tr key={u.id}>
                     <td>
                       <div className="user-cell">
-                        <div className="user-avatar-sm" style={{ background: getRoleColor(u.role), overflow: 'hidden' }}>
-                          {getAvatarUrl(u.avatar) ? <img src={getAvatarUrl(u.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (u.name || 'U').charAt(0)}
-                        </div>
-                        <span className="truncate-cell">{u.name}</span>
-                      </div>
+                         <div className="user-avatar-sm" style={{ background: getRoleColor(u.role), overflow: 'hidden' }}>
+                           {getAvatarUrl(u.avatar) ? <img src={getAvatarUrl(u.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (u.name || 'U').charAt(0)}
+                         </div>
+                         <span className="truncate-cell">{u.name}</span>
+                         {u.approved === false && u.role !== 'admin' && (
+                           <span className="role-badge" style={{ background: '#DC262620', color: '#DC2626', marginLeft: '6px' }}>{t('common.blocked')}</span>
+                         )}
+                       </div>
                     </td>
                     <td><span className="truncate-cell">{u.email}</span></td>
                     <td><span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>{t('role.' + u.role)}</span></td>
@@ -312,7 +321,14 @@ export default function Users() {
                     <td><span className="truncate-cell">{u.companyName || <span style={{ color: '#9ca3af' }}>-</span>}</span></td>
                     <td>{new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td>
-                      <div className="actions-cell-inline">
+                        <div className="actions-cell-inline">
+                        {u.selfRegistered && u.role === 'client' && (!u.moderated || !u.approved) && (
+                          u.approved ? (
+                            <button className="action-btn-text delete" onClick={() => handleApprove(u.id, u.name, false)}>{t('common.blockUser')}</button>
+                          ) : (
+                            <button className="action-btn-text edit" onClick={() => handleApprove(u.id, u.name, true)}>{t('common.unblockUser')}</button>
+                          )
+                        )}
                         <button className="action-btn-text edit" onClick={() => openEdit(u)}>{t('common.edit')}</button>
                         <button className="action-btn-text delete" onClick={() => setDeleteTarget({ id: u.id, name: u.name })}>{t('common.delete')}</button>
                       </div>
@@ -354,6 +370,18 @@ export default function Users() {
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
               <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
               <button onClick={() => handleDelete(deleteTarget.id, deleteTarget.name)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.delete')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {blockTarget && (
+        <div className="modal-overlay" onClick={() => setBlockTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>{blockTarget.approved ? t('common.confirmUnblockUser') : t('common.confirmBlockUser')}</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setBlockTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={confirmBlock} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{blockTarget.approved ? t('common.unblockUser') : t('common.blockUser')}</button>
             </div>
           </div>
         </div>

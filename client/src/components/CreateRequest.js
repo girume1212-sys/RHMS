@@ -24,7 +24,7 @@ export default function CreateRequest() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
-  const [form, setForm] = useState({ subject: '', description: '', categoryId: '', priorityId: '2' });
+  const [form, setForm] = useState({ subject: '', description: '', categoryId: '', priorityId: '2', customCategory: '' });
   const [categories, setCategories] = useState([]);
   const [prioritiesList, setPriorities] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -91,6 +91,26 @@ export default function CreateRequest() {
     return uploaded;
   };
 
+  const isOtherCategory = form.categoryId === '8';
+
+  if (isClient && user?.approved === false) {
+    return (
+      <div className="page-container">
+        <div className="page-header">
+          <div>
+            <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← {t('common.backToRequests')}</button>
+            <h1>{t('common.createRequest')}</h1>
+          </div>
+        </div>
+        <div className="form-card" style={{ textAlign: 'center', padding: '48px 24px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px', color: '#DC2626' }}><Icon name="lock" size={48} /></div>
+          <h2 style={{ marginBottom: '12px', color: '#DC2626' }}>{t('common.accountBlockedTitle')}</h2>
+          <p style={{ color: '#6B7280', fontSize: '15px' }}>{t('common.accountBlocked')}</p>
+        </div>
+      </div>
+    );
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.subject.trim() || !form.description.trim() || !form.categoryId) {
@@ -107,7 +127,7 @@ export default function CreateRequest() {
         attachments = await uploadFiles();
         setUploading(false);
       }
-      await api.post('/api/requests', { ...form, attachments });
+      await api.post('/api/requests', { ...form, customCategory: isOtherCategory ? form.customCategory.trim() : undefined, attachments });
       addToast(t('common.requestCreatedSuccess'));
       showStatusToast(t('common.newRequestCreated', { subject: form.subject }), 'request_created');
       navigate(`${basePath}/requests`);
@@ -149,7 +169,7 @@ export default function CreateRequest() {
                 <div
                   key={c.id}
                   className={`category-card-select ${form.categoryId === c.id ? 'selected' : ''}`}
-                  onClick={() => setForm({ ...form, categoryId: c.id })}
+                  onClick={() => setForm((prev) => ({ ...prev, categoryId: c.id, customCategory: c.id === '8' ? (prev.customCategory || '') : '' }))}
                   style={{ '--cat-color': c.color }}
                 >
                   <div className="category-card-icon"><Icon name={c.icon} size={32} /></div>
@@ -158,6 +178,21 @@ export default function CreateRequest() {
                 </div>
               ))}
             </div>
+            {isOtherCategory && (
+              <div className="form-group custom-category-abstract" style={{ marginTop: '12px', padding: '14px 16px', borderRadius: '12px', border: '1px dashed #a5b4fc', background: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 50%, #ecfdf5 100%)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#4338ca', fontWeight: 600 }}>
+                  <span style={{ display: 'inline-flex', width: '26px', height: '26px', borderRadius: '50%', background: '#4f46e5', color: '#fff', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>✦</span>
+                  {t('common.specifyCategory') || 'Please specify the category'}
+                </label>
+                <input
+                  type="text"
+                  value={form.customCategory}
+                  onChange={(e) => setForm({ ...form, customCategory: e.target.value })}
+                  placeholder={t('common.specifyCategoryPlaceholder') || 'Enter the name or description of your custom category'}
+                  style={{ background: '#ffffff', border: '1px solid #c7d2fe', borderRadius: '8px', color: '#1a1a2e', caretColor: '#4f46e5' }}
+                />
+              </div>
+            )}
             {form.categoryId && (
               <input type="hidden" value={form.categoryId} required />
             )}

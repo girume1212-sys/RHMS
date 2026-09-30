@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   group_id VARCHAR(50),
   avatar VARCHAR(500),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  moderated BOOLEAN DEFAULT true,
   FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE SET NULL
 );
 

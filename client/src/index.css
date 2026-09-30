@@ -8571,3 +8571,27 @@ body.dark-mode .composer-btn:hover {
 body.dark-mode .composer-textarea::placeholder {
   color: #94a3b8;
 }
+/* Custom-category abstract input: keep text readable in both themes */
+.custom-category-abstract input {
+  color: #1a1a2e !important;
+  background: #ffffff !important;
+}
+.custom-category-abstract input::placeholder {
+  color: #6b7280 !important;
+  opacity: 1;
+}
+body.dark-mode .custom-category-abstract {
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #134e4a 100%) !important;
+  border-color: #818cf8 !important;
+}
+body.dark-mode .custom-category-abstract label {
+  color: #e0e7ff !important;
+}
+body.dark-mode .custom-category-abstract input {
+  color: #f8fafc !important;
+  background: #0f172a !important;
+  border-color: #818cf8 !important;
+}
+body.dark-mode .custom-category-abstract input::placeholder {
+  color: #94a3b8 !important;
+}

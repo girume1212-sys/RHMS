@@ -43,7 +43,10 @@ CREATE TABLE priorities (
 CREATE TABLE statuses (
   id VARCHAR(50) PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
-  color VARCHAR(20) DEFAULT '#6B7280'
+  color VARCHAR(20) DEFAULT '#6B7280',
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order INTEGER DEFAULT 0,
+  is_system BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE tags (
@@ -77,7 +80,8 @@ CREATE TABLE users (
   company_name VARCHAR(255) DEFAULT '',
   approved BOOLEAN DEFAULT false,
   login_attempts INTEGER DEFAULT 0,
-  language VARCHAR(10) DEFAULT 'en'
+  language VARCHAR(10) DEFAULT 'en',
+  moderated BOOLEAN DEFAULT true
 );
 
 CREATE TABLE user_groups (
@@ -125,6 +129,7 @@ CREATE TABLE requests (
   status_id VARCHAR(50) REFERENCES statuses(id),
   assigned_to VARCHAR(50) REFERENCES users(id),
   assigned_group VARCHAR(50) REFERENCES groups(id) ON DELETE SET NULL,
+  custom_category TEXT,
   attachments JSONB DEFAULT '[]',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

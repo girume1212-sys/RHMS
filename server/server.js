@@ -8,6 +8,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { OAuth2Client } = require('google-auth-library');
 const pool = require('./db');
+const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity, logUserActivity, logGroupActivity, logCompanyActivity, logSettingsActivity, logSearchActivity } = require('./activityLogger');
 
 (async () => {
   try {
@@ -117,6 +118,7 @@ const pool = require('./db');
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS priority_id VARCHAR(50)`);
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS status_id VARCHAR(50)`);
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT '[]'`);
+    await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS custom_category TEXT`);
     await pool.query(`ALTER TABLE comments ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT '[]'`);
     console.log('requests columns ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255) DEFAULT ''`);
@@ -124,8 +126,11 @@ const pool = require('./db');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'en'`);
     console.log('language column ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE users ALTER COLUMN approved SET DEFAULT true`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS login_attempts INTEGER DEFAULT 0`);
     console.log('approved column ready');
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS moderated BOOLEAN DEFAULT true`);
+    console.log('moderated column ready');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS companies (
         id VARCHAR(50) PRIMARY KEY,
@@ -146,18 +151,34 @@ const pool = require('./db');
         request_id VARCHAR(50),
         user_id VARCHAR(50) REFERENCES users(id),
         message TEXT NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        entity_type VARCHAR(50),
+        entity_id VARCHAR(50),
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        details JSONB,
+        severity VARCHAR(20) DEFAULT 'info'
       )
     `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_log_entity_type ON activity_log(entity_type)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_log_entity_id ON activity_log(entity_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_log_severity ON activity_log(severity)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_log_type_created ON activity_log(type, created_at DESC)`);
     console.log('activity_log table ready');
+    await pool.query(`ALTER TABLE statuses ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
+    await pool.query(`ALTER TABLE statuses ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE statuses ADD COLUMN IF NOT EXISTS is_system BOOLEAN DEFAULT FALSE`);
     await pool.query(`
-      INSERT INTO statuses (id, name, color) VALUES ('8', 'Rejected', '#DC2626')
+      INSERT INTO statuses (id, name, color, is_system, sort_order) VALUES ('8', 'Rejected', '#DC2626', TRUE, 8)
       ON CONFLICT (id) DO NOTHING
     `);
     await pool.query(`
-      INSERT INTO statuses (id, name, color) VALUES ('9', 'Escalated', '#EF4444')
+      INSERT INTO statuses (id, name, color, is_system, sort_order) VALUES ('9', 'Escalated', '#EF4444', TRUE, 9)
       ON CONFLICT (id) DO NOTHING
     `);
+    await pool.query(`UPDATE statuses SET is_system = TRUE WHERE id IN ('1', '2', '3', '4', '5', '6', '7')`);
+    await pool.query(`UPDATE statuses SET sort_order = CAST(id AS INTEGER) WHERE sort_order = 0 AND id ~ '^[0-9]+$'`);
     const reopenedStatus = await pool.query(`SELECT id FROM statuses WHERE LOWER(name) = 'reopened'`);
     if (reopenedStatus.rows.length > 0) {
       const reopenedId = reopenedStatus.rows[0].id;
@@ -396,7 +417,7 @@ const authMiddleware = async (req, res, next) => {
   if (!token) return res.status(401).json({ error: 'No token provided' });
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const result = await pool.query('SELECT id, name, email, role, avatar, created_at FROM users WHERE id = $1', [decoded.id]);
+    const result = await pool.query('SELECT id, name, email, role, avatar, created_at, approved FROM users WHERE id = $1', [decoded.id]);
     if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid token' });
     req.user = result.rows[0];
     next();
@@ -617,6 +638,8 @@ const mapUser = (u) => ({
   companyName: u.company_name || '',
   language: u.language || 'en',
   approved: u.approved || false,
+  selfRegistered: u.self_registered || false,
+  moderated: u.moderated || false,
   createdAt: u.created_at
 });
 
@@ -626,6 +649,7 @@ const mapRequest = (r) => ({
   description: r.description,
   clientId: r.client_id,
   categoryId: r.category_id,
+  customCategory: r.custom_category || null,
   priorityId: r.priority_id,
   statusId: r.status_id,
   assignedTo: r.assigned_to,
@@ -710,8 +734,8 @@ app.post('/api/auth/signup', async (req, res) => {
     const id = uuidv4();
     const hashedPassword = bcrypt.hashSync(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (id, name, email, password, role, company_name, language) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, avatar, created_at, company_name, language',
-      [id, name, email, hashedPassword, 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en']
+      'INSERT INTO users (id, name, email, password, role, company_name, language, approved, moderated) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, email, role, avatar, created_at, company_name, language, approved, moderated',
+      [id, name, email, hashedPassword, 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en', true, false]
     );
 
     // Auto-assign to default group
@@ -722,6 +746,7 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     auditLogin('signup', id, email, req);
+    await logAuthActivity('signup', { id, name, email }, req);
     res.status(201).json({ message: 'Account created successfully', user: mapUser(result.rows[0]) });
   } catch (err) {
     console.error(err);
@@ -747,17 +772,21 @@ app.post('/api/auth/login', async (req, res) => {
         const currentAttempts = (user.login_attempts || 0) + 1;
         await pool.query('UPDATE users SET login_attempts = $1 WHERE id = $2', [currentAttempts, user.id]);
         auditLogin('login_failed', user.id, user.email, req);
+        await logAuthActivity('login_failed', user, req, { credential });
         if (currentAttempts >= maxAttempts) {
           await pool.query("UPDATE users SET approved = false WHERE id = $1", [user.id]);
+          await logAuthActivity('account_blocked', user, req, { reason: 'too_many_failed_attempts' });
         }
       } else {
         auditLogin('login_failed', null, credential, req);
+        await logAuthActivity('login_failed', null, req, { credential });
       }
       return res.status(401).json({ error: 'Invalid username, email or password' });
     }
 
     if (user.login_attempts >= maxAttempts) {
       auditLogin('login_locked', user.id, user.email, req);
+      await logAuthActivity('login_locked', user, req);
       return res.status(423).json({ error: 'Account locked due to too many failed attempts. Contact administrator.' });
     }
 
@@ -769,6 +798,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     const token = jwt.sign({ id: user.id, role: user.role, sessionTimeout }, JWT_SECRET, { expiresIn });
     auditLogin('login_success', user.id, user.email, req);
+    await logAuthActivity('login_success', user, req);
     persistSession(user.id, token, req);
     res.json({ token, user: mapUser(user) });
   } catch (err) {
@@ -809,6 +839,8 @@ app.post('/api/auth/google', async (req, res) => {
 
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
     auditLogin('login_success', user.id, email, req);
+    const isNewUser = !result.rows[0]?.created_at || (Date.now() - new Date(result.rows[0].created_at).getTime() < 60000);
+    await logAuthActivity(isNewUser ? 'google_signup' : 'google_login', user, req);
     persistSession(user.id, token, req);
     res.json({ token, user: mapUser(user) });
   } catch (err) {
@@ -848,6 +880,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       );
 
       auditLogin('password_reset_requested', user.id, user.email, req);
+      await logAuthActivity('password_reset_requested', user, req, { email });
 
       // No mailer is configured; surface the reset link on the server console and
       // as an in-app notification so the flow is usable on this local deployment.
@@ -918,6 +951,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
     const userResult = await pool.query('SELECT id, email FROM users WHERE id = $1', [row.user_id]);
     auditLogin('password_reset_success', row.user_id, userResult.rows[0]?.email, req);
+    await logAuthActivity('password_reset_completed', { id: row.user_id, email: userResult.rows[0]?.email }, req);
 
     res.json({ message: 'Password has been reset. You can now sign in with your new password.' });
   } catch (err) {
@@ -930,7 +964,8 @@ app.post('/api/auth/reset-password', async (req, res) => {
 app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.language, u.approved, u.created_at
+      SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.language, u.approved, u.moderated, u.created_at,
+        EXISTS(SELECT 1 FROM login_audit la WHERE la.action = 'signup' AND la.email = u.email) AS self_registered
       FROM users u
       ORDER BY u.created_at DESC
     `);
@@ -977,8 +1012,8 @@ app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res)
     const id = uuidv4();
     const hashedPassword = bcrypt.hashSync(password, 10);
     await pool.query(
-      'INSERT INTO users (id, name, email, password, role, company_name, language) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [id, name, email, hashedPassword, role || 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en']
+      'INSERT INTO users (id, name, email, password, role, company_name, language, approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, name, email, hashedPassword, role || 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en', true]
     );
     try {
       if (groupIds && groupIds.length > 0) {
@@ -1010,6 +1045,7 @@ app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res)
       user.groupNames = [];
       user.groupColors = [];
     }
+    await logUserActivity('user_created', { id, name, email, role: role || 'client' }, req.user, req);
     res.status(201).json(user);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -1061,6 +1097,7 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
       user.groupNames = [];
       user.groupColors = [];
     }
+    await logUserActivity('user_updated', { id: req.params.id, name, email, role }, req.user, req, { changes: { name, email, role, companyName, language } });
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -1080,6 +1117,7 @@ app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req
     await pool.query('UPDATE feedback SET user_id = NULL WHERE user_id = $1', [req.params.id]);
     await pool.query('DELETE FROM user_groups WHERE user_id = $1', [req.params.id]);
     await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+    await logUserActivity('user_deleted', { id: req.params.id }, req.user, req);
     res.json({ message: 'User deleted' });
   } catch (err) {
     console.error(err);
@@ -1090,9 +1128,10 @@ app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req
 app.patch('/api/users/:id/approve', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const { approved } = req.body;
-    const result = await pool.query('UPDATE users SET approved = $1 WHERE id = $2 RETURNING *', [approved, req.params.id]);
+    const result = await pool.query('UPDATE users SET approved = $1, moderated = true WHERE id = $2 RETURNING *', [approved, req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = mapUser(result.rows[0]);
+    await logUserActivity(approved ? 'user_approved' : 'user_blocked', user, req.user, req);
     try {
       const groupResult = await pool.query(`
         SELECT g.id AS group_id, g.name AS group_name, g.color AS group_color
@@ -1147,6 +1186,7 @@ app.put('/api/profile', authMiddleware, upload.single('avatar'), async (req, res
     const result = await pool.query(query, params);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = mapUser(result.rows[0]);
+    await logUserActivity('profile_updated', user, req.user, req, { changes: { name, email, companyName, language, avatar: !!avatarPath } });
     try {
       const groupResult = await pool.query(`
         SELECT g.id AS group_id, g.name AS group_name, g.color AS group_color
@@ -1187,6 +1227,7 @@ app.post('/api/categories', authMiddleware, roleMiddleware('admin'), async (req,
       'INSERT INTO categories (id, name, description, color) VALUES ($1, $2, $3, $4) RETURNING *',
       [id, name, description, color || '#6B7280']
     );
+    await logActivity({ type: 'category_created', message: `Category "${name}" created`, userId: req.user.id, entityType: 'category', entityId: id, req });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -1201,6 +1242,7 @@ app.put('/api/categories/:id', authMiddleware, roleMiddleware('admin'), async (r
       [name, description, color, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Category not found' });
+    await logActivity({ type: 'category_updated', message: `Category "${name}" updated`, userId: req.user.id, entityType: 'category', entityId: req.params.id, req });
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -1212,6 +1254,7 @@ app.delete('/api/categories/:id', authMiddleware, roleMiddleware('admin'), async
     await pool.query('UPDATE requests SET category_id = NULL WHERE category_id = $1', [req.params.id]);
     const result = await pool.query('DELETE FROM categories WHERE id = $1', [req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Category not found' });
+    await logActivity({ type: 'category_deleted', message: `Category deleted`, userId: req.user.id, entityType: 'category', entityId: req.params.id, severity: 'warning', req });
     res.json({ message: 'Category deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -1236,6 +1279,7 @@ app.post('/api/priorities', authMiddleware, roleMiddleware('admin'), async (req,
       'INSERT INTO priorities (id, name, color, level) VALUES ($1, $2, $3, $4) RETURNING *',
       [id, name, color || '#6B7280', level || 1]
     );
+    await logActivity({ type: 'priority_created', message: `Priority "${name}" created`, userId: req.user.id, entityType: 'priority', entityId: id, req });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -1245,8 +1289,131 @@ app.post('/api/priorities', authMiddleware, roleMiddleware('admin'), async (req,
 // Statuses Routes
 app.get('/api/statuses', authMiddleware, async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM statuses WHERE LOWER(name) <> 'reopened' ORDER BY id`);
+    const result = await pool.query(`SELECT * FROM statuses WHERE LOWER(name) <> 'reopened' ORDER BY sort_order, id`);
     res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/statuses/all', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM statuses WHERE LOWER(name) <> 'reopened' ORDER BY sort_order, id`);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/statuses', authMiddleware, async (req, res) => {
+  try {
+    const { name, color } = req.body;
+    const trimmedName = (name || '').trim();
+    if (!trimmedName) {
+      return res.status(400).json({ error: 'Status name is required' });
+    }
+    const existing = await pool.query(
+      `SELECT id FROM statuses WHERE LOWER(name) = LOWER($1)`,
+      [trimmedName]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'A status with this name already exists' });
+    }
+    const maxOrder = await pool.query(`SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM statuses`);
+    const newOrder = (maxOrder.rows[0].max_order || 0) + 1;
+    const id = 'status_' + Date.now();
+    await pool.query(
+      `INSERT INTO statuses (id, name, color, is_active, sort_order, is_system)
+       VALUES ($1, $2, $3, TRUE, $4, FALSE)`,
+      [id, trimmedName, color || '#6B7280', newOrder]
+    );
+    const result = await pool.query(`SELECT * FROM statuses WHERE id = $1`, [id]);
+    await logActivity({ type: 'status_created', message: `Status "${trimmedName}" created`, userId: req.user.id, entityType: 'status', entityId: id, req });
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/statuses/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, color } = req.body;
+    const trimmedName = (name || '').trim();
+    if (!trimmedName) {
+      return res.status(400).json({ error: 'Status name is required' });
+    }
+    const existing = await pool.query(
+      `SELECT id FROM statuses WHERE LOWER(name) = LOWER($1) AND id <> $2`,
+      [trimmedName, id]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'A status with this name already exists' });
+    }
+    await pool.query(
+      `UPDATE statuses SET name = $1, color = $2 WHERE id = $3`,
+      [trimmedName, color || '#6B7280', id]
+    );
+    const result = await pool.query(`SELECT * FROM statuses WHERE id = $1`, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Status not found' });
+    }
+    await logActivity({ type: 'status_updated', message: `Status "${trimmedName}" updated`, userId: req.user.id, entityType: 'status', entityId: id, req });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/statuses/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const statusCheck = await pool.query(`SELECT is_system FROM statuses WHERE id = $1`, [id]);
+    if (statusCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Status not found' });
+    }
+    if (statusCheck.rows[0].is_system) {
+      return res.status(403).json({ error: 'System statuses cannot be deleted' });
+    }
+    const requestCheck = await pool.query(`SELECT COUNT(*)::int AS count FROM requests WHERE status_id = $1`, [id]);
+    if (requestCheck.rows[0].count > 0) {
+      return res.status(409).json({ error: 'Cannot delete a status that is in use by requests' });
+    }
+    await pool.query(`DELETE FROM statuses WHERE id = $1`, [id]);
+    await logActivity({ type: 'status_deleted', message: `Status deleted`, userId: req.user.id, entityType: 'status', entityId: id, severity: 'warning', req });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.patch('/api/statuses/:id/toggle', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `UPDATE statuses SET is_active = NOT is_active WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Status not found' });
+    }
+    await logActivity({ type: 'status_toggled', message: `Status ${result.rows[0].is_active ? 'activated' : 'deactivated'}: ${result.rows[0].name}`, userId: req.user.id, entityType: 'status', entityId: id, req });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.patch('/api/statuses/reorder', authMiddleware, async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds)) {
+      return res.status(400).json({ error: 'orderedIds must be an array' });
+    }
+    for (let i = 0; i < orderedIds.length; i++) {
+      await pool.query(`UPDATE statuses SET sort_order = $1 WHERE id = $2`, [i + 1, orderedIds[i]]);
+    }
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -1332,6 +1499,7 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       description: r.description,
       clientId: r.client_id,
       categoryId: r.category_id,
+      customCategory: r.custom_category || null,
       priorityId: r.priority_id,
       statusId: r.status_id,
       assignedTo: r.assigned_to,
@@ -1340,7 +1508,7 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       updatedAt: r.updated_at,
       clientDeleted: r.client_deleted,
       client: r.client_deleted ? { deleted: true } : (r.client_name ? { id: r.client_id, name: r.client_name, email: r.client_email, role: r.client_role, avatar: r.client_avatar, createdAt: r.client_created_at } : null),
-      category: r.category_name ? { id: r.category_id, name: r.category_name, description: r.category_description, color: r.category_color } : null,
+      category: r.category_name ? { id: r.category_id, name: (r.custom_category || r.category_name), description: r.category_description, color: r.category_color, customCategory: (r.custom_category || null) } : (r.custom_category ? { id: r.category_id, name: r.custom_category, description: null, color: '#6B7280', customCategory: r.custom_category } : null),
       priority: r.priority_name ? { id: r.priority_id, name: r.priority_name, color: r.priority_color, level: r.priority_level } : null,
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
 assignee: r.assignee_name ? { id: r.assigned_to, name: r.assignee_name, email: r.assignee_email, role: r.assignee_role, avatar: r.assignee_avatar, createdAt: r.assignee_created_at } : null,
@@ -1385,6 +1553,7 @@ groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.grou
     } catch (e) {
       console.error('Load comments for requests error:', e.message);
     }
+    await logActivity({ type: 'request_list_viewed', message: `Request list viewed`, userId: req.user.id, entityType: 'request', req });
     res.json(enriched);
   } catch (err) {
     console.error(err);
@@ -1504,6 +1673,7 @@ app.get('/api/search', authMiddleware, async (req, res) => {
       results.groups = { total: countResult.rows[0].total, items: itemsResult.rows };
     }
 
+    await logSearchActivity(type, q, req.user, req, { totalResults: results.requests?.total + results.users?.total + results.groups?.total });
     res.json({ q, page, limit, type, results });
   } catch (err) {
     console.error(err);
@@ -1569,6 +1739,7 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       description: r.description,
       clientId: r.client_id,
       categoryId: r.category_id,
+      customCategory: r.custom_category || null,
       priorityId: r.priority_id,
       statusId: r.status_id,
       assignedTo: r.assigned_to,
@@ -1577,7 +1748,7 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       updatedAt: r.updated_at,
       clientDeleted: r.client_deleted,
       client: r.client_deleted ? { deleted: true } : (r.client_name ? { id: r.client_id, name: r.client_name, email: r.client_email, role: r.client_role, avatar: r.client_avatar, createdAt: r.client_created_at } : null),
-      category: r.category_name ? { id: r.category_id, name: r.category_name, description: r.category_description, color: r.category_color } : null,
+      category: r.category_name ? { id: r.category_id, name: (r.custom_category || r.category_name), description: r.category_description, color: r.category_color, customCategory: (r.custom_category || null) } : (r.custom_category ? { id: r.category_id, name: r.custom_category, description: null, color: '#6B7280', customCategory: r.custom_category } : null),
       priority: r.priority_name ? { id: r.priority_id, name: r.priority_name, color: r.priority_color, level: r.priority_level } : null,
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
       assignee: r.assignee_name ? { id: r.assigned_to, name: r.assignee_name, email: r.assignee_email, role: r.assignee_role, avatar: r.assignee_avatar, createdAt: r.assignee_created_at } : null,
@@ -1600,6 +1771,7 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       );
       enriched.groups = userGroupsRes.rows;
     }
+    await logRequestActivity('viewed', { id: req.params.id }, req.user, req);
     res.json(enriched);
   } catch (err) {
     console.error(err);
@@ -1609,10 +1781,22 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
 
 app.post('/api/requests', authMiddleware, async (req, res) => {
   try {
-    const { subject, description, categoryId, priorityId, attachments } = req.body;
+    // Blocked users (approved = false) cannot submit new requests. Admins are
+    // exempt so they can still create requests on behalf of clients.
+    if (req.user.role !== 'admin' && !req.user.approved) {
+      return res.status(403).json({ error: 'Your account is blocked. You cannot submit requests.' });
+    }
+    const { subject, description, categoryId, priorityId, attachments, customCategory } = req.body;
     if (!subject || !subject.trim() || !description || !description.trim() || !categoryId) {
       return res.status(400).json({ error: 'Please fill all required fields' });
     }
+    // Map the "Other Categories" pseudo-option to the real "Other" category (id 8)
+    // so the FK stays valid while preserving existing categories/workflow.
+    let effectiveCategoryId = categoryId;
+    if (categoryId === 'other-categories') effectiveCategoryId = '8';
+    const customCategoryValue = (effectiveCategoryId === '8' && customCategory && String(customCategory).trim())
+      ? String(customCategory).trim()
+      : null;
     const countResult = await pool.query("SELECT nextval('requests_id_seq') AS next_num");
     const nextNum = parseInt(countResult.rows[0].next_num);
     const id = `REQ-2024-${String(nextNum).padStart(5, '0')}`;
@@ -1626,14 +1810,15 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     const defaultPriorityId = defMap.defaultPriority || '2';
 
     await pool.query(
-      'INSERT INTO requests (id, subject, description, client_id, category_id, priority_id, status_id, attachments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-      [id, subject, description, clientId, categoryId, priorityId || defaultPriorityId, defaultStatusId, JSON.stringify(attachments || []), now, now]
+      'INSERT INTO requests (id, subject, description, client_id, category_id, priority_id, status_id, attachments, created_at, updated_at, custom_category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+      [id, subject, description, clientId, effectiveCategoryId, priorityId || defaultPriorityId, defaultStatusId, JSON.stringify(attachments || []), now, now, customCategoryValue]
     );
 
     await pool.query(
       'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
       [uuidv4(), 'created', id, req.user.id, 'New request created', now]
     );
+    await logRequestActivity('created', { id, subject }, req.user, req);
 
     // Store client's groups for group-based visibility
     const clientGroups = await pool.query('SELECT group_id FROM user_groups WHERE user_id = $1', [clientId]);
@@ -1645,7 +1830,7 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     // Real-time notification
     notifyAdmins('New request created', { type: 'request_created', requestId: id, subject, userId: req.user.id, userName: req.user.name });
 
-    res.status(201).json({ id, subject, description, clientId, categoryId, priorityId: priorityId || '2', statusId: '1', assignedTo: null, attachments: attachments || [], createdAt: now, updatedAt: now });
+    res.status(201).json({ id, subject, description, clientId, categoryId: effectiveCategoryId, customCategory: customCategoryValue, priorityId: priorityId || '2', statusId: '1', assignedTo: null, attachments: attachments || [], createdAt: now, updatedAt: now });
   } catch (err) {
     console.error('Create request error:', err.message);
     res.status(500).json({ error: 'Failed to create request: ' + err.message });
@@ -1767,6 +1952,7 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
         'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
         [uuidv4(), 'status_update', req.params.id, req.user.id, `Changed status from ${oldStatusName} to ${newStatusName}`, now]
       );
+      await logRequestActivity('status_changed', { id: req.params.id }, req.user, req, { oldStatus: oldStatusName, newStatus: newStatusName });
       const statusName = newStatusName;
       const clientId = existing.rows[0].client_id;
       notifyAdmins(`Request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
@@ -1781,6 +1967,7 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
         'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
         [uuidv4(), 'assigned', req.params.id, req.user.id, `Assigned to ${assigneeResult.rows[0]?.name || 'Unknown'}`, now]
       );
+      await logRequestActivity('assigned', { id: req.params.id }, req.user, req, { assigneeName: assigneeResult.rows[0]?.name || 'Unknown', assigneeId: assignedTo });
       const assigneeName = assigneeResult.rows[0]?.name || 'Unknown';
       const clientId = existing.rows[0].client_id;
       notifyAdmins(`Request #${req.params.id} assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
@@ -1844,6 +2031,7 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
       'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
       [uuidv4(), 'assigned', requestId, req.user.id, `Claimed by ${assigneeName}`, now]
     );
+    await logRequestActivity('claimed', { id: requestId }, req.user, req, { assigneeName });
 
     const notifResult = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('notifyClientStatusChange', 'notifyDeveloperAssignment', 'emailNotifications', 'inAppNotifications')");
     const notifSettings = {};
@@ -1890,6 +2078,7 @@ app.delete('/api/requests/:id', authMiddleware, async (req, res) => {
     await pool.query('DELETE FROM activity_log WHERE request_id = $1', [req.params.id]);
     await pool.query('DELETE FROM feedback WHERE request_id = $1', [req.params.id]);
     await pool.query('DELETE FROM requests WHERE id = $1', [req.params.id]);
+    await logRequestActivity('deleted', { id: req.params.id }, req.user, req);
     // Real-time notification
     notifyAdmins(`Request #${req.params.id} deleted`, { type: 'request_deleted', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     res.json({ message: 'Request deleted' });
@@ -1937,6 +2126,7 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
       'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
       [uuidv4(), 'comment', req.params.id, req.user.id, 'New comment on request', now]
     );
+    await logRequestActivity('comment_added', { id: req.params.id }, req.user, req, { commentId: id });
 
     // Real-time notification
     const clientId = existing.rows[0].client_id;
@@ -1977,6 +2167,7 @@ app.post('/api/requests/:id/feedback', authMiddleware, async (req, res) => {
       const id = uuidv4();
       await pool.query('INSERT INTO feedback (id, request_id, user_id, rating, comment) VALUES ($1, $2, $3, $4, $5)', [id, req.params.id, req.user.id, rating, comment || '']);
     }
+    await logRequestActivity('feedback_submitted', { id: req.params.id }, req.user, req, { rating, comment });
     res.status(201).json({ rating, comment });
   } catch (err) {
     console.error(err);
@@ -2005,6 +2196,7 @@ app.delete('/api/feedback/:id', authMiddleware, roleMiddleware('admin'), async (
     const existing = await pool.query('SELECT id FROM feedback WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Feedback not found' });
     await pool.query('DELETE FROM feedback WHERE id = $1', [req.params.id]);
+    await logActivity({ type: 'feedback_deleted', message: `Feedback deleted`, userId: req.user.id, entityType: 'feedback', entityId: req.params.id, severity: 'warning', req });
     res.json({ message: 'Feedback deleted' });
   } catch (err) {
     console.error(err);
@@ -2025,6 +2217,7 @@ app.post('/api/upload', authMiddleware, async (req, res, next) => {
         return res.status(400).json({ error: err.message });
       }
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      await logActivity({ type: 'file_uploaded', message: `File uploaded: ${req.file.originalname}`, userId: req.user.id, entityType: 'file', details: { filename: req.file.filename, size: req.file.size, mimetype: req.file.mimetype }, req });
       res.json({ filename: req.file.filename, path: `/uploads/${req.file.filename}` });
     });
   } catch (err) {
@@ -2183,6 +2376,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       closed: parseInt(row.closed) || 0
     }));
 
+    await logActivity({ type: 'dashboard_viewed', message: `Dashboard viewed`, userId: req.user.id, entityType: 'dashboard', req });
     res.json({
       total,
       open,
@@ -2326,6 +2520,7 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
       ...statuses
     }));
 
+    await logActivity({ type: 'performance_viewed', message: `Performance dashboard viewed`, userId: req.user.id, entityType: 'dashboard', req });
     res.json({ labels, byCompany, byDeveloper, companyStats, developerStats });
   } catch (err) {
     console.error(err);
@@ -2359,11 +2554,16 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
     const days = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : null;
 
     // Per-developer workload, taken from the same request/assignee/status joins
-    // the rest of the performance endpoint uses. Restricted to the developer and
-    // support roles, which is the population that can be assigned work.
+    // the rest of the performance endpoint uses. Restricted to the developer
+    // role only, so Developer Performance stays separate from the Escalation
+    // (Support) Team performance computed below: a resolved request counts
+    // toward the performance of the team its assignee belongs to. Grouping by
+    // user id (not just name) keeps same-named users from being merged.
     const devResult = await pool.query(`
       SELECT
+        u.id AS id,
         u.name AS name,
+        u.role AS role,
         COUNT(*)::int AS assigned,
         COUNT(*) FILTER (WHERE s.name IN ('Resolved', 'Closed'))::int AS resolved,
         COUNT(*) FILTER (WHERE s.name IN ('New', 'Assigned', 'In Progress', 'Waiting for Client'))::int AS in_progress,
@@ -2373,9 +2573,9 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
       FROM requests r
       JOIN users u ON r.assigned_to = u.id
       LEFT JOIN statuses s ON r.status_id = s.id
-      WHERE u.role IN ('developer', 'support')
+      WHERE u.role = 'developer'
         AND ($1::int IS NULL OR r.created_at::date >= (CURRENT_DATE - ($1::int || ' days')::interval))
-      GROUP BY u.name
+      GROUP BY u.id, u.name, u.role
       ORDER BY assigned DESC, u.name
     `, [days]);
 
@@ -2384,7 +2584,9 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
       const resolved = row.resolved || 0;
       const inProgress = row.in_progress || 0;
       return {
+        id: row.id || null,
         name: row.name,
+        role: row.role || null,
         assigned,
         resolved,
         inProgress,
@@ -2546,6 +2748,7 @@ app.get('/api/activity', authMiddleware, async (req, res) => {
       user: a.user_name ? { id: a.user_id, name: a.user_name, email: a.user_email, role: a.user_role, avatar: a.user_avatar, createdAt: a.user_created_at } : null,
       request: a.request_subject ? { id: a.request_id, subject: a.request_subject } : null
     }));
+    await logActivity({ type: 'activity_log_viewed', message: `Activity log viewed`, userId: req.user.id, entityType: 'activity_log', req });
     res.json(enriched);
   } catch (err) {
     console.error(err);
@@ -2561,6 +2764,7 @@ app.delete('/api/requests/:id/activity', authMiddleware, async (req, res) => {
       if (ownership.rows.length === 0) return res.status(403).json({ error: 'Access denied' });
     }
     await pool.query('DELETE FROM activity_log WHERE request_id = $1', [req.params.id]);
+    await logActivity({ type: 'activity_cleared', message: `Activity log cleared for request`, userId: req.user.id, entityType: 'activity_log', entityId: req.params.id, severity: 'warning', req });
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -2571,6 +2775,7 @@ app.delete('/api/requests/:id/activity', authMiddleware, async (req, res) => {
 app.delete('/api/activity', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     await pool.query('DELETE FROM activity_log');
+    await logActivity({ type: 'activity_cleared', message: `All activity log cleared`, userId: req.user.id, entityType: 'activity_log', severity: 'critical', req });
     res.json({ success: true, message: 'All activity cleared' });
   } catch (err) {
     console.error(err);
@@ -2668,6 +2873,8 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
       ORDER BY resolved DESC
     `);
 
+    await logActivity({ type: 'dashboard_viewed', message: `Dashboard viewed`, userId: req.user.id, entityType: 'dashboard', req });
+    await logActivity({ type: 'report_viewed', message: `Report viewed`, userId: req.user.id, entityType: 'report', req });
     res.json({
       total,
       byStatus: byStatusResult.rows,
@@ -2722,6 +2929,7 @@ app.post('/api/groups', authMiddleware, roleMiddleware('admin'), async (req, res
       'INSERT INTO groups (id, name, description, color, company_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [id, name, description || '', color || '#6B7280', company_id || null]
     );
+    await logGroupActivity('group_created', { id, name }, req.user, req);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -2736,6 +2944,7 @@ app.put('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (req, 
       [name, description, color, company_id ?? null, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Group not found' });
+    await logGroupActivity('group_updated', { id: req.params.id, name }, req.user, req);
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -2747,6 +2956,7 @@ app.delete('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (re
     await pool.query('DELETE FROM user_groups WHERE group_id = $1', [req.params.id]);
     await pool.query('UPDATE users SET group_id = NULL WHERE group_id = $1', [req.params.id]);
     await pool.query('DELETE FROM groups WHERE id = $1', [req.params.id]);
+    await logGroupActivity('group_deleted', { id: req.params.id }, req.user, req);
     res.json({ message: 'Group deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -2777,6 +2987,7 @@ app.post('/api/groups/:id/members', authMiddleware, roleMiddleware('admin'), asy
       'INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
       [user_id, req.params.id]
     );
+    await logGroupActivity('member_added', { id: req.params.id }, req.user, req, { memberId: user_id });
     // Associate the user's previously submitted requests with this group so
     // they become visible to the group's developers/escalation members
     const synced = await addUserRequestGroup(user_id, req.params.id);
@@ -2795,6 +3006,7 @@ app.delete('/api/groups/:id/members/:userId', authMiddleware, roleMiddleware('ad
       'DELETE FROM user_groups WHERE user_id = $1 AND group_id = $2',
       [req.params.userId, req.params.id]
     );
+    await logGroupActivity('member_removed', { id: req.params.id }, req.user, req, { memberId: req.params.userId });
     // Remove the group association from the user's requests unless explicitly assigned
     await removeUserRequestGroup(req.params.userId, req.params.id);
     res.json({ message: 'Member removed' });
@@ -2822,6 +3034,7 @@ app.post('/api/companies', authMiddleware, roleMiddleware('admin'), async (req, 
       'INSERT INTO companies (id, company_id, name, industry, company_type, email, phone) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
       [id, companyId || null, name, industry || null, companyType || null, email || null, phone || null]
     );
+    await logCompanyActivity('company_created', { id, name }, req.user, req);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505') {
@@ -2839,6 +3052,7 @@ app.put('/api/companies/:id', authMiddleware, roleMiddleware('admin'), async (re
       [companyId, name, industry, companyType, email, phone, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Company not found' });
+    await logCompanyActivity('company_updated', { id: req.params.id, name }, req.user, req);
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -2849,6 +3063,7 @@ app.delete('/api/companies/:id', authMiddleware, roleMiddleware('admin'), async 
   try {
     const result = await pool.query('DELETE FROM companies WHERE id = $1', [req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Company not found' });
+    await logCompanyActivity('company_deleted', { id: req.params.id }, req.user, req);
     res.json({ message: 'Company deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -3008,6 +3223,7 @@ app.put('/api/settings', authMiddleware, roleMiddleware('admin'), async (req, re
         [key, stringValue]
       );
     }
+    await logSettingsActivity('settings_updated', req.user, req, { changes: Object.keys(updates) });
     res.json({ message: 'Settings updated successfully' });
   } catch (err) {
     console.error('Update settings error:', err);
@@ -3068,6 +3284,7 @@ app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (
         [s.key, s.value]
       );
     }
+    await logSettingsActivity('settings_reset', req.user, req);
     res.json({ message: 'Settings reset to defaults' });
   } catch (err) {
     console.error('Reset settings error:', err);
@@ -3086,6 +3303,7 @@ app.post('/api/settings/logo', authMiddleware, roleMiddleware('admin'), upload.s
       'INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
       ['systemLogo', logoPath]
     );
+    await logSettingsActivity('logo_uploaded', req.user, req);
     res.json({ logo: logoPath });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
@@ -3098,6 +3316,7 @@ app.delete('/api/settings/logo', authMiddleware, roleMiddleware('admin'), async 
       'INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
       ['systemLogo', '']
     );
+    await logSettingsActivity('logo_removed', req.user, req);
     res.json({ message: 'Logo removed' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -3137,6 +3356,7 @@ app.post('/api/announcements', authMiddleware, roleMiddleware('admin'), async (r
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
       [id, title, content, priority || 'normal', target_role || null, req.user.id, expires_at || null]
     );
+    await logActivity({ type: 'announcement_created', message: `Announcement "${title}" created`, userId: req.user.id, entityType: 'announcement', entityId: id, req });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3154,6 +3374,7 @@ app.put('/api/announcements/:id', authMiddleware, roleMiddleware('admin'), async
       [title, content, priority, target_role, expires_at === undefined ? null : expires_at, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Announcement not found' });
+    await logActivity({ type: 'announcement_updated', message: `Announcement updated`, userId: req.user.id, entityType: 'announcement', entityId: req.params.id, req });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3165,6 +3386,7 @@ app.delete('/api/announcements/:id', authMiddleware, roleMiddleware('admin'), as
   try {
     const result = await pool.query('DELETE FROM announcements WHERE id = $1', [req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Announcement not found' });
+    await logActivity({ type: 'announcement_deleted', message: `Announcement deleted`, userId: req.user.id, entityType: 'announcement', entityId: req.params.id, severity: 'warning', req });
     res.json({ message: 'Announcement deleted' });
   } catch (err) {
     console.error(err);
@@ -3207,6 +3429,7 @@ app.get('/api/knowledge-base/:id', authMiddleware, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Article not found' });
     await pool.query('UPDATE knowledge_base SET views = views + 1 WHERE id = $1', [req.params.id]);
     result.rows[0].views = (result.rows[0].views || 0) + 1;
+    await logActivity({ type: 'kb_viewed', message: `Knowledge base article viewed`, userId: req.user.id, entityType: 'knowledge_base', entityId: req.params.id, req });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3224,6 +3447,7 @@ app.post('/api/knowledge-base', authMiddleware, roleMiddleware('admin', 'support
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) RETURNING *`,
       [id, title, content, category_id || null, Array.isArray(tags) ? tags : [], status || 'published', req.user.id]
     );
+    await logActivity({ type: 'kb_created', message: `Knowledge base article "${title}" created`, userId: req.user.id, entityType: 'knowledge_base', entityId: id, req });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3241,6 +3465,7 @@ app.put('/api/knowledge-base/:id', authMiddleware, roleMiddleware('admin', 'supp
       [title, content, category_id, Array.isArray(tags) ? tags : null, status, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Article not found' });
+    await logActivity({ type: 'kb_updated', message: `Knowledge base article updated`, userId: req.user.id, entityType: 'knowledge_base', entityId: req.params.id, req });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3252,6 +3477,7 @@ app.delete('/api/knowledge-base/:id', authMiddleware, roleMiddleware('admin'), a
   try {
     const result = await pool.query('DELETE FROM knowledge_base WHERE id = $1', [req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Article not found' });
+    await logActivity({ type: 'kb_deleted', message: `Knowledge base article deleted`, userId: req.user.id, entityType: 'knowledge_base', entityId: req.params.id, severity: 'warning', req });
     res.json({ message: 'Article deleted' });
   } catch (err) {
     console.error(err);
@@ -3279,6 +3505,7 @@ app.post('/api/tags', authMiddleware, roleMiddleware('admin', 'support'), async 
       'INSERT INTO tags (id, name, color) VALUES ($1, $2, $3) RETURNING *',
       [id, name.trim(), color || '#6B7280']
     );
+    await logActivity({ type: 'tag_created', message: `Tag "${name.trim()}" created`, userId: req.user.id, entityType: 'tag', entityId: id, req });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'Tag name already exists' });
@@ -3295,6 +3522,7 @@ app.put('/api/tags/:id', authMiddleware, roleMiddleware('admin', 'support'), asy
       [name, color, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Tag not found' });
+    await logActivity({ type: 'tag_updated', message: `Tag updated`, userId: req.user.id, entityType: 'tag', entityId: req.params.id, req });
     res.json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'Tag name already exists' });
@@ -3308,6 +3536,7 @@ app.delete('/api/tags/:id', authMiddleware, roleMiddleware('admin'), async (req,
     await pool.query('DELETE FROM request_tags WHERE tag_id = $1', [req.params.id]);
     const result = await pool.query('DELETE FROM tags WHERE id = $1', [req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Tag not found' });
+    await logActivity({ type: 'tag_deleted', message: `Tag deleted`, userId: req.user.id, entityType: 'tag', entityId: req.params.id, severity: 'warning', req });
     res.json({ message: 'Tag deleted' });
   } catch (err) {
     console.error(err);
@@ -3344,6 +3573,7 @@ app.post('/api/templates', authMiddleware, async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()) RETURNING *`,
       [id, name, subject, description || null, category_id || null, priority_id || null, is_public === undefined ? true : !!is_public, req.user.id]
     );
+    await logActivity({ type: 'template_created', message: `Template "${name}" created`, userId: req.user.id, entityType: 'template', entityId: id, req });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3364,6 +3594,7 @@ app.put('/api/templates/:id', authMiddleware, async (req, res) => {
          updated_at = NOW() WHERE id = $7 RETURNING *`,
       [name, subject, description, category_id, priority_id, is_public === undefined ? null : !!is_public, req.params.id]
     );
+    await logActivity({ type: 'template_updated', message: `Template updated`, userId: req.user.id, entityType: 'template', entityId: req.params.id, req });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3377,6 +3608,7 @@ app.delete('/api/templates/:id', authMiddleware, async (req, res) => {
     if (tmpl.rows.length === 0) return res.status(404).json({ error: 'Template not found' });
     if (tmpl.rows[0].created_by !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Insufficient permissions' });
     await pool.query('DELETE FROM templates WHERE id = $1', [req.params.id]);
+    await logActivity({ type: 'template_deleted', message: `Template deleted`, userId: req.user.id, entityType: 'template', entityId: req.params.id, severity: 'warning', req });
     res.json({ message: 'Template deleted' });
   } catch (err) {
     console.error(err);
@@ -3411,6 +3643,7 @@ app.post('/api/sla/policies', authMiddleware, roleMiddleware('admin'), async (re
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
       [id, name, category_id || null, priority_id || null, response_time_minutes, resolution_time_minutes, escalation_enabled === undefined ? false : !!escalation_enabled]
     );
+    await logActivity({ type: 'sla_created', message: `SLA policy "${name}" created`, userId: req.user.id, entityType: 'sla_policy', entityId: id, req });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3429,6 +3662,7 @@ app.put('/api/sla/policies/:id', authMiddleware, roleMiddleware('admin'), async 
       [name, category_id, priority_id, response_time_minutes, resolution_time_minutes, escalation_enabled === undefined ? null : !!escalation_enabled, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'SLA policy not found' });
+    await logActivity({ type: 'sla_updated', message: `SLA policy updated`, userId: req.user.id, entityType: 'sla_policy', entityId: req.params.id, req });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3440,6 +3674,7 @@ app.delete('/api/sla/policies/:id', authMiddleware, roleMiddleware('admin'), asy
   try {
     const result = await pool.query('DELETE FROM sla_policies WHERE id = $1', [req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'SLA policy not found' });
+    await logActivity({ type: 'sla_deleted', message: `SLA policy deleted`, userId: req.user.id, entityType: 'sla_policy', entityId: req.params.id, severity: 'warning', req });
     res.json({ message: 'SLA policy deleted' });
   } catch (err) {
     console.error(err);
@@ -3484,6 +3719,7 @@ app.post('/api/sla/tracking', authMiddleware, roleMiddleware('admin', 'support',
        RETURNING *`,
       [id, request_id, sla_policy_id || null, response_due_at || null, resolution_due_at || null, first_response_at || null, resolved_at || null, response_breached === undefined ? false : !!response_breached, resolution_breached === undefined ? false : !!resolution_breached]
     );
+    await logActivity({ type: 'sla_tracking_created', message: `SLA tracking created for request`, userId: req.user.id, entityType: 'sla_tracking', entityId: id, requestId: request_id, req });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3503,6 +3739,7 @@ app.put('/api/sla/tracking/:id', authMiddleware, roleMiddleware('admin', 'suppor
       [sla_policy_id, response_due_at, resolution_due_at, first_response_at, resolved_at, response_breached === undefined ? null : !!response_breached, resolution_breached === undefined ? null : !!resolution_breached, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'SLA tracking record not found' });
+    await logActivity({ type: 'sla_tracking_updated', message: `SLA tracking updated`, userId: req.user.id, entityType: 'sla_tracking', entityId: req.params.id, req });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3514,6 +3751,7 @@ app.delete('/api/sla/tracking/:id', authMiddleware, roleMiddleware('admin', 'sup
   try {
     const result = await pool.query('DELETE FROM sla_tracking WHERE id = $1', [req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'SLA tracking record not found' });
+    await logActivity({ type: 'sla_tracking_deleted', message: `SLA tracking deleted`, userId: req.user.id, entityType: 'sla_tracking', entityId: req.params.id, severity: 'warning', req });
     res.json({ message: 'SLA tracking record deleted' });
   } catch (err) {
     console.error(err);
@@ -3547,6 +3785,7 @@ app.post('/api/requests/:id/watchers', authMiddleware, async (req, res) => {
        ON CONFLICT (request_id, user_id) DO NOTHING RETURNING *`,
       [req.params.id, userId]
     );
+    await logActivity({ type: 'watcher_added', message: `Watcher added to request`, userId: req.user.id, entityType: 'watcher', entityId: req.params.id, requestId: req.params.id, req });
     res.status(201).json(result.rows[0] || { request_id: req.params.id, user_id: userId, created_at: new Date().toISOString() });
   } catch (err) {
     console.error(err);
@@ -3561,6 +3800,7 @@ app.delete('/api/requests/:id/watchers/:userId', authMiddleware, async (req, res
       [req.params.id, req.params.userId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Watcher not found' });
+    await logActivity({ type: 'watcher_removed', message: `Watcher removed from request`, userId: req.user.id, entityType: 'watcher', entityId: req.params.id, requestId: req.params.id, req });
     res.json({ message: 'Watcher removed' });
   } catch (err) {
     console.error(err);
@@ -3598,6 +3838,7 @@ app.post('/api/attachments', authMiddleware, async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
       [id, request_id, req.user.id, filename, original_name || filename, mime_type || null, size_bytes || null]
     );
+    await logActivity({ type: 'attachment_uploaded', message: `Attachment "${original_name || filename}" uploaded`, userId: req.user.id, entityType: 'attachment', entityId: id, requestId: request_id, req });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3609,6 +3850,7 @@ app.delete('/api/attachments/:id', authMiddleware, roleMiddleware('admin'), asyn
   try {
     const result = await pool.query('DELETE FROM attachments WHERE id = $1', [req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Attachment not found' });
+    await logActivity({ type: 'attachment_deleted', message: `Attachment deleted`, userId: req.user.id, entityType: 'attachment', entityId: req.params.id, severity: 'warning', req });
     res.json({ message: 'Attachment deleted' });
   } catch (err) {
     console.error(err);
@@ -3645,6 +3887,7 @@ app.post('/api/notifications', authMiddleware, roleMiddleware('admin', 'support'
        VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
       [id, user_id, type || 'info', title || null, message, request_id || null]
     );
+    await logActivity({ type: 'notification_sent', message: `Notification sent: ${title || message}`, userId: req.user.id, entityType: 'notification', entityId: id, requestId: request_id || null, req });
     notifyUser(user_id, message, { type: type || 'info', title, requestId: request_id });
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -3660,6 +3903,7 @@ app.put('/api/notifications/:id/read', authMiddleware, async (req, res) => {
       [req.params.id, req.user.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Notification not found' });
+    await logActivity({ type: 'notification_read', message: `Notification marked as read`, userId: req.user.id, entityType: 'notification', entityId: req.params.id, req });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3681,6 +3925,7 @@ app.delete('/api/notifications/:id', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM notifications WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Notification not found' });
+    await logActivity({ type: 'notification_deleted', message: `Notification deleted`, userId: req.user.id, entityType: 'notification', entityId: req.params.id, req });
     res.json({ message: 'Notification deleted' });
   } catch (err) {
     console.error(err);
@@ -3711,6 +3956,7 @@ app.delete('/api/sessions/:id', authMiddleware, async (req, res) => {
     }
     const result = await pool.query('UPDATE sessions SET revoked_at = NOW() WHERE id = $1 RETURNING *', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Session not found' });
+    await logActivity({ type: 'session_revoked', message: `Session revoked`, userId: req.user.id, entityType: 'session', entityId: req.params.id, req });
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -3743,6 +3989,7 @@ app.delete('/api/login-audit/:id', authMiddleware, roleMiddleware('admin'), asyn
   try {
     const result = await pool.query('DELETE FROM login_audit WHERE id = $1', [req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Audit record not found' });
+    await logActivity({ type: 'audit_deleted', message: `Login audit record deleted`, userId: req.user.id, entityType: 'login_audit', entityId: req.params.id, severity: 'warning', req });
     res.json({ message: 'Audit record deleted' });
   } catch (err) {
     console.error(err);

@@ -198,10 +198,14 @@ export default function Dashboard() {
     { dataKey: 'resolved', labelKey: 'dashboard.resolvedDev', color: '#10B981' }
   ]), []);
 
+  // Developer chart: only real developer users (users.role === 'developer').
+  // Anything else from the API is dropped here as a guard so Escalation Team
+  // (support) names can never render in this chart.
   const devChartData = useMemo(() => {
     const rows = escPerfData?.developers;
     if (!Array.isArray(rows) || rows.length === 0) return [];
     return rows
+      .filter(row => row && row.role === 'developer' && row.name)
       .map(row => ({
         name: row.name,
         role: row.role || null,
@@ -212,7 +216,7 @@ export default function Dashboard() {
         avgResolutionHours: row.avgResolutionHours ?? null,
         successRate: Number(row.successRate) || 0
       }))
-      .sort((a, b) => b.assigned - a.assigned || a.name.localeCompare(b.name));
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [escPerfData?.developers]);
 
   const devTotalAssigned = useMemo(
@@ -269,8 +273,7 @@ export default function Dashboard() {
         avgResolutionHours: row.avgResolutionHours ?? null,
         successRate: Number(row.successRate) || 0
       }))
-      .sort((a, b) => b.totalEscalated - a.totalEscalated
-        || String(a.name || '').localeCompare(String(b.name || '')));
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   }, [escPerfData?.team]);
 
   // X-axis label: the real member name, or the unassigned label when the
@@ -732,7 +735,9 @@ export default function Dashboard() {
                     <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                       {r.status?.name === 'New' || r.status?.name === 'Assigned' ? (
                         <>
-                          <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>{t('common.edit')}</button>
+                          {r.status?.name === 'Assigned' && (
+                            <button className="action-btn-text edit" onClick={() => navigate(`/requests/${r.id}?edit=true`)}>{t('common.edit')}</button>
+                          )}
                           <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(r.id); }}>{t('common.delete')}</button>
                         </>
                       ) : (
@@ -818,10 +823,10 @@ export default function Dashboard() {
                     </div>
                     <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
                       <div className="perf-chart-section">
-                        <ResponsiveContainer width="100%" height={400}>
+                        <ResponsiveContainer width="100%" height={530}>
                           <AreaChart
                             data={escChartData}
-                            margin={{ top: 24, right: 28, left: 16, bottom: 60 }}
+                            margin={{ top: 24, right: 28, left: 60, bottom: 100 }}
                           >
                             <defs>
                               <linearGradient id="escPerfArea" x1="0" y1="0" x2="0" y2="1">
@@ -840,7 +845,7 @@ export default function Dashboard() {
                               angle={-20}
                               textAnchor="end"
                               interval={0}
-                              height={60}
+                              height={100}
                               tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
                             />
                             <YAxis
@@ -940,7 +945,7 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <div className="esc-kpi-grid">
-                      {devKpis.map(kpi => (
+                      {devKpis.map((kpi, index) => (
                         <div
                           key={kpi.key}
                           className="esc-kpi"
@@ -948,15 +953,20 @@ export default function Dashboard() {
                         >
                           <div className="esc-kpi-value">{kpi.value}</div>
                           <div className="esc-kpi-label">{t(kpi.labelKey)}</div>
+                          {index === escKpis.findIndex(kpi => kpi.hintKey) && (
+                            <div className="esc-kpi-hint" aria-hidden="true" style={{ visibility: 'hidden' }}>
+                              {t('dashboard.escalationAvgBasis')}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                     <div className="perf-charts-grid" style={{ gridTemplateColumns: '1fr' }}>
                       <div className="perf-chart-section">
-                        <ResponsiveContainer width="100%" height={400}>
+                        <ResponsiveContainer width="100%" height={530}>
                           <AreaChart
                             data={devChartData}
-                            margin={{ top: 24, right: 28, left: 16, bottom: 60 }}
+                            margin={{ top: 24, right: 28, left: 60, bottom: 100 }}
                             onClick={(state) => {
                               // preserve the existing per-developer drilldown
                               const name = state?.activePayload?.[0]?.payload?.name;
@@ -981,7 +991,7 @@ export default function Dashboard() {
                               axisLine={{ stroke: '#e5e7eb' }}
                               angle={-20}
                               textAnchor="end"
-                              height={60}
+                              height={100}
                               interval={0}
                               tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
                             />
@@ -1053,6 +1063,9 @@ export default function Dashboard() {
                             />
                           </AreaChart>
                         </ResponsiveContainer>
+                        <p className="esc-legend-note" aria-hidden="true" style={{ visibility: 'hidden' }}>
+                          {t('dashboard.escalationAvgBasis')}
+                        </p>
                       </div>
                     </div>
                   </>

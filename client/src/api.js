@@ -44,6 +44,7 @@ const SERVER_ERROR_MAP = {
   'Not found': 'common.notFound',
   'No token provided': 'common.sessionExpired',
   'Invalid token': 'common.sessionExpired',
+  'Your account is blocked. You cannot submit requests.': 'common.accountBlocked',
 };
 
 function translateServerError(msg) {

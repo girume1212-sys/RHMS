@@ -22,6 +22,7 @@ export default function RequestsList() {
 
   const fromCategories = user?.role === 'admin' && !!initialFilter.category;
   const goBack = useBackNavigation(fromCategories ? '/categories' : (basePath || '/'));
+  const isBlockedClient = isClient && user?.approved === false;
 
   return (
     <div className="page-container requests-list">
@@ -31,12 +32,17 @@ export default function RequestsList() {
           <h1>{t('common.requests')}</h1>
           <p>{isClient ? t('common.viewYourRequests') : t('common.manageAllRequests')}</p>
         </div>
-        {(isClient || user?.role === 'admin') && (
+        {((isClient && !isBlockedClient) || user?.role === 'admin') && (
           <button className="btn btn-primary" onClick={() => navigate(`${basePath}/requests/create`)}>
             + {t('common.createRequest')}
           </button>
         )}
       </div>
+      {isBlockedClient && (
+        <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '16px 20px', borderRadius: '8px', fontSize: '14px', marginBottom: '20px' }}>
+          <strong>{t('common.accountBlockedTitle')}:</strong> {t('common.accountBlocked')}
+        </div>
+      )}
       <RequestsTable user={user} basePath={basePath} initialFilter={initialFilter} />
     </div>
   );

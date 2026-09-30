@@ -36,12 +36,24 @@ export default function ClientLayout() {
   const dismissedIds = useRef(new Set());
   const showNotificationsRef = useRef(false);
   const audioUnlocked = useRef(false);
-  const messagesSeenRef = useRef((() => {
-    let v = null;
-    try { v = localStorage.getItem('rhms_messages_seen'); } catch (e) {}
-    const n = v ? parseInt(v, 10) : NaN;
-    return Number.isNaN(n) ? Date.now() : n;
-  })());
+  const messagesSeenRef = useRef(Date.now());
+  const messagesSeenKey = user?.id ? `rhms_messages_seen_${user.id}` : 'rhms_messages_seen';
+
+  // Load per-user messages-seen timestamp (migrate legacy shared key once)
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const perUser = localStorage.getItem(`rhms_messages_seen_${user.id}`);
+      if (perUser && !Number.isNaN(parseInt(perUser, 10))) {
+        messagesSeenRef.current = parseInt(perUser, 10);
+      } else {
+        const legacy = localStorage.getItem('rhms_messages_seen');
+        const n = legacy ? parseInt(legacy, 10) : NaN;
+        messagesSeenRef.current = Number.isNaN(n) ? Date.now() : n;
+        localStorage.setItem(`rhms_messages_seen_${user.id}`, String(messagesSeenRef.current));
+      }
+    } catch (e) {}
+  }, [user?.id]);
 
   // Unlock audio on first user interaction
   useEffect(() => {
@@ -107,6 +119,24 @@ export default function ClientLayout() {
     dismissedIds.current.add(id);
     setBubbleNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
+
+  // Seed the unread badge from persisted notifications so it survives page reloads
+  useEffect(() => {
+    if (!user) return;
+    api.get('/api/notifications').then(data => {
+      const unreadList = (data.notifications || [])
+        .filter(n => !n.is_read)
+        .slice(0, 20)
+        .map(n => ({
+          id: n.id,
+          type: n.type,
+          message: n.message,
+          requestId: n.request_id,
+          timestamp: n.created_at
+        }));
+      setUnreadNotifications(unreadList);
+    }).catch(() => {});
+  }, [user]);
 
   // SSE real-time notifications
   useEffect(() => {
@@ -260,12 +290,14 @@ export default function ClientLayout() {
     if (next) {
       setPanelNotifications(unreadNotifications);
       setUnreadNotifications([]);
+      api.put('/api/notifications/read-all').catch(() => {});
     }
   };
 
   const markAllRead = useCallback(() => {
     setUnreadNotifications([]);
     setPanelNotifications([]);
+    api.put('/api/notifications/read-all').catch(() => {});
   }, []);
 
   const getNotifTitle = (type) => {
@@ -428,7 +460,10 @@ export default function ClientLayout() {
                 setShowNotifications(false);
                 if (next) {
                   messagesSeenRef.current = Date.now();
-                  try { localStorage.setItem('rhms_messages_seen', String(messagesSeenRef.current)); } catch (e) {}
+                  try {
+                    localStorage.setItem(messagesSeenKey, String(messagesSeenRef.current));
+                    localStorage.setItem('rhms_messages_seen', String(messagesSeenRef.current));
+                  } catch (e) {}
                   setUnreadMessages(0);
                 }
               }} title={t('topbar.messages')} style={{ position: 'relative' }}>

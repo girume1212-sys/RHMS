@@ -89,6 +89,7 @@ export default function Settings() {
     autoBackup: false,
     backupFrequency: 'weekly',
     systemLogo: '',
+    createRequestEnabled: false,
   };
 
   const [form, setForm] = useState({ ...initialForm });
@@ -102,17 +103,25 @@ export default function Settings() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  const [statusModal, setStatusModal] = useState(null);
+  const [showStatusManagement, setShowStatusManagement] = useState(true);
+  const [editingStatus, setEditingStatus] = useState(null);
+  const [statusForm, setStatusForm] = useState({ name: '', color: '#6B7280' });
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [allStatuses, setAllStatuses] = useState([]);
+
   useEffect(() => {
     Promise.all([
       api.get('/api/settings'),
       api.get('/api/companies'),
       api.get('/api/groups'),
-      api.get('/api/statuses'),
+      api.get('/api/statuses/all'),
       api.get('/api/priorities'),
     ]).then(([settingsData, companiesData, groupsData, statusesData, prioritiesData]) => {
       setCompanies(Array.isArray(companiesData) ? companiesData : []);
       setGroups(Array.isArray(groupsData) ? groupsData : []);
-      setStatuses(Array.isArray(statusesData) ? statusesData : []);
+      setAllStatuses(Array.isArray(statusesData) ? statusesData : []);
+      setStatuses(Array.isArray(statusesData) ? statusesData.filter(s => s.is_active !== false) : []);
       setPriorities(Array.isArray(prioritiesData) ? prioritiesData : []);
       setForm(prev => {
         const merged = { ...prev, ...settingsData };
@@ -120,7 +129,7 @@ export default function Settings() {
           'autoRequestId', 'allowReopen', 'emailNotifications', 'inAppNotifications',
           'notifyClientStatusChange', 'notifyDeveloperAssignment', 'autoAssign',
           'soundAlerts', 'desktopNotifications', 'twoFactorAuth', 'maintenanceMode',
-          'escalationEnabled', 'holidaysEnabled', 'autoBackup'
+          'escalationEnabled', 'holidaysEnabled', 'autoBackup', 'createRequestEnabled'
         ];
         const numKeys = [
           'maxFileSize', 'passwordLength', 'passwordExpiry', 'sessionTimeout',
@@ -198,6 +207,7 @@ export default function Settings() {
         holidaysEnabled: String(form.holidaysEnabled),
         autoBackup: String(form.autoBackup),
         backupFrequency: form.backupFrequency,
+        createRequestEnabled: String(form.createRequestEnabled),
       });
       applyTheme(form.theme);
       if (form.language) changeLanguage(form.language);
@@ -223,6 +233,99 @@ export default function Settings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const openStatusModal = (status = null) => {
+    setEditingStatus(status);
+    setStatusForm(status ? { name: status.name, color: status.color } : { name: '', color: '#6B7280' });
+    setStatusModal(true);
+  };
+
+  const closeStatusModal = () => {
+    setStatusModal(false);
+    setEditingStatus(null);
+    setStatusForm({ name: '', color: '#6B7280' });
+  };
+
+  const handleStatusSave = async () => {
+    const trimmedName = statusForm.name.trim();
+    if (!trimmedName) {
+      addToast('Status name is required', 'error');
+      return;
+    }
+    setStatusSaving(true);
+    try {
+      if (editingStatus) {
+        await api.put(`/api/statuses/${editingStatus.id}`, { name: trimmedName, color: statusForm.color });
+        addToast('Status updated successfully');
+      } else {
+        await api.post('/api/statuses', { name: trimmedName, color: statusForm.color });
+        addToast('Status created successfully');
+      }
+      const refreshed = await api.get('/api/statuses/all');
+      setAllStatuses(Array.isArray(refreshed) ? refreshed : []);
+      setStatuses(Array.isArray(refreshed) ? refreshed.filter(s => s.is_active !== false) : []);
+      closeStatusModal();
+    } catch (err) {
+      addToast(err.message || 'Failed to save status', 'error');
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const [statusDeleteTarget, setStatusDeleteTarget] = useState(null);
+
+  const handleStatusDelete = (status) => {
+    if (status.is_system) {
+      addToast('System statuses cannot be deleted', 'error');
+      return;
+    }
+    setStatusDeleteTarget(status);
+  };
+
+  const confirmStatusDelete = async () => {
+    const status = statusDeleteTarget;
+    setStatusDeleteTarget(null);
+    try {
+      await api.delete(`/api/statuses/${status.id}`);
+      addToast('Status deleted successfully');
+      const refreshed = await api.get('/api/statuses/all');
+      setAllStatuses(Array.isArray(refreshed) ? refreshed : []);
+      setStatuses(Array.isArray(refreshed) ? refreshed.filter(s => s.is_active !== false) : []);
+    } catch (err) {
+      addToast(err.message || 'Failed to delete status', 'error');
+    }
+  };
+
+  const handleStatusToggle = async (status) => {
+    try {
+      await api.patch(`/api/statuses/${status.id}/toggle`);
+      const refreshed = await api.get('/api/statuses/all');
+      setAllStatuses(Array.isArray(refreshed) ? refreshed : []);
+      setStatuses(Array.isArray(refreshed) ? refreshed.filter(s => s.is_active !== false) : []);
+    } catch (err) {
+      addToast(err.message || 'Failed to toggle status', 'error');
+    }
+  };
+
+  const handleStatusReorder = async (orderedIds) => {
+    try {
+      await api.patch('/api/statuses/reorder', { orderedIds });
+      const refreshed = await api.get('/api/statuses/all');
+      setAllStatuses(Array.isArray(refreshed) ? refreshed : []);
+      setStatuses(Array.isArray(refreshed) ? refreshed.filter(s => s.is_active !== false) : []);
+    } catch (err) {
+      addToast(err.message || 'Failed to reorder statuses', 'error');
+    }
+  };
+
+  const moveStatus = (index, direction) => {
+    const newOrder = [...allStatuses];
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= newOrder.length) return;
+    [newOrder[index], newOrder[newIndex]] = [newOrder[newIndex], newOrder[index]];
+    setAllStatuses(newOrder);
+    handleStatusReorder(newOrder.map(s => s.id));
   };
 
   if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
@@ -408,6 +511,128 @@ export default function Settings() {
               <input type="checkbox" checked={form.allowReopen} onChange={e => handleChange('allowReopen', e.target.checked)} />
               <span className="slider"></span>
             </label>
+          </div>
+        </div>
+
+        {/* Create Request Feature Toggle */}
+        <div className="settings-card">
+          <h3>Create Request</h3>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">Enable Create Request</span>
+              <span className="toggle-sublabel">Allow admins to create requests on behalf of clients</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.createRequestEnabled} onChange={e => handleChange('createRequestEnabled', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        {/* Status Management */}
+        <div className="settings-card">
+          <div
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', padding: '4px 0' }}
+            onClick={() => setShowStatusManagement(!showStatusManagement)}
+          >
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, textAlign: 'left' }}>Status Management</h3>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', transform: showStatusManagement ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+              <path d="M5 7.5L10 12.5L15 7.5" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div style={{ display: 'grid', gridTemplateRows: showStatusManagement ? '1fr' : '0fr', transition: 'grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+            <div style={{ overflow: 'hidden' }}>
+          <div style={{ marginTop: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+            <button className="btn btn-primary" onClick={() => openStatusModal()} style={{ minWidth: '0' }}>
+              + Add Status
+            </button>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>Order</th>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>Status Name</th>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>Color</th>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>Type</th>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>Active</th>
+                  <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allStatuses.map((status, index) => (
+                  <tr key={status.id} style={{ borderBottom: '1px solid #f3f4f6', opacity: status.is_active === false ? 0.6 : 1 }}>
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <button
+                          onClick={() => moveStatus(index, -1)}
+                          disabled={index === 0}
+                          title="Move up"
+                          style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '4px 10px', cursor: index === 0 ? 'not-allowed' : 'pointer', background: index === 0 ? '#f9fafb' : '#fff', fontSize: '14px', fontWeight: 600, opacity: index === 0 ? 0.4 : 1, color: '#374151' }}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          onClick={() => moveStatus(index, 1)}
+                          disabled={index === allStatuses.length - 1}
+                          title="Move down"
+                          style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '4px 10px', cursor: index === allStatuses.length - 1 ? 'not-allowed' : 'pointer', background: index === allStatuses.length - 1 ? '#f9fafb' : '#fff', fontSize: '14px', fontWeight: 600, opacity: index === allStatuses.length - 1 ? 0.4 : 1, color: '#374151' }}
+                        >
+                          ↓
+                        </button>
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: '14px' }}>{status.name}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: status.color, border: '1px solid #e5e7eb' }}></div>
+                        <span style={{ fontSize: '12px', color: '#6b7280' }}>{status.color}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      {status.is_system ? (
+                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', background: '#dbeafe', color: '#1d4ed8', fontWeight: 600 }}>System</span>
+                      ) : (
+                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>Custom</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <label className="toggle">
+                        <input
+                          type="checkbox"
+                          checked={status.is_active !== false}
+                          onChange={() => handleStatusToggle(status)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button
+                          className="btn btn-outline"
+                          onClick={() => openStatusModal(status)}
+                          style={{ minWidth: '0', padding: '6px 14px', fontSize: '13px', fontWeight: 500, color: '#4338ca', borderColor: '#a5b4fc', background: '#eef2ff' }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn btn-outline"
+                          onClick={() => handleStatusDelete(status)}
+                          disabled={status.is_system}
+                          style={{ minWidth: '0', padding: '6px 14px', fontSize: '13px', fontWeight: 500, color: status.is_system ? '#9ca3af' : '#dc2626', borderColor: status.is_system ? '#e5e7eb' : '#fca5a5', cursor: status.is_system ? 'not-allowed' : 'pointer', background: status.is_system ? '#f9fafb' : '#fef2f2' }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          </div>
+          </div>
           </div>
         </div>
 
@@ -686,6 +911,86 @@ export default function Settings() {
           </button>
         </div>
       </div>
+
+      {statusModal && (
+        <div onClick={closeStatusModal} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #e0e7ff 50%, #c7d2fe 100%)', borderRadius: '16px', padding: '28px', width: '90%', maxWidth: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', border: '1px solid #e0e7ff' }}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', color: '#1e1b4b' }}>
+              {editingStatus ? 'Edit Status' : 'Create Status'}
+            </h3>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: '#374151' }}>
+                Status Name
+              </label>
+              <input
+                type="text"
+                value={statusForm.name}
+                onChange={e => setStatusForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Enter status name"
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #c7d2fe', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box', background: 'rgba(255,255,255,0.8)' }}
+                autoFocus
+              />
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: '#374151' }}>
+                Color
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <input
+                  type="color"
+                  value={statusForm.color}
+                  onChange={e => setStatusForm(prev => ({ ...prev, color: e.target.value }))}
+                  style={{ width: '48px', height: '40px', border: '1px solid #c7d2fe', borderRadius: '8px', cursor: 'pointer', padding: '2px', background: 'rgba(255,255,255,0.8)' }}
+                />
+                <span style={{ fontSize: '14px', color: '#1f2937', fontWeight: 600 }}>{statusForm.color}</span>
+              </div>
+            </div>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: '#374151' }}>
+                Status Type
+              </label>
+              <select
+                value={statusForm.type || 'custom'}
+                onChange={e => setStatusForm(prev => ({ ...prev, type: e.target.value }))}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #c7d2fe', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box', background: 'rgba(255,255,255,0.8)' }}
+              >
+                <option value="custom">Custom</option>
+                <option value="system">System</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-outline"
+                onClick={closeStatusModal}
+                disabled={statusSaving}
+                style={{ minWidth: '0' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleStatusSave}
+                disabled={statusSaving}
+                style={{ minWidth: '0' }}
+              >
+                {statusSaving ? 'Saving...' : editingStatus ? 'Update' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {statusDeleteTarget && (
+        <div className="modal-overlay" onClick={() => setStatusDeleteTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>Are you sure you want to delete "{statusDeleteTarget.name}"?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setStatusDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={confirmStatusDelete} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

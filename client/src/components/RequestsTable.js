@@ -391,7 +391,9 @@ const RequestsTable = forwardRef(function RequestsTable({
                           )
                         ) : user?.role === 'admin' && (r.statusId === '1' || r.statusId === '2') ? (
                           <>
-                            <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>{t('common.edit')}</button>
+                            {r.status?.name === 'Assigned' && (
+                              <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>{t('common.edit')}</button>
+                            )}
                             <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>{t('common.delete')}</button>
                           </>
                         ) : isClient && r.statusId === '1' ? (

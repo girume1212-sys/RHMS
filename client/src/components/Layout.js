@@ -36,12 +36,24 @@ export default function Layout() {
   const eventSourceRef = useRef(null);
   const audioUnlocked = useRef(false);
   const notificationAudio = useRef(null);
-  const messagesSeenRef = useRef((() => {
-    let v = null;
-    try { v = localStorage.getItem('rhms_messages_seen'); } catch (e) {}
-    const n = v ? parseInt(v, 10) : NaN;
-    return Number.isNaN(n) ? Date.now() : n;
-  })());
+  const messagesSeenRef = useRef(Date.now());
+  const messagesSeenKey = user?.id ? `rhms_messages_seen_${user.id}` : 'rhms_messages_seen';
+
+  // Load per-user messages-seen timestamp (migrate legacy shared key once)
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const perUser = localStorage.getItem(`rhms_messages_seen_${user.id}`);
+      if (perUser && !Number.isNaN(parseInt(perUser, 10))) {
+        messagesSeenRef.current = parseInt(perUser, 10);
+      } else {
+        const legacy = localStorage.getItem('rhms_messages_seen');
+        const n = legacy ? parseInt(legacy, 10) : NaN;
+        messagesSeenRef.current = Number.isNaN(n) ? Date.now() : n;
+        localStorage.setItem(`rhms_messages_seen_${user.id}`, String(messagesSeenRef.current));
+      }
+    } catch (e) {}
+  }, [user?.id]);
 
   // Unlock audio on first user interaction
   useEffect(() => {
@@ -511,7 +523,10 @@ export default function Layout() {
                 setShowNotifications(false);
                 if (next) {
                   messagesSeenRef.current = Date.now();
-                  try { localStorage.setItem('rhms_messages_seen', String(messagesSeenRef.current)); } catch (e) {}
+                  try {
+                    localStorage.setItem(messagesSeenKey, String(messagesSeenRef.current));
+                    localStorage.setItem('rhms_messages_seen', String(messagesSeenRef.current));
+                  } catch (e) {}
                   setUnreadMessages(0);
                 }
               }}>
