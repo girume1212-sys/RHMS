@@ -74,8 +74,12 @@ body {
 
 .login-card {
   width: 100%;
-  max-width: 420px;
+  max-width: 460px;
+  min-height: unset;
   padding: 44px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -87,17 +91,70 @@ body {
 }
 
 .login-title {
-  font-size: 32px;
+  font-size: 38px;
   font-weight: 700;
   color: #ffffff;
   margin: 0 0 8px 0;
   letter-spacing: -0.5px;
+  text-align: center;
 }
 
 .login-subtitle {
-  font-size: 14px;
+  font-size: 15px;
   color: rgba(255, 255, 255, 0.5);
   margin: 0 0 32px 0;
+  text-align: center;
+}
+
+.signup-card {
+  min-height: unset;
+  padding: 32px 36px;
+}
+
+/* --- OTP 6-box inputs (reset password modal) --- */
+.otp-boxes {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+.otp-box {
+  width: 48px;
+  height: 56px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(0, 180, 216, 0.25);
+  border-radius: 12px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  box-sizing: border-box;
+  caret-color: #00b4d8;
+}
+.otp-box:focus {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(rgba(13, 27, 62, 0.9), rgba(13, 27, 62, 0.9)) padding-box,
+    linear-gradient(135deg, #00b4d8, #0077b6, #7209b7) border-box;
+  box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.25), 0 4px 16px rgba(0, 180, 216, 0.2);
+  transform: translateY(-2px);
+}
+.otp-box.otp-filled {
+  background:
+    linear-gradient(rgba(0, 180, 216, 0.15), rgba(114, 9, 183, 0.15)) padding-box,
+    linear-gradient(135deg, #00b4d8, #0077b6) border-box;
+  border: 1px solid rgba(0, 180, 216, 0.5);
+}
+.otp-box.input-error {
+  border-color: rgba(239, 68, 68, 0.6);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+@media (max-width: 480px) {
+  .otp-boxes { gap: 8px; }
+  .otp-box { width: 42px; height: 50px; font-size: 20px; border-radius: 10px; }
 }
 
 .login-error {
@@ -4096,8 +4153,8 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
   .sidebar { display: none; }
   .main-area { margin-left: 0 !important; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
-  .login-card { padding: 32px 24px; }
-  .login-title { font-size: 26px; }
+  .login-card { padding: 40px 28px; }
+  .login-title { font-size: 30px; text-align: center; }
   .login-orb-1 { width: 250px; height: 250px; }
   .login-orb-2 { width: 200px; height: 200px; }
   .detail-grid { grid-template-columns: 1fr; }

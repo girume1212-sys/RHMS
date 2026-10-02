@@ -64,7 +64,7 @@ export default function Signup() {
 
       <LanguageSelector variant="login" />
 
-      <div className="login-card">
+      <div className="login-card signup-card">
         <h2 className="login-title">{t('common.createAccount')}</h2>
         <p className="login-subtitle">{t('common.fillDetails')}</p>
 

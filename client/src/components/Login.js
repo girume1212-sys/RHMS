@@ -5,16 +5,7 @@ import { validateEmail } from '../utils/validation';
 import ValidationError from './ValidationError';
 import { useTranslation } from '../i18n/useTranslation';
 import LanguageSelector from './LanguageSelector';
-import { API_BASE, api } from '../api';
-
-const GOOGLE_G_ICON = `
-  <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true" focusable="false">
-    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-  </svg>
-`;
+import { api } from '../api';
 
 export default function Login() {
   const { t } = useTranslation();
@@ -34,11 +25,9 @@ export default function Login() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotError, setForgotError] = useState('');
   const [errors, setErrors] = useState({ forgotEmail: '', otp: '', newPassword: '', confirmPassword: '' });
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleBtnReady, setGoogleBtnReady] = useState(false);
-  const googleScriptRef = useRef(null);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const otpRefs = useRef([]);
 
   useEffect(() => {
     const saved = localStorage.getItem('rhms_remember');
@@ -48,86 +37,6 @@ export default function Login() {
       setRememberMe(true);
     }
   }, []);
-
-  useEffect(() => {
-    loadGoogleScript(() => {});
-    return () => {
-      if (googleScriptRef.current) {
-        document.body.removeChild(googleScriptRef.current);
-        googleScriptRef.current = null;
-      }
-    };
-  }, []);
-
-  const initGoogle = () => {
-    if (window.google && window.google.accounts) {
-      window.google.accounts.id.initialize({
-        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
-        callback: handleGoogleResponse,
-        locale: 'en',
-      });
-      setGoogleBtnReady(true);
-      return true;
-    }
-    return false;
-  };
-
-  const loadGoogleScript = (onReady) => {
-    if (initGoogle()) {
-      onReady();
-      return;
-    }
-    if (!googleScriptRef.current) {
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      googleScriptRef.current = script;
-      document.body.appendChild(script);
-    }
-    googleScriptRef.current.onload = () => {
-      if (initGoogle()) onReady();
-    };
-  };
-
-  const handleGoogleClick = () => {
-    setError('');
-    loadGoogleScript(() => {
-      try {
-        if (window.google && window.google.accounts) {
-          window.google.accounts.id.prompt();
-        }
-      } catch (err) {
-        console.error('Google sign-in error:', err);
-        setError(t('common.googleSignInFailed'));
-      }
-    });
-  };
-
-  const handleGoogleResponse = async (response) => {
-    setGoogleLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/google`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential: response.credential }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || t('common.googleSignInFailed'));
-      localStorage.setItem('rhms_token', data.token);
-      if (data.user.role === 'client') {
-        navigate('/client');
-      } else {
-        navigate('/');
-      }
-      window.location.reload();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
 
   const validateField = (name, value) => {
     let err = '';
@@ -201,6 +110,50 @@ export default function Login() {
   };
 
   // Step 2: verify the OTP and its expiration.
+  // --- OTP 6-box UI handlers (UI only, otp string state unchanged) ---
+  const handleOtpChange = (index, value) => {
+    const clean = value.replace(/\D/g, '');
+    if (!clean) {
+      setOtp((prev) => (prev.slice(0, index) + prev.slice(index + 1)).slice(0, 6));
+      setErrors(prev => ({ ...prev, otp: '' }));
+      return;
+    }
+    const char = clean.slice(-1);
+    const digits = otp.split('');
+    while (digits.length < 6) digits.push('');
+    digits[index] = char;
+    setOtp(digits.join('').slice(0, 6));
+    setErrors(prev => ({ ...prev, otp: '' }));
+    if (index < 5) otpRefs.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      if (otp[index]) {
+        setOtp((prev) => (prev.slice(0, index) + prev.slice(index + 1)).slice(0, 6));
+        setErrors(prev => ({ ...prev, otp: '' }));
+      } else if (index > 0) {
+        otpRefs.current[index - 1]?.focus();
+        setOtp((prev) => (prev.slice(0, index - 1) + prev.slice(index)).slice(0, 6));
+      }
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      otpRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    setOtp(pasted);
+    setErrors(prev => ({ ...prev, otp: '' }));
+    const focusIndex = Math.min(pasted.length, 5);
+    otpRefs.current[focusIndex]?.focus();
+  };
+
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     const code = otp.trim();
@@ -334,22 +287,6 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="login-divider">
-          <span>{t('common.or')}</span>
-        </div>
-
-        <div className="google-btn-wrapper">
-          <button
-            type="button"
-            className="google-btn"
-            onClick={handleGoogleClick}
-          >
-            <span className="google-btn-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: GOOGLE_G_ICON }} />
-            <span className="google-btn-text">{t('common.googleContinue')}</span>
-          </button>
-          {googleLoading && <div className="google-loading">{t('common.googleSignIn')}</div>}
-        </div>
-
         <p className="signup-link">
           {t('common.noAccount')} <button type="button" className="signup-btn" onClick={() => navigate('/signup')}>{t('common.signUp')}</button>
         </p>
@@ -394,18 +331,23 @@ export default function Login() {
             {forgotStep === 'otp' && (
               <form onSubmit={handleVerifyOtp}>
                 <div className="login-field">
-                  <div className="login-input-wrapper">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={otp}
-                      onChange={(e) => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setErrors(prev => ({ ...prev, otp: '' })); }}
-                      placeholder={t('common.enterOtpCode')}
-                      className={errors.otp ? 'input-error' : ''}
-                      style={{ letterSpacing: '8px', textAlign: 'center', fontWeight: 700, fontSize: '18px' }}
-                      required
-                    />
+                  <div className="otp-boxes" onPaste={handleOtpPaste}>
+                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                      <input
+                        key={i}
+                        ref={(el) => (otpRefs.current[i] = el)}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={otp[i] || ''}
+                        onChange={(e) => handleOtpChange(i, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                        onFocus={(e) => e.target.select()}
+                        className={`otp-box${errors.otp ? ' input-error' : ''}${otp[i] ? ' otp-filled' : ''}`}
+                        aria-label={`Digit ${i + 1}`}
+                        required={i === 0}
+                      />
+                    ))}
                   </div>
                   <ValidationError message={errors.otp} />
                 </div>
