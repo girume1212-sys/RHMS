@@ -995,6 +995,20 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 .stat-change.up { color: #10B981; }
 .stat-change.down { color: #EF4444; }
 
+/* Stat-card footer sparkline (visual-only overlay). Absolutely positioned so
+   card width/height, grid layout and hover behavior never change. */
+.stat-card { position: relative; overflow: hidden; }
+.stat-spark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 34px;
+  pointer-events: none;
+  opacity: 0.9;
+}
+.stat-spark > div { width: 100%; height: 100%; }
+
 /* Admin request stat card hover — same treatment as the performance stat cards:
    12px lift, accent-tinted glow, accent left border. The left border is
    transparent at rest so it never shifts the layout on hover. Confined to
