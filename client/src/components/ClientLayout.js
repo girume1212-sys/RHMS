@@ -25,6 +25,7 @@ export default function ClientLayout() {
   useTrackPrevMenu(CLIENT_MENUS);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState([]);
@@ -276,8 +277,15 @@ export default function ClientLayout() {
     };
   }, []);
 
-  const openNotifications = () => {
-    const next = !showNotifications;
+  const handleRefreshSystem = () => {
+    setShowUserMenu(false);
+    setRefreshing(true);
+    setTimeout(() => {
+      window.location.reload();
+    }, 700);
+  };
+
+  const openNotifications = () => {    const next = !showNotifications;
     setShowNotifications(next);
     if (next) {
       setPanelNotifications(unreadNotifications);
@@ -316,7 +324,7 @@ export default function ClientLayout() {
     || menuItems.find((item) => item.path !== '/client' && location.pathname.startsWith(item.path + '/'));
 
   return (
-    <div className="layout">
+    <div className={`layout role-${user?.role || 'guest'}`}>
       <aside className={`sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
         <div className="sidebar-header">
           <div className="sidebar-brand">
@@ -390,6 +398,15 @@ export default function ClientLayout() {
         <div className={`status-toast status-toast-${statusToast.type}`}>
           <span className="status-toast-icon">{statusToast.type === 'success' ? '✓' : statusToast.type === 'error' ? '✕' : 'ℹ'}</span>
           <span className="status-toast-message">{statusToast.message}</span>
+        </div>
+      )}
+
+      {refreshing && (
+        <div className="refresh-overlay">
+          <div className="refresh-overlay-card">
+            <div className="spinner"></div>
+            <p>{t('common.refreshingSystem')}</p>
+          </div>
         </div>
       )}
 
@@ -504,6 +521,7 @@ export default function ClientLayout() {
                   </div>
                   <div className="dropdown-divider"></div>
                   <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/client/profile'); }}><span className="dropdown-item-icon"><Icon name="user" /></span> {t('common.myProfile')}</button>
+                  <button className="dropdown-item" onClick={handleRefreshSystem} title={t('common.refreshTitle')}><span className="dropdown-item-icon"><Icon name="refresh" /></span> {t('common.refresh')}</button>
                   <div className="dropdown-divider"></div>
                   <button className="dropdown-item logout" onClick={() => { logout(); navigate('/login'); }}>
                     <span className="dropdown-item-icon"><Icon name="logout" /></span> {t('common.signOut')}

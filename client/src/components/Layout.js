@@ -376,7 +376,7 @@ export default function Layout() {
   };
 
   return (
-    <div className="layout">
+    <div className={`layout role-${user?.role || 'guest'}`}>
       <aside className={`sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
         <div className="sidebar-header">
           <div className="sidebar-brand">
@@ -558,7 +558,9 @@ export default function Layout() {
                   </div>
                   <div className="dropdown-divider"></div>
                   <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/profile'); }}><span className="dropdown-item-icon"><Icon name="user" /></span> {t('topbar.myProfile')}</button>
-                  <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/settings'); }}><span className="dropdown-item-icon"><Icon name="settings" /></span> {t('topbar.settingsLabel')}</button>
+                  {user?.role === 'admin' && (
+                    <button className="dropdown-item" onClick={() => { setShowUserMenu(false); navigate('/settings'); }}><span className="dropdown-item-icon"><Icon name="settings" /></span> {t('topbar.settingsLabel')}</button>
+                  )}
                   <button className="dropdown-item" onClick={handleRefreshSystem} title={t('common.refreshTitle')}><span className="dropdown-item-icon"><Icon name="refresh" /></span> {t('common.refresh')}</button>
                   <div className="dropdown-divider"></div>
                   <button className="dropdown-item logout" onClick={() => { logout(); navigate('/login'); }}>
