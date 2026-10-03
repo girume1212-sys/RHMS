@@ -1111,11 +1111,25 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlMinutes) {
     `<p>Regards,<br>RHMS Support Team</p>`;
   if (mailer.isSmtpConfigured()) {
     try {
+      // Fast-fail when the SMTP server is unreachable instead of hanging.
+      await mailer.verifySmtp();
+    } catch (err) {
+      const kind = (err && err.message) || '';
+      console.error('[PasswordResetOTP] SMTP verify failed:', kind);
+      if (kind === 'SMTP_TIMEOUT' || (err && err.code === 'ETIMEDOUT')) throw new Error('SMTP_TIMEOUT');
+      if (kind === 'SMTP_AUTH') throw new Error('SMTP_AUTH');
+      throw new Error('SMTP_UNAVAILABLE');
+    }
+    try {
       const info = await mailer.sendMail({ to: toEmail, subject, text, html });
       console.log(`[PasswordResetOTP] Email sent to ${toEmail} via SMTP (messageId: ${info.messageId || 'n/a'})`);
+      return { channel: 'smtp' };
     } catch (err) {
-      console.error('[PasswordResetOTP] SMTP send failed:', err.message);
-      throw new Error('Failed to send verification code email');
+      const kind = (err && err.message) || '';
+      console.error('[PasswordResetOTP] SMTP send failed:', kind);
+      // Propagate a classified kind so the endpoint can return a clear message.
+      if (['SMTP_TIMEOUT', 'SMTP_AUTH', 'SMTP_UNAVAILABLE'].includes(kind)) throw err;
+      throw new Error('SMTP_UNAVAILABLE');
     }
   } else {
     console.log(`[PasswordResetOTP] SMTP not configured; using in-app fallback. From: ${fromAddress} To: ${toEmail} Subject: ${subject}\n${text}`);
@@ -1204,19 +1218,29 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
       await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [user.id]);
       const otp = String(crypto.randomInt(100000, 1000000));
       const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
+      const otpId = uuidv4();
       await pool.query(
         `INSERT INTO password_reset_otps (id, user_id, otp_hash, expires_at, created_by_ip, created_at)
          VALUES ($1, $2, $3, $4, $5, NOW())`,
-        [uuidv4(), user.id, hashOtp(otp), expiresAt, ip]
+        [otpId, user.id, hashOtp(otp), expiresAt, ip]
       );
       auditLogin('password_reset_otp_requested', user.id, user.email, req);
       await logAuthActivity('password_reset_requested', user, req, { email, channel: 'otp' });
+      const sendWithTimeout = (ms) => Promise.race([
+        sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_MINUTES),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_TIMEOUT')), ms)),
+      ]);
       try {
-        await sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_MINUTES);
+        await sendWithTimeout(25000);
       } catch (err) {
-        return res.status(503).json({ error: 'Failed to send verification code. Please try again later.' });
+        // Do not leave an undeliverable OTP active; it must not count as an attempt.
+        try { await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE id = $1', [otpId]); } catch (e) { /* ignore */ }
+        const kind = (err && err.message) || '';
+        if (kind === 'SMTP_TIMEOUT') return res.status(504).json({ error: 'The email service took too long to respond. Please try again.' });
+        if (kind === 'SMTP_AUTH') return res.status(503).json({ error: 'Password reset email service is not configured correctly. Please contact the administrator.' });
+        return res.status(503).json({ error: 'Email service is temporarily unavailable. Please try again later.' });
       }
-      return res.json({ message: 'If an account exists with this email, a verification code has been sent.', resent: true });
+      return res.json({ message: 'Verification code sent to your email.', resent: true });
     }
     res.json({ message: 'If an account exists with this email, a verification code has been sent.' });
   } catch (err) {

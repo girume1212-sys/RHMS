@@ -102,6 +102,7 @@ export default function Login() {
   // Step 1: check the email against the users database and send a 6-digit OTP.
   const handleSendOtp = async (e, isResend = false) => {
     if (e) e.preventDefault();
+    if (forgotLoading) return; // prevent duplicate/hanging requests from the same click
     const targetEmail = forgotEmail;
     const err = validateField('forgotEmail', targetEmail);
     if (err) return;
