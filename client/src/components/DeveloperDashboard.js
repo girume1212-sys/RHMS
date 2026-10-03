@@ -1,5 +1,5 @@
 ﻿import React, { useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getStatusIcon } from '../utils/statusIcons';
 import { shareOfTotalPercent } from '../utils/statusShare';
 import { useAuth } from '../AuthContext';
@@ -14,6 +14,7 @@ export default function DeveloperDashboard() {
   const { t } = useTranslation();
   const shareLabel = t('common.ofTotal');
   const goBack = usePageBack('/');
+  const location = useLocation();
   const navigate = useNavigate();
   const tableRef = useRef();
   const [shared, setShared] = useState({ requests: [], statuses: [], showMyTasks: false, filter: { status: '' } });
@@ -70,7 +71,9 @@ export default function DeveloperDashboard() {
     <div className="dashboard">
 <div className="page-header">
         <div>
-          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
+          {location.pathname !== '/' && (
+            <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
+          )}
           <h1>{t('dashboard.developerWorkspace')}</h1>
           <p>{t('dashboard.developerWelcome', { name: user?.name?.split(' ')[0] })}</p>
           <h3 style={{ marginTop: '8px', marginBottom: 0 }}>{t('common.allRequests')}</h3>

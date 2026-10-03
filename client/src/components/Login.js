@@ -5,6 +5,7 @@ import { validateEmail } from '../utils/validation';
 import ValidationError from './ValidationError';
 import { useTranslation } from '../i18n/useTranslation';
 import LanguageSelector from './LanguageSelector';
+import Icon from './Icon';
 import { api } from '../api';
 
 export default function Login() {
@@ -278,8 +279,10 @@ export default function Login() {
                 type="button"
                 className="show-password-btn"
                 onClick={() => setShowPassword(!showPassword)}
+                title={showPassword ? t('common.hidePassword') : t('common.showPassword')}
+                aria-label={showPassword ? t('common.hidePassword') : t('common.showPassword')}
               >
-                {showPassword ? t('common.hide') : t('common.show')}
+                <Icon name={showPassword ? 'eyeOff' : 'eye'} size={18} />
               </button>
             </div>
           </div>

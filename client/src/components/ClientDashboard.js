@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { getStatusIcon } from '../utils/statusIcons';
 import { shareOfTotalPercent } from '../utils/statusShare';
 import { useAuth } from '../AuthContext';
@@ -28,6 +28,7 @@ export default function ClientDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const goBack = usePageBack('/client');
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
 
@@ -193,7 +194,9 @@ export default function ClientDashboard() {
       </div>
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
+          {location.pathname !== '/client' && (
+            <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
+          )}
           <h1>{t('common.myDashboard')}</h1>
           <p>{t('common.welcomeBackRequests', { name: user?.name?.split(' ')[0] })}</p>
         </div>

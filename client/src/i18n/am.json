@@ -69,6 +69,8 @@
     "or": "ወይም",
     "show": "አሳይ",
     "hide": "ደብቅ",
+    "showPassword": "የይለፍ ቃል አሳይ",
+    "hidePassword": "የይለፍ ቃል ደብቅ",
     "deleteConfirm": "{item}ን መሰረዝ ይፈልጋሉ?",
     "search": "{items}ን ይፈልጉ...",
     "noResults": "{items} አልተገኙም",

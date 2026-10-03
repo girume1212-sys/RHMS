@@ -69,6 +69,8 @@
     "or": "or",
     "show": "Show",
     "hide": "Hide",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "deleteConfirm": "Are you sure you want to delete this {item}?",
     "search": "Search {items}...",
     "noResults": "No {items} found",

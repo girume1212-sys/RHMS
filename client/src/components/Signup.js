@@ -5,6 +5,7 @@ import { validateName, validateEmail } from '../utils/validation';
 import ValidationError from './ValidationError';
 import { useTranslation } from '../i18n/useTranslation';
 import LanguageSelector from './LanguageSelector';
+import Icon from './Icon';
 
 export default function Signup() {
   const { t } = useTranslation();
@@ -134,7 +135,8 @@ export default function Signup() {
     codeRefs.current[focusIndex]?.focus();
   };
 
-  // Step 2: verify the code, then create the account with the verified code.
+  // Step 2: create the account with the code. /api/auth/signup verifies the
+  // code itself (same checks), so no separate pre-verification round-trip.
   const handleVerifyAndSignup = async (e) => {
     e.preventDefault();
     setError('');
@@ -145,18 +147,14 @@ export default function Signup() {
     setErrors(prev => ({ ...prev, code: '' }));
     setLoading(true);
     try {
-      const check = await api.post('/api/auth/verify-email-code', { email, code: code.trim() });
-      if (!check.valid) {
-        if (check.reason === 'expired') setError(t('common.otpExpired'));
-        else if (check.reason === 'locked') setError(t('common.otpLocked'));
-        else setError(t('common.invalidOtp'));
-        return;
-      }
       await api.post('/api/auth/signup', { name, email, password, companyName, code: code.trim() });
-      setSuccess(true);
-      setTimeout(() => navigate('/login'), 2000);
+      navigate('/login');
     } catch (err) {
-      setError(err.message);
+      const msg = err.message || '';
+      if (msg.includes('expired')) setError(t('common.otpExpired'));
+      else if (msg.includes('Too many incorrect attempts')) setError(t('common.otpLocked'));
+      else if (msg.includes('verification failed')) setError(t('common.invalidOtp'));
+      else setError(msg);
     } finally {
       setLoading(false);
     }
@@ -252,8 +250,10 @@ export default function Signup() {
                 type="button"
                 className="show-password-btn"
                 onClick={() => setShowPassword(!showPassword)}
+                title={showPassword ? t('common.hidePassword') : t('common.showPassword')}
+                aria-label={showPassword ? t('common.hidePassword') : t('common.showPassword')}
               >
-                {showPassword ? t('common.hide').toUpperCase() : t('common.show').toUpperCase()}
+                <Icon name={showPassword ? 'eyeOff' : 'eye'} size={18} />
               </button>
             </div>
           </div>
@@ -276,8 +276,10 @@ export default function Signup() {
                 type="button"
                 className="show-password-btn"
                 onClick={() => setShowConfirm(!showConfirm)}
+                title={showConfirm ? t('common.hidePassword') : t('common.showPassword')}
+                aria-label={showConfirm ? t('common.hidePassword') : t('common.showPassword')}
               >
-                {showConfirm ? t('common.hide').toUpperCase() : t('common.show').toUpperCase()}
+                <Icon name={showConfirm ? 'eyeOff' : 'eye'} size={18} />
               </button>
             </div>
           </div>

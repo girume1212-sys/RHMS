@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getStatusIcon } from '../utils/statusIcons';
 import { shareOfTotalPercent } from '../utils/statusShare';
 import { useAuth } from '../AuthContext';
@@ -39,6 +39,7 @@ export default function EscalationDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const goBack = usePageBack('/');
+  const location = useLocation();
 
   useEffect(() => {
     loadData();
@@ -278,7 +279,9 @@ if (statusName === 'New') {
     <div className="dashboard">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
+          {location.pathname !== '/' && (
+            <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
+          )}
           <h1>{t('dashboard.escalationDashboard')}</h1>
           <p>{t('dashboard.escalationWelcome', { name: user?.name?.split(' ')[0] })}</p>
         </div>

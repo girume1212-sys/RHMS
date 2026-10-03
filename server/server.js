@@ -831,6 +831,31 @@ app.post('/api/auth/signup', async (req, res) => {
     auditLogin('signup', id, email, req);
     await logAuthActivity('signup', { id, name, email }, req);
     notifyAdmins(`New user registered: ${name} (${email})`, { type: 'user_registered', userId: id, userName: name });
+    // Registration-success confirmation email. Sent ONLY after the account is
+    // created, using the existing Gmail SMTP service. Fire-and-forget so the
+    // signup response (and login navigation) never waits on SMTP delivery;
+    // a failure is logged and never rolls back or duplicates the registration.
+    const newUser = result.rows[0];
+    mailer.sendMail({
+      to: newUser.email,
+      subject: 'RHMS Registration Successful',
+      text:
+        `Hello ${newUser.name},\n\n` +
+        `Your registration was successful in the Request Handling Management System (RHMS).\n\n` +
+        `Your account has been successfully created.\n\n` +
+        `You can now sign in to RHMS using your registered email address and password.\n\n` +
+        `Regards,\nRHMS Support Team`,
+      html:
+        `<p>Hello ${newUser.name},</p>` +
+        `<p>Your registration was successful in the Request Handling Management System (RHMS).</p>` +
+        `<p>Your account has been successfully created.</p>` +
+        `<p>You can now sign in to RHMS using your registered email address and password.</p>` +
+        `<p>Regards,<br>RHMS Support Team</p>`,
+    }).then(() => {
+      console.log(`[Signup] Registration confirmation email sent to ${newUser.email}`);
+    }).catch((err) => {
+      console.error('[Signup] Registration confirmation email failed:', err.message);
+    });
     res.status(201).json({ message: 'Account created successfully', user: mapUser(result.rows[0]) });
   } catch (err) {
     console.error(err);
@@ -1353,16 +1378,20 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
     await pool.query('UPDATE email_verification_codes SET used_at = NOW() WHERE email = $1 AND used_at IS NULL', [email]);
     const code = String(crypto.randomInt(100000, 1000000));
     const expiresAt = new Date(Date.now() + EMAIL_VERIFY_TTL_MINUTES * 60 * 1000);
+    const codeId = uuidv4();
     await pool.query(
       `INSERT INTO email_verification_codes (id, email, code_hash, expires_at, created_by_ip, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())`,
-      [uuidv4(), email, hashOtp(code), expiresAt, ip]
+      [codeId, email, hashOtp(code), expiresAt, ip]
     );
     try {
       await sendRegistrationVerificationEmail(email, name, code);
     } catch (err) {
-      console.error('[EmailVerify] send failed:', err.message);
-      return res.status(503).json({ error: 'This email address does not exist or cannot be verified. Please use a valid email address.' });
+      console.error('[EmailVerify] SMTP send failed for', email, ':', err.message);
+      // The email was NOT delivered: remove the unsent code so a retry sends
+      // fresh instead of hitting the resend cooldown and falsely reporting success.
+      await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]);
+      return res.status(503).json({ error: 'We could not send the verification code to this email address. Please check the email address and try again.' });
     }
     return res.json({ message: 'Verification code sent.', resent: true });
   } catch (err) {

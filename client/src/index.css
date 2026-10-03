@@ -226,6 +226,9 @@ body {
   letter-spacing: 0.5px;
   font-family: inherit;
   padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .show-password-btn:hover {
