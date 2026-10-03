@@ -569,11 +569,11 @@ body.dark-mode {
   border: none;
 }
 .nav-item:hover {
-  background: linear-gradient(135deg, #2563EB 0%, #14B8A6 100%);
-  color: #FFFFFF;
-  box-shadow: 0 4px 14px rgba(20, 184, 166, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, #c7d2fe 0%, #cbd5e1 55%, #99f6e4 100%);
+  color: #1e3a5f;
+  box-shadow: 0 4px 14px rgba(30, 58, 95, 0.25), inset 0 0 0 1px rgba(148, 163, 184, 0.5);
 }
-.nav-item:hover .nav-icon { color: #FFFFFF; }
+.nav-item:hover .nav-icon { color: #1e3a5f; }
 .nav-item.active {
   background: #DBEAFE;
   color: #1E40AF;
@@ -995,26 +995,12 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 .stat-change.up { color: #10B981; }
 .stat-change.down { color: #EF4444; }
 
-/* Stat-card footer sparkline (visual-only overlay). Absolutely positioned so
-   card width/height, grid layout and hover behavior never change. */
-.stat-card { position: relative; overflow: hidden; }
-.stat-spark {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 34px;
-  pointer-events: none;
-  opacity: 0.9;
-}
-.stat-spark > div { width: 100%; height: 100%; }
-
 /* Admin request stat card hover — same treatment as the performance stat cards:
    12px lift, accent-tinted glow, accent left border. The left border is
    transparent at rest so it never shifts the layout on hover. Confined to
    devices with a real cursor so touch screens don't get a stuck highlight. */
 .stat-card {
-  border-left: 4px solid transparent;
+  border-left: 2px solid transparent;
   transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
 @media (hover: hover) and (pointer: fine) {
@@ -1031,6 +1017,12 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   .stat-card-interactive:hover,
   body.dark-mode .stat-card-interactive:hover { transform: none; }
 }
+
+/* Stat-card accent: solid color bar on the left side of each card, using the
+   card's own --stat-accent (same as the performance cards, always visible).
+   Placed after the base/hover rules so it wins at rest; hover sets the same
+   color. Cards without an accent keep the transparent border. */
+.stat-card { border-left-color: var(--stat-accent, transparent); }
 
 .stat-card-simple {
   background: white;
@@ -1128,11 +1120,11 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 }
 .esc-kpi {
   flex: 0 0 calc((100% - (var(--esc-kpi-cols) - 1) * var(--esc-kpi-gap-x)) / var(--esc-kpi-cols));
-  background: #f9fafb;
+  background: #ffffff;
   border: 1px solid #f1f5f9;
-  border-left: 4px solid var(--esc-kpi-accent, #3b82f6);
+  border-left: 2px solid var(--esc-kpi-accent, #3b82f6);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 14px 16px;
   min-width: 0;
   transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
@@ -1192,25 +1184,33 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   font-weight: 600;
   fill: #6b7280;
 }
-/* Neon gradient performance charts — visual layer only. Dark glassmorphism
-   plot background, line glow, light-on-dark ticks. Sizes, data and tooltip
-   content are unchanged. */
+/* Neon gradient performance charts — visual layer only. Light glassmorphism
+   plot background in bright mode, dark glass in dark mode. Sizes, data and
+   tooltip content are unchanged. */
 .perf-neon-chart {
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.94) 55%, rgba(15, 23, 42, 0.96) 100%);
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: linear-gradient(135deg, rgba(224, 231, 255, 0.85) 0%, rgba(226, 232, 240, 0.92) 45%, rgba(204, 251, 241, 0.7) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.45);
   border-radius: 14px;
   padding: 12px 8px 4px;
-  box-shadow: 0 12px 32px rgba(2, 6, 23, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 12px 32px rgba(2, 6, 23, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(8px);
+}
+body.dark-mode .perf-neon-chart {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.94) 55%, rgba(15, 23, 42, 0.96) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 12px 32px rgba(2, 6, 23, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .perf-neon-chart .recharts-area-curve {
   filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.65)) drop-shadow(0 0 16px rgba(167, 139, 250, 0.3));
 }
 
 .perf-neon-chart .recharts-area-area { opacity: 1; }
-.perf-neon-chart .recharts-cartesian-axis-tick text { font-weight: 600; }
-.perf-neon-chart .esc-axis-label.perf-neon-axis { fill: #94A3B8; }
-.perf-neon-chart .recharts-legend-item-text { color: #E2E8F0 !important; }
+.perf-neon-chart .recharts-cartesian-axis-tick text { font-weight: 600; fill: #475569; }
+.perf-neon-chart .esc-axis-label.perf-neon-axis { fill: #64748B; }
+.perf-neon-chart .recharts-legend-item-text { color: #475569 !important; }
+body.dark-mode .perf-neon-chart .recharts-cartesian-axis-tick text { fill: #E2E8F0; }
+body.dark-mode .perf-neon-chart .esc-axis-label.perf-neon-axis { fill: #94A3B8; }
+body.dark-mode .perf-neon-chart .recharts-legend-item-text { color: #E2E8F0 !important; }
 /* Basis note below the Developer Performance chart — abstract display style */
 .perf-basis-note {
   margin-top: 16px;
@@ -1357,8 +1357,9 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 }
 
 body.dark-mode .esc-kpi {
-  background: #0f172a;
-  border-color: #334155;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-left: 2px solid var(--esc-kpi-accent, #334155);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 body.dark-mode .esc-kpi-label { color: #cbd5e1; }
@@ -4257,9 +4258,9 @@ body.dark-sidebar .nav-item {
 }
 body.dark-mode .sidebar-nav .nav-item:hover,
 body.dark-sidebar .sidebar-nav .nav-item:hover {
-  background: linear-gradient(135deg, #2563EB 0%, #14B8A6 100%);
+  background: linear-gradient(135deg, #312e81 0%, #1e293b 55%, #134e4a 100%);
   color: #FFFFFF;
-  box-shadow: 0 4px 16px rgba(20, 184, 166, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  box-shadow: 0 4px 16px rgba(20, 184, 166, 0.45), inset 0 0 0 1px rgba(148, 163, 184, 0.4);
 }
 body.dark-mode .sidebar-nav .nav-item.active,
 body.dark-sidebar .sidebar-nav .nav-item.active {
@@ -4645,6 +4646,11 @@ body.dark-mode .settings-card {
   background: #1e293b;
   border: 1px solid #334155;
   box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+/* Dark mode resets the border shorthand above, so restore the stat-card
+   accent bar (4px + card color, same as light mode and performance cards). */
+body.dark-mode .stat-card {
+  border-left: 2px solid var(--stat-accent, #334155);
 }
 body.dark-mode .detail-card h3,
 body.dark-mode .settings-card h3 {
@@ -6629,15 +6635,15 @@ body.dark-mode .status-toast {
   box-shadow: 0 4px 12px rgba(0, 180, 216, 0.15);
 }
 .perf-toggle-btn.active {
-  background: linear-gradient(135deg, #1E3A5F, #0F172A);
-  color: white;
-  border-color: transparent;
-  box-shadow: 0 4px 16px rgba(30, 58, 95, 0.35);
+  background: linear-gradient(135deg, #e0e7ff 0%, #e2e8f0 55%, #ccfbf1 100%);
+  color: #1e3a5f;
+  border-color: rgba(148, 163, 184, 0.5);
+  box-shadow: 0 4px 16px rgba(30, 58, 95, 0.18);
 }
 .perf-toggle-btn.active:hover {
-  background: linear-gradient(135deg, #172d4b, #0a1020);
+  background: linear-gradient(135deg, #c7d2fe 0%, #cbd5e1 55%, #99f6e4 100%);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(30, 58, 95, 0.45);
+  box-shadow: 0 6px 20px rgba(30, 58, 95, 0.25);
 }
 .perf-toggle-icon {
   font-size: 18px;
@@ -6654,9 +6660,9 @@ body.dark-mode .perf-toggle-btn:hover {
   background: rgba(14, 165, 233, 0.1);
 }
 body.dark-mode .perf-toggle-btn.active {
-  background: linear-gradient(135deg, #0ea5e9, #0284c7);
+  background: linear-gradient(135deg, #312e81 0%, #1e293b 55%, #134e4a 100%);
   color: white;
-  border-color: transparent;
+  border-color: rgba(148, 163, 184, 0.4);
   box-shadow: 0 4px 16px rgba(14, 165, 233, 0.3);
 }
 

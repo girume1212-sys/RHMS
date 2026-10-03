@@ -35,7 +35,7 @@ const PERF_TONES = {
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
 
-function StatCard({ icon, value, label, share, color, onClick, shareLabel, spark, sparkId }) {
+function StatCard({ icon, value, label, share, color, onClick, shareLabel }) {
   const shareNum = parseFloat(share) || 0;
   return (
     <div className={`stat-card${onClick ? ' stat-card-interactive' : ''}`}
@@ -54,43 +54,6 @@ function StatCard({ icon, value, label, share, color, onClick, shareLabel, spark
           {'↑'} {shareNum}% {shareLabel}
         </span>
       </div>
-      {spark && spark.length > 0 && <StatSpark data={spark} color={color} id={sparkId} />}
-    </div>
-  );
-}
-
-// Compact footer sparkline for stat cards. Visual-only overlay (absolute,
-// pointer-events:none) so card dimensions never change. Data comes from the
-// already-fetched request list (real daily counts); recharts is the existing
-// chart library. No axes, tooltip, or dots — smooth monotone line, gradient
-// fill fading to transparent, subtle neon glow via drop-shadow.
-function StatSpark({ data, color, id }) {
-  const maxV = Math.max(1, ...data.map(d => d.v));
-  const gid = `stat-spark-${String(id).replace(/[^a-zA-Z0-9-_]/g, '')}`;
-  return (
-    <div className="stat-spark" aria-hidden="true">
-      <ResponsiveContainer width="100%" height={34}>
-        <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.35} />
-              <stop offset="100%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <XAxis dataKey="i" hide />
-          <YAxis hide domain={[0, maxV]} />
-          <Area
-            type="monotone"
-            dataKey="v"
-            stroke={color}
-            strokeWidth={1.5}
-            fill={`url(#${gid})`}
-            dot={false}
-            isAnimationActive={false}
-            style={{ filter: `drop-shadow(0 0 4px ${color}66)` }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
     </div>
   );
 }
@@ -188,33 +151,6 @@ export default function Dashboard() {
       .then(setEscPerfData)
       .catch(err => console.error('Escalation perf fetch error:', err));
   }, [user, rangeDays]);
-
-  // Real per-day counts for the stat-card sparklines, derived from the
-  // already-fetched request list (createdAt + status). Display-only: existing
-  // totals/calculations are untouched. Last 7 days, oldest first.
-  const sparkTrends = useMemo(() => {
-    const DAYS = 7;
-    const zeros = Array(DAYS).fill(0);
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    const total = [...zeros];
-    const byId = {};
-    (recentRequests || []).forEach(r => {
-      const created = r.createdAt ? new Date(r.createdAt) : null;
-      if (!created || isNaN(created.getTime())) return;
-      const day = new Date(created);
-      day.setHours(0, 0, 0, 0);
-      const idx = DAYS - 1 + Math.round((day.getTime() - midnight.getTime()) / 86400000);
-      if (idx < 0 || idx >= DAYS) return;
-      total[idx] += 1;
-      const sid = r.status?.id ?? r.statusId ?? r.status_id;
-      if (sid !== undefined && sid !== null) {
-        if (!byId[sid]) byId[sid] = [...zeros];
-        byId[sid][idx] += 1;
-      }
-    });
-    return { total, byId, zeros };
-  }, [recentRequests]);
 
   // Both performance cards share the same shell (.charts-row > .chart-card.wide,
   // 5 KPI cards, 400px chart). The escalation card's KPI hint row and legend
@@ -515,15 +451,11 @@ export default function Dashboard() {
         const statusCards = (stats.byStatus || []).filter(s => s.is_active !== false);
         const totalCards = statusCards.length + 1;
         const perRow = Math.ceil(totalCards / 2);
-        const sparkOf = (sid) => {
-          const arr = sid === 'total' ? sparkTrends.total : (sparkTrends.byId[sid] || sparkTrends.zeros);
-          return arr.map((v, i) => ({ i, v }));
-        };
-        const row1 = [<StatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} share={shareOfTotalPercent(stats.total, stats.total)} shareLabel={shareLabel} color="#FACC15" onClick={() => navigate('/requests')} spark={sparkOf('total')} sparkId="total" />, ...statusCards.slice(0, perRow - 1).map(s => (
-          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} spark={sparkOf(s.id)} sparkId={s.id} />
+        const row1 = [<StatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} share={shareOfTotalPercent(stats.total, stats.total)} shareLabel={shareLabel} color="#FACC15" onClick={() => navigate('/requests')} />, ...statusCards.slice(0, perRow - 1).map(s => (
+          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
         ))];
         const row2 = statusCards.slice(perRow - 1).map(s => (
-          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} spark={sparkOf(s.id)} sparkId={s.id} />
+          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
         ));
         return (
           <>
