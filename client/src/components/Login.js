@@ -241,6 +241,30 @@ export default function Login() {
       <LanguageSelector variant="login" />
 
       <div className="login-card">
+        <div className="login-avatar" aria-hidden="true">
+          <svg width="120" height="120" viewBox="0 0 96 96" fill="none" aria-hidden="true">
+            <defs>
+              <radialGradient id="loginAvatarBg" cx="0.38" cy="0.3" r="0.95">
+                <stop offset="0%" stopColor="#B9D4EA" />
+                <stop offset="45%" stopColor="#7FA9C9" />
+                <stop offset="100%" stopColor="#4E7FA3" />
+              </radialGradient>
+              <linearGradient id="loginAvatarHead" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#5AAFFF" />
+                <stop offset="100%" stopColor="#1E3A5F" />
+              </linearGradient>
+              <linearGradient id="loginAvatarBody" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#4D9BE6" />
+                <stop offset="100%" stopColor="#16283F" />
+              </linearGradient>
+            </defs>
+            <circle cx="48" cy="48" r="45" fill="url(#loginAvatarBg)" stroke="#6F9FC5" strokeWidth="2" />
+            <ellipse cx="34" cy="28" rx="16" ry="10" fill="#FFFFFF" opacity="0.16" />
+            <ellipse cx="48" cy="37" rx="14" ry="16" fill="url(#loginAvatarHead)" />
+            <path d="M22 76c0-11 10.5-18.5 26-18.5S74 65 74 76v3H22v-3z" fill="url(#loginAvatarBody)" />
+            <path d="M62 82a30 30 0 0 0 18-16" stroke="#8FB5D3" strokeWidth="2" strokeLinecap="round" opacity="0.6" />
+          </svg>
+        </div>
         <h2 className="login-title">{t('common.login')}</h2>
         <p className="login-subtitle">{t('common.welcomeSubtitle')}</p>
 

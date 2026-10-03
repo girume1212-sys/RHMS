@@ -75,7 +75,7 @@ body {
 .login-card {
   width: 100%;
   max-width: 460px;
-  min-height: unset;
+  min-height: 640px;
   padding: 44px 36px;
   display: flex;
   flex-direction: column;
@@ -97,6 +97,20 @@ body {
   margin: 0 0 8px 0;
   letter-spacing: -0.5px;
   text-align: center;
+}
+
+/* --- Login avatar icon (centered above Login title) --- */
+.login-avatar {
+  width: 120px;
+  height: 120px;
+  margin: -70px auto 16px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  box-shadow: 0 6px 18px rgba(60, 110, 150, 0.35);
 }
 
 .login-subtitle {
@@ -971,6 +985,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   grid-template-columns: repeat(4, 1fr);
   gap: 20px 16px;
   margin-bottom: 24px;
+  isolation: isolate;
 }
 .stat-card {
   background: white;
@@ -999,7 +1014,9 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 .stat-change.down { color: #EF4444; }
 
 /* Admin request stat card hover — same treatment as the performance stat cards:
-   12px lift, accent-tinted glow, accent left border. The left border is
+   small contained lift, accent-tinted glow, accent left border. The lift and
+   shadow are kept smaller than the grid/flex gaps so the hovered card never
+   visually connects with its neighbors. The left border is
    transparent at rest so it never shifts the layout on hover. Confined to
    devices with a real cursor so touch screens don't get a stuck highlight. */
 .stat-card {
@@ -1009,9 +1026,11 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 @media (hover: hover) and (pointer: fine) {
   .stat-card-interactive:hover,
   body.dark-mode .stat-card-interactive:hover {
-    transform: translateY(-12px);
-    box-shadow: 0 20px 38px var(--stat-shadow, var(--rhms-stat-hover-shadow)),
-      var(--rhms-stat-hover-contact);
+    transform: translateY(-4px);
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 6px 14px 0 var(--stat-shadow, rgba(29, 78, 216, 0.28)),
+      0 2px 6px 0 rgba(15, 23, 42, 0.10);
     border-left-color: var(--stat-accent, var(--rhms-stat-hover-border));
   }
 }
@@ -1120,6 +1139,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   justify-content: center;
   gap: var(--esc-kpi-gap-y) var(--esc-kpi-gap-x);
   margin-bottom: 20px;
+  isolation: isolate;
 }
 .esc-kpi {
   flex: 0 0 calc((100% - (var(--esc-kpi-cols) - 1) * var(--esc-kpi-gap-x)) / var(--esc-kpi-cols));
@@ -1156,16 +1176,19 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   margin-top: 2px;
 }
 
-/* Performance stat card hover — mirrors the admin request StatCard: lift 4px,
-   accent-tinted glow (0 8px 25px at the card's own color + '30'), accent left
-   border. Confined to devices with a real cursor so touch screens don't get a
-   card stuck in the highlighted state. */
+/* Performance stat card hover — mirrors the admin request StatCard: contained
+   4px lift, accent-tinted glow at the card's own color + '30', accent left
+   border. Lift and shadow stay inside the card's own gap so neighbors are
+   never touched. Confined to devices with a real cursor so touch screens
+   don't get a card stuck in the highlighted state. */
 @media (hover: hover) and (pointer: fine) {
   .esc-kpi:hover,
   body.dark-mode .esc-kpi:hover {
-    transform: translateY(-12px);
-    box-shadow: 0 20px 38px var(--esc-kpi-shadow, var(--rhms-stat-hover-shadow)),
-      var(--rhms-stat-hover-contact);
+    transform: translateY(-4px);
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 6px 14px 0 var(--esc-kpi-shadow, rgba(29, 78, 216, 0.28)),
+      0 2px 6px 0 rgba(15, 23, 42, 0.10);
     border-left-color: var(--esc-kpi-accent, var(--rhms-stat-hover-border));
   }
 }
@@ -2916,6 +2939,22 @@ body.dark-mode .info-attachment-file:hover {
   margin-bottom: 16px;
 }
 .detail-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+
+/* Full-width History section below Comments (Request Details → Comments → History).
+   Spans the whole content width; Status Flow stays inside the same History card.
+   Margin-top pulls it tight against the grid above to remove empty space. */
+.detail-history-full {
+  margin-top: 4px;
+  width: 100%;
+}
+.detail-history-full .detail-card {
+  margin-bottom: 0;
+}
+@media (max-width: 768px) {
+  .detail-history-full {
+    margin-top: 0;
+  }
+}
 .detail-description { font-size: 14px; color: #374151; line-height: 1.7; white-space: pre-wrap; }
 .detail-content { padding: 0; }
 
@@ -6450,8 +6489,37 @@ body.dark-mode .detail-card:has(.star-rating) {
   border-radius: 2px;
   margin-top: 18px;
   flex-shrink: 0;
+  position: relative;
   transform-origin: left center;
   animation: lifecycle-grow 0.5s ease backwards;
+}
+
+/* Small animated chevron travelling along each connector to show
+   forward progression. White on the gradient line, subtle and slow. */
+.lifecycle-connector::after {
+  content: '›';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-54%);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
+  animation: lifecycle-arrow 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes lifecycle-arrow {
+  0% { left: 0; opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { left: calc(100% - 8px); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lifecycle-connector::after { animation: none; display: none; }
 }
 
 @keyframes lifecycle-grow {

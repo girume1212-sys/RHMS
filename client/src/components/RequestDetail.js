@@ -1200,7 +1200,12 @@ export default function RequestDetail() {
             )}
           </div>
 
-          {/* Timeline / History */}
+          {/* Timeline / History moved to full-width section below Comments */}
+        </div>
+      </div>
+
+      {/* History (full width: Request Details → Comments → History) */}
+      <div className="detail-history-full">
           <div className="detail-card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <h3 style={{ margin: 0, border: 'none', padding: 0 }}>📜 {t('common.history')}</h3>
@@ -1296,7 +1301,6 @@ export default function RequestDetail() {
               </>
             )}
           </div>
-        </div>
       </div>
 
       {lightbox && (
