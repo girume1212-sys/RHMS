@@ -82,6 +82,7 @@ export default function Settings() {
     responseHours: 4,
     resolutionHours: 48,
     escalationEnabled: true,
+    autoEscalationMinutes: 120,
     workStart: '09:00',
     workEnd: '17:00',
     weekendDays: '',
@@ -93,6 +94,8 @@ export default function Settings() {
   };
 
   const [form, setForm] = useState({ ...initialForm });
+  // Display unit for the auto-escalation duration (stored in settings as minutes).
+  const [escUnit, setEscUnit] = useState('minutes');
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -135,7 +138,7 @@ export default function Settings() {
         ];
         const numKeys = [
           'maxFileSize', 'passwordLength', 'passwordExpiry', 'sessionTimeout',
-          'maxLoginAttempts', 'responseHours', 'resolutionHours'
+          'maxLoginAttempts', 'responseHours', 'resolutionHours', 'autoEscalationMinutes'
         ];
         for (const key of boolKeys) {
           if (typeof merged[key] === 'string') merged[key] = merged[key] === 'true';
@@ -143,6 +146,8 @@ export default function Settings() {
         for (const key of numKeys) {
           if (typeof merged[key] === 'string') merged[key] = Number(merged[key]);
         }
+        const escMinutes = Number(merged.autoEscalationMinutes) || 0;
+        if (escMinutes >= 60 && escMinutes % 60 === 0) setEscUnit('hours');
         return merged;
       });
     }).catch(err => {
@@ -165,6 +170,11 @@ export default function Settings() {
   };
 
   const handleSave = async () => {
+    const escMinutes = Number(form.autoEscalationMinutes) || 0;
+    if (!Number.isFinite(escMinutes) || escMinutes < 1) {
+      addToast(t('settings.autoEscalationInvalid'), 'error');
+      return;
+    }
     setSaving(true);
     try {
       await api.put('/api/settings', {
@@ -203,6 +213,7 @@ export default function Settings() {
         responseHours: String(form.responseHours),
         resolutionHours: String(form.resolutionHours),
         escalationEnabled: String(form.escalationEnabled),
+        autoEscalationMinutes: String(form.autoEscalationMinutes),
         workStart: form.workStart,
         workEnd: form.workEnd,
         weekendDays: form.weekendDays || '',
@@ -764,6 +775,40 @@ export default function Settings() {
               <input type="checkbox" checked={form.escalationEnabled} onChange={e => handleChange('escalationEnabled', e.target.checked)} />
               <span className="slider"></span>
             </label>
+          </div>
+        </div>
+
+        {/* Auto Escalation */}
+        <div className="settings-card">
+          <h3>{t('settings.autoEscalation')}</h3>
+          <div className="toggle-row-settings">
+            <div>
+              <span className="toggle-label">{t('settings.autoEscalationToggle')}</span>
+              <span className="toggle-sublabel">{t('settings.autoEscalationDesc')}</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.escalationEnabled} onChange={e => handleChange('escalationEnabled', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+          <div className="settings-field">
+            <label>{t('settings.autoEscalationTime')}</label>
+            <div className="input-with-unit">
+              <input
+                type="number"
+                value={escUnit === 'hours' ? Math.round((Number(form.autoEscalationMinutes) || 0) / 60) : (form.autoEscalationMinutes || '')}
+                onChange={e => {
+                  const v = parseInt(e.target.value) || 0;
+                  handleChange('autoEscalationMinutes', escUnit === 'hours' ? v * 60 : v);
+                }}
+                min="1"
+              />
+              <select value={escUnit} onChange={e => setEscUnit(e.target.value)} className="input-unit" style={{ border: 'none', background: 'transparent' }}>
+                <option value="minutes">{t('settings.minutes')}</option>
+                <option value="hours">{t('settings.hours')}</option>
+              </select>
+            </div>
+            <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.autoEscalationTimeDesc')}</span>
           </div>
         </div>
 

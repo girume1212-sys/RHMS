@@ -63,6 +63,18 @@ export default function RequestDetail() {
     return true;
   })();
 
+  // A Resolved request Closed/Rejected by the Client is read-only for staff:
+  // Admin, Developer and Escalation Team can view everything (details,
+  // comments, history, Status Flow) but must not change the status.
+  const closedByClient = (() => {
+    if (!request || (request.statusId !== '6' && request.statusId !== '8')) return false;
+    const closers = (activityLog || [])
+      .filter(a => a.type === 'status_update' && /to (Closed|Rejected)\s*$/i.test(a.message || ''))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return closers.length > 0 && closers[0].user?.role === 'client';
+  })();
+  const staffReadOnly = !isClient && closedByClient;
+
   const unreadComments = (request?.comments || []).filter(c =>
     c.user?.id !== user?.id &&
     lastSeenRef.current !== null &&
@@ -208,6 +220,7 @@ export default function RequestDetail() {
   };
 
   const handleStatusChange = async (statusId) => {
+    if (staffReadOnly) return;
     if (isClient && (statusId === '6' || statusId === '8') && request.statusId !== '5') {
       addToast(t('common.closeRejectResolvedOnly'), 'error');
       return;
@@ -224,6 +237,7 @@ export default function RequestDetail() {
   };
 
   const handleClaim = async () => {
+    if (staffReadOnly) return;
     setClaiming(true);
     try {
       await api.put(`/api/requests/${id}/claim`);
@@ -239,6 +253,7 @@ export default function RequestDetail() {
   };
 
   const handleAssign = async (assignedTo) => {
+    if (staffReadOnly) return;
     const prev = { assignedTo: request.assignedTo, statusId: request.statusId, status: request.status, assignee: request.assignee };
     const optAssignee = assignedTo ? users.find(u => u.id === assignedTo) : null;
     const optStatus = !prev.assignedTo && assignedTo && prev.statusId === '1' ? statuses.find(s => s.id === '2') : prev.status;
@@ -367,6 +382,22 @@ export default function RequestDetail() {
   const getStatusColor = (status) => {
     const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Rejected: '#DC2626' };
     return colors[status?.name] || '#6B7280';
+  };
+
+  // Abstract per-status animation for the Status Flow dots (visual only).
+  // Custom statuses are matched by meaning-keywords; unknown names fall back
+  // to a subtle neutral animation. Colors always come from getStatusColor.
+  const getStatusAnim = (name) => {
+    const n = String(name || '').toLowerCase();
+    if (/escalat|urgent|critical|alert|alarm/.test(n)) return 'anim-escalated';
+    if (/wait|pending|client|hold|paused/.test(n)) return 'anim-waiting';
+    if (/resolv|fix|done|success|verif|approv/.test(n)) return 'anim-resolved';
+    if (/clos|complet|lock|archiv|finish|final/.test(n)) return 'anim-closed';
+    if (/reject|cancel|declin|denied/.test(n)) return 'anim-rejected';
+    if (/progress|work|start|develop|handl|review|test/.test(n)) return 'anim-progress';
+    if (/assign|claim|owner|agent|triage|pick/.test(n)) return 'anim-assigned';
+    if (/new|open|creat|receiv|submit|report/.test(n)) return 'anim-new';
+    return 'anim-neutral';
   };
 
   const getPriorityColor = (priority) => {
@@ -1115,8 +1146,8 @@ export default function RequestDetail() {
             </div>
           </div>
 
-          {/* Actions (Admin/Support only) */}
-          {!isClient && (
+          {/* Actions (Admin/Support only) — hidden for client-closed requests */}
+          {!isClient && !staffReadOnly && (
             <div className="detail-card">
               <h3>{t('common.actions')}</h3>
               <div className="action-list">
@@ -1234,8 +1265,9 @@ export default function RequestDetail() {
                       return flowSteps.map((step, idx) => (
                         <React.Fragment key={idx}>
                           <div className={`lifecycle-step visited ${step.current ? 'current' : ''} ${step.isPast ? 'past' : ''}`}>
-                            <div className="lifecycle-dot" style={{
+                            <div className={`lifecycle-dot ${step.current ? getStatusAnim(step.name) : 'anim-none'}`} style={{
                               background: step.color,
+                              '--step-color': step.color,
                               boxShadow: step.current ? `0 0 0 4px ${step.color}30, 0 0 12px ${step.color}50` : 'none',
                               animationDelay: `${idx * 0.15}s`
                             }}>
@@ -1260,7 +1292,8 @@ export default function RequestDetail() {
                           {idx < flowSteps.length - 1 && (
                             <div className="lifecycle-connector" style={{
                               background: `linear-gradient(90deg, ${step.color}, ${flowSteps[idx + 1].color})`,
-                              animationDelay: `${(idx + 1) * 0.15}s`
+                              animationDelay: `${(idx + 1) * 0.15}s`,
+                              '--arrow-delay': `${idx * 0.45}s`
                             }}></div>
                           )}
                         </React.Fragment>

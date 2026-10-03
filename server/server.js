@@ -2341,6 +2341,20 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
   }
 });
 
+// True when the request's current Closed/Rejected state was set by a Client
+// (derived from the activity log, no schema change). Used to make
+// client-closed requests read-only for Admin/Developer/Escalation staff.
+async function closedByClient(requestId) {
+  const closer = await pool.query(
+    `SELECT u.role FROM activity_log a JOIN users u ON u.id = a.user_id
+     WHERE a.request_id = $1 AND a.type = 'status_update'
+       AND (a.message LIKE '%to Closed' OR a.message LIKE '%to Rejected')
+     ORDER BY a.created_at DESC LIMIT 1`,
+    [requestId]
+  );
+  return closer.rows.length > 0 && closer.rows[0].role === 'client';
+}
+
 app.put('/api/requests/:id', authMiddleware, async (req, res) => {
   try {
     const { subject, description, categoryId, priorityId, statusId, assignedTo, assignedGroup, attachments } = req.body;
@@ -2348,6 +2362,14 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
 
     const existing = await pool.query('SELECT * FROM requests WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+
+    // A Resolved request Closed/Rejected by the Client is read-only for staff:
+    // Admin, Developer and Escalation Team can view it but must not change it.
+    if ((statusId || assignedTo !== undefined || assignedGroup !== undefined) && req.user.role !== 'client' &&
+        (existing.rows[0].status_id === '6' || existing.rows[0].status_id === '8') &&
+        await closedByClient(req.params.id)) {
+      return res.status(403).json({ error: 'This request was closed by the client and is read-only.' });
+    }
 
     // Check group-based access for non-admin users
     if (req.user.role !== 'admin') {
@@ -2518,6 +2540,12 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
 
     if (req.user.role === 'client') {
       return res.status(403).json({ error: 'Clients cannot claim requests' });
+    }
+
+    // A request Closed/Rejected by the Client cannot be claimed by staff.
+    if ((existing.rows[0].status_id === '6' || existing.rows[0].status_id === '8') &&
+        await closedByClient(requestId)) {
+      return res.status(403).json({ error: 'This request was closed by the client and is read-only.' });
     }
 
     if (req.user.role === 'support') {
@@ -3874,6 +3902,7 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
       { key: 'responseHours', value: '4' },
       { key: 'resolutionHours', value: '48' },
       { key: 'escalationEnabled', value: 'true' },
+      { key: 'autoEscalationMinutes', value: '120' },
       { key: 'workStart', value: '09:00' },
       { key: 'workEnd', value: '17:00' },
       { key: 'weekendDays', value: JSON.stringify(['saturday', 'sunday']) },
@@ -3992,6 +4021,7 @@ app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (
       { key: 'responseHours', value: '4' },
       { key: 'resolutionHours', value: '48' },
       { key: 'escalationEnabled', value: 'true' },
+      { key: 'autoEscalationMinutes', value: '120' },
       { key: 'workStart', value: '09:00' },
       { key: 'workEnd', value: '17:00' },
       { key: 'weekendDays', value: JSON.stringify(['saturday', 'sunday']) },
@@ -4770,7 +4800,87 @@ const server = app.listen(PORT, () => {
   if (!mailer.isSmtpConfigured()) {
     console.warn('[PasswordResetOTP] WARNING: SMTP is not configured (see server/.env.example). OTP emails will use the in-app fallback until SMTP_HOST/SMTP_USER/SMTP_PASS are set.');
   }
+  // First auto-escalation sweep shortly after startup, then every minute.
+  setTimeout(() => runAutoEscalation().catch(err => console.error('[AutoEscalation] sweep failed:', err.message)), 15000);
+  setInterval(() => runAutoEscalation().catch(err => console.error('[AutoEscalation] sweep failed:', err.message)), 60 * 1000);
 });
+
+// ---- Auto Escalation ----
+// When enabled, requests assigned to a Developer that are not resolved within
+// the configured time are moved to Escalated (same end state as manual
+// escalation: status change only, assignment preserved for the Escalation
+// Team workflow). DB-driven (assignment timestamp from the activity log, with
+// updated_at fallback) so the timer survives refreshes, logins and restarts.
+async function runAutoEscalation() {
+  const settingsRows = await pool.query(
+    "SELECT key, value FROM system_settings WHERE key IN ('escalationEnabled', 'autoEscalationMinutes')"
+  );
+  const settings = {};
+  for (const row of settingsRows.rows) settings[row.key] = row.value;
+  if (settings.escalationEnabled !== 'true') return;
+  const minutes = parseInt(settings.autoEscalationMinutes, 10);
+  if (!Number.isFinite(minutes) || minutes < 1) return;
+
+  const statuses = await pool.query('SELECT id, name FROM statuses');
+  const byName = {};
+  for (const s of statuses.rows) byName[String(s.name).toLowerCase()] = s.id;
+  const escalatedId = byName['escalated'];
+  if (!escalatedId) return;
+  const terminalIds = ['resolved', 'closed', 'rejected', 'escalated']
+    .map(n => byName[n])
+    .filter(Boolean);
+
+  const candidates = await pool.query(
+    `SELECT r.id, r.status_id, r.assigned_to, r.client_id, r.updated_at, s.name AS status_name, u.name AS assignee_name
+     FROM requests r
+     JOIN users u ON u.id = r.assigned_to AND u.role = 'developer'
+     JOIN statuses s ON s.id = r.status_id
+     WHERE r.assigned_to IS NOT NULL AND r.status_id <> ALL($1)`,
+    [terminalIds.length > 0 ? terminalIds : ['__none__']]
+  );
+  if (candidates.rows.length === 0) return;
+  const now = Date.now();
+
+  for (const req of candidates.rows) {
+    try {
+      const assignedRows = await pool.query(
+        `SELECT created_at FROM activity_log WHERE request_id = $1 AND type = 'assigned'
+         ORDER BY created_at DESC LIMIT 1`,
+        [req.id]
+      );
+      const assignedAt = assignedRows.rows.length > 0
+        ? new Date(assignedRows.rows[0].created_at).getTime()
+        : new Date(req.updated_at).getTime();
+      if (!Number.isFinite(assignedAt) || now - assignedAt < minutes * 60 * 1000) continue;
+
+      // Re-check status inside the loop so a concurrent resolve wins.
+      const fresh = await pool.query('SELECT status_id FROM requests WHERE id = $1', [req.id]);
+      if (fresh.rows.length === 0 || fresh.rows[0].status_id !== req.status_id) continue;
+      if (terminalIds.includes(fresh.rows[0].status_id)) continue;
+
+      const timestamp = new Date().toISOString();
+      await pool.query('UPDATE requests SET status_id = $1, updated_at = $2 WHERE id = $3', [escalatedId, timestamp, req.id]);
+      await pool.query(
+        'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+        [uuidv4(), 'status_update', req.id, null, `Changed status from ${req.status_name} to Escalated`, timestamp]
+      );
+      await pool.query(
+        'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+        [uuidv4(), 'escalated', req.id, null, `This request was automatically escalated because the Developer did not complete it within the configured time (${minutes} minutes).`, timestamp]
+      );
+      notifyAdmins(`Request #${req.id} was automatically escalated (${req.assignee_name || 'developer'} exceeded ${minutes} minutes)`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
+      if (req.assigned_to) {
+        notifyUser(req.assigned_to, `Request #${req.id} was automatically escalated because it was not completed within ${minutes} minutes`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
+      }
+      if (req.client_id) {
+        notifyUser(req.client_id, `Your request #${req.id} status changed to Escalated`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
+      }
+      console.log(`[AutoEscalation] Request #${req.id} escalated after ${minutes} minutes assigned to developer.`);
+    } catch (err) {
+      console.error(`[AutoEscalation] Failed for request #${req.id}:`, err.message);
+    }
+  }
+}
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {

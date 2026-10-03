@@ -741,6 +741,72 @@ body.dark-mode {
 .dropdown-panel-item.notification-new { background: #fef2f2; border-left: 3px solid #ef4444; }
 body.dark-mode .dropdown-panel-item.notification-new { background: #3b1a1a; border-left-color: #ef4444; }
 .dropdown-panel-item:last-child { border-bottom: none; }
+/* Per-item read/unread state — small professional controls, design unchanged */
+.dropdown-panel-item.notif-unread { background: #eff6ff; }
+body.dark-mode .dropdown-panel-item.notif-unread { background: #1e3a5f; }
+.dropdown-panel-read {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.notif-unread-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #EF4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
+}
+.notif-read-btn {
+  font-size: 11px;
+  font-weight: 600;
+  color: #3B82F6;
+  background: transparent;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.notif-read-btn:hover { background: #dbeafe; }
+body.dark-mode .notif-read-btn { border-color: #334155; }
+body.dark-mode .notif-read-btn:hover { background: #334155; }
+.notif-read-state {
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+/* Read/Unread filter tabs inside notification/message panels */
+.notif-filter-tabs {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+body.dark-mode .notif-filter-tabs { border-color: #334155; }
+.notif-filter-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  background: #f3f4f6;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.notif-filter-btn.left { margin-right: auto; }
+.notif-filter-btn.right { margin-left: auto; }
+.notif-filter-btn:hover { background: #e5e7eb; }
+.notif-filter-btn.active { background: #dbeafe; color: #2563EB; border-color: #bfdbfe; }
+body.dark-mode .notif-filter-btn { background: #334155; color: #cbd5e1; }
+body.dark-mode .notif-filter-btn.active { background: #1e3a5f; color: #93c5fd; border-color: #3b82f6; }
 .dropdown-panel-icon {
   width: 32px;
   height: 32px;
@@ -6433,6 +6499,101 @@ body.dark-mode .detail-card:has(.star-rating) {
   100% { transform: scale(1.5); opacity: 0; }
 }
 
+/* Per-status abstract animations for the Status Flow dots. Each animation
+   uses the step's own color (--step-color, set inline) so custom statuses
+   stay consistent. All effects are absolutely-positioned rings/dots outside
+   the 40px dot, so size, alignment and layout never change. */
+.lifecycle-dot[class*="anim-"]::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+/* Only the current/last status is animated; past steps stay static. */
+.lifecycle-dot.anim-none::after {
+  display: none;
+}
+/* New — subtle notification pulse (soft expanding ring) */
+.lifecycle-dot.anim-new::after {
+  inset: 0;
+  border: 2px solid var(--step-color, #3B82F6);
+  animation: lifecycle-anim-new 2.4s ease-out infinite;
+}
+@keyframes lifecycle-anim-new {
+  0% { transform: scale(1); opacity: 0.7; }
+  70% { transform: scale(1.45); opacity: 0; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+/* Assigned — user handoff (small satellite dot orbiting the step) */
+.lifecycle-dot.anim-assigned::after {
+  inset: -5px;
+  background: radial-gradient(circle 3px at 50% 1px, var(--step-color, #8B5CF6) 98%, transparent 100%);
+  animation: lifecycle-spin 3s linear infinite;
+}
+/* In Progress — active progress (rotating arc) */
+.lifecycle-dot.anim-progress::after {
+  inset: -4px;
+  border: 2px solid transparent;
+  border-top-color: var(--step-color, #F59E0B);
+  animation: lifecycle-spin 1.6s linear infinite;
+}
+/* Waiting for Client — rotating dashed loading ring */
+.lifecycle-dot.anim-waiting::after {
+  inset: -4px;
+  border: 2px dashed var(--step-color, #F97316);
+  opacity: 0.75;
+  animation: lifecycle-spin 4s linear infinite;
+}
+/* Resolved — success glow (soft breathing halo) */
+.lifecycle-dot.anim-resolved::after {
+  inset: 0;
+  border: 2px solid var(--step-color, #10B981);
+  animation: lifecycle-anim-resolved 2.6s ease-in-out infinite;
+}
+@keyframes lifecycle-anim-resolved {
+  0%, 100% { transform: scale(1); opacity: 0.55; box-shadow: 0 0 0 0 transparent; }
+  50% { transform: scale(1.12); opacity: 0.9; box-shadow: 0 0 10px 0 var(--step-color, #10B981); }
+}
+/* Closed — completed lock (steady double ring, barely breathing) */
+.lifecycle-dot.anim-closed::after {
+  inset: -4px;
+  border: 2px solid var(--step-color, #6B7280);
+  opacity: 0.35;
+  animation: lifecycle-anim-closed 5s ease-in-out infinite;
+}
+@keyframes lifecycle-anim-closed {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.04); opacity: 0.45; }
+}
+/* Escalated — alert (quick double-blink expanding ring) */
+.lifecycle-dot.anim-escalated::after {
+  inset: 0;
+  border: 2px solid var(--step-color, #EF4444);
+  animation: lifecycle-anim-escalated 1.2s ease-out infinite;
+}
+@keyframes lifecycle-anim-escalated {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+/* Rejected / neutral / custom fallback — subtle neutral breathe */
+.lifecycle-dot.anim-rejected::after,
+.lifecycle-dot.anim-neutral::after {
+  inset: -3px;
+  border: 2px solid var(--step-color, #6B7280);
+  opacity: 0.3;
+  animation: lifecycle-anim-neutral 3s ease-in-out infinite;
+}
+@keyframes lifecycle-anim-neutral {
+  0%, 100% { transform: scale(1); opacity: 0.25; }
+  50% { transform: scale(1.08); opacity: 0.45; }
+}
+@keyframes lifecycle-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lifecycle-dot[class*="anim-"]::after { animation: none; display: none; }
+}
+
 .lifecycle-label {
   font-size: 13px;
   margin-top: 8px;
@@ -6494,28 +6655,35 @@ body.dark-mode .detail-card:has(.star-rating) {
   animation: lifecycle-grow 0.5s ease backwards;
 }
 
-/* Small animated chevron travelling along each connector to show
-   forward progression. White on the gradient line, subtle and slow. */
+/* Small arrow travelling along each connector — highly visible: larger
+   bright chevron with glow, gliding from one status to the next. */
+.lifecycle-connector {
+  overflow: visible;
+}
+.lifecycle-connector::before {
+  display: none;
+}
 .lifecycle-connector::after {
   content: '›';
   position: absolute;
   top: 50%;
   left: 0;
   transform: translateY(-54%);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.95);
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
-  animation: lifecycle-arrow 1.8s ease-in-out infinite;
+  color: #ffffff;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.45), 0 0 8px rgba(255, 255, 255, 0.6);
+  animation: lifecycle-arrow-move 1.6s ease-in-out infinite;
+  animation-delay: var(--arrow-delay, 0s);
   pointer-events: none;
 }
 
-@keyframes lifecycle-arrow {
-  0% { left: 0; opacity: 0; }
-  20% { opacity: 1; }
-  80% { opacity: 1; }
-  100% { left: calc(100% - 8px); opacity: 0; }
+@keyframes lifecycle-arrow-move {
+  0% { left: -2px; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { left: calc(100% - 10px); opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

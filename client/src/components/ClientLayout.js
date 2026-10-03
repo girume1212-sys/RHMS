@@ -28,25 +28,14 @@ export default function ClientLayout() {
   const [refreshing, setRefreshing] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState([]);
-  const [panelNotifications, setPanelNotifications] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [unreadMessages, setUnreadMessages] = useState(0);
+  // All persisted notification rows for this user (read + unread).
+  // Badges and panels derive from real DB is_read state; opening a panel
+  // never marks anything read — only clicking an item (or its Read control).
+  const [allNotifications, setAllNotifications] = useState([]);
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
   const eventSourceRef = useRef(null);
   const dismissedIds = useRef(new Set());
-  const showNotificationsRef = useRef(false);
   const audioUnlocked = useRef(false);
-  const messagesSeenRef = useRef(null);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    api.get('/api/comments/read-status').then(data => {
-      messagesSeenRef.current = data.last_read_at ? new Date(data.last_read_at).getTime() : Date.now();
-    }).catch(() => {
-      messagesSeenRef.current = Date.now();
-    });
-  }, [user?.id]);
 
   // Unlock audio on first user interaction
   useEffect(() => {
@@ -90,9 +79,41 @@ export default function ClientLayout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    showNotificationsRef.current = showNotifications;
-  }, [showNotifications]);
+  // Map persisted rows to panel items, preserving DB read state.
+  const mapNotifRows = useCallback((rows) => (rows || []).map(n => ({
+    id: n.id,
+    type: n.type,
+    message: n.message,
+    requestId: n.request_id,
+    timestamp: n.created_at,
+    userName: n.user_name || null,
+    is_read: !!n.is_read
+  })), []);
+
+  const refreshNotifications = useCallback(() => {
+    api.get('/api/notifications').then(data => {
+      setAllNotifications(mapNotifRows(data.notifications));
+    }).catch(() => {});
+  }, [mapNotifRows]);
+
+  // Mark exactly one item read (persisted). Badge derives from state, so it
+  // decreases by exactly 1 per item.
+  const markNotificationRead = useCallback((id) => {
+    if (!id) return;
+    setAllNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    api.put(`/api/notifications/${id}/read`).catch(() => refreshNotifications());
+  }, [refreshNotifications]);
+
+  // Bell panel = non-comment notifications; message panel = comment ones.
+  const bellNotes = allNotifications.filter(n => n.type !== 'comment');
+  const commentNotes = allNotifications.filter(n => n.type === 'comment');
+  const unreadBell = bellNotes.filter(n => !n.is_read).length;
+  const unreadMsgs = commentNotes.filter(n => !n.is_read).length;
+  // Panel filters: show only read or only unread items per panel.
+  const [notifFilter, setNotifFilter] = useState('unread');
+  const [msgFilter, setMsgFilter] = useState('unread');
+  const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.is_read);
+  const shownMsgs = commentNotes.filter(n => msgFilter === 'read' ? n.is_read : !n.is_read);
 
   const getNotificationIcon = useCallback((type) => {
     const icons = { status_change: 'refresh', assigned: 'user', comment: 'comment', request_created: 'requests', request_deleted: 'delete', default: 'bell' };
@@ -113,23 +134,11 @@ export default function ClientLayout() {
     setBubbleNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
 
-  // Seed the unread badge from persisted notifications so it survives page reloads
+  // Seed badges + panels from persisted DB read state (survives reloads).
   useEffect(() => {
     if (!user) return;
-    api.get('/api/notifications').then(data => {
-      const unreadList = (data.notifications || [])
-        .filter(n => !n.is_read)
-        .slice(0, 20)
-        .map(n => ({
-          id: n.id,
-          type: n.type,
-          message: n.message,
-          requestId: n.request_id,
-          timestamp: n.created_at
-        }));
-      setUnreadNotifications(unreadList);
-    }).catch(() => {});
-  }, [user]);
+    refreshNotifications();
+  }, [user, refreshNotifications]);
 
   // SSE real-time notifications
   useEffect(() => {
@@ -179,11 +188,10 @@ export default function ClientLayout() {
 
           const isOwnAction = notification.userId && String(notification.userId) === String(user.id);
 
+          // Rows are already persisted server-side per user: refetch real
+          // rows (with DB ids) so badges stay exact and read state is kept.
           if (!isOwnAction) {
-            setUnreadNotifications(prev => [notification, ...prev].slice(0, 20));
-            if (showNotificationsRef.current) {
-              setPanelNotifications(prev => [notification, ...prev].slice(0, 20));
-            }
+            refreshNotifications();
           }
 
           if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
@@ -231,33 +239,14 @@ export default function ClientLayout() {
     };
   }, [user, playNotificationSound]);
 
-  // Load messages (comments from support on the client's requests) with unread tracking
+  // Load messages panel from persisted comment notifications (per-item
+  // read state). Polling refetches real DB rows — never auto-marks read.
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
-    const loadMessages = () => {
-      api.get('/api/requests').then(data => {
-        const msgs = [];
-        data.forEach(r => {
-          if (r.comments) {
-            r.comments.forEach(c => {
-              if (c.userId !== user.id) {
-                msgs.push({ ...c, requestId: r.id, requestSubject: r.subject });
-              }
-            });
-          }
-        });
-        msgs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        if (cancelled) return;
-        setMessages(msgs);
-        const seen = messagesSeenRef.current;
-        setUnreadMessages(msgs.filter(m => new Date(m.createdAt).getTime() > seen).length);
-      }).catch(() => {});
-    };
-    loadMessages();
-    const timer = setInterval(loadMessages, 5000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [user]);
+    refreshNotifications();
+    const timer = setInterval(refreshNotifications, 15000);
+    return () => clearInterval(timer);
+  }, [user, refreshNotifications]);
 
   // Status toast listener
   const [statusToast, setStatusToast] = useState(null);
@@ -285,20 +274,25 @@ export default function ClientLayout() {
     }, 700);
   };
 
+  // Opening a panel never marks anything read — only item clicks do.
   const openNotifications = () => {    const next = !showNotifications;
     setShowNotifications(next);
     if (next) {
-      setPanelNotifications(unreadNotifications);
-      setUnreadNotifications([]);
-      api.put('/api/notifications/read-all').catch(() => {});
+      setShowMessages(false);
     }
   };
 
+  const openMessages = () => {
+    const next = !showMessages;
+    setShowMessages(next);
+    setShowNotifications(false);
+  };
+
+  // Explicit "mark all read" control (user-initiated, persisted).
   const markAllRead = useCallback(() => {
-    setUnreadNotifications([]);
-    setPanelNotifications([]);
-    api.put('/api/notifications/read-all').catch(() => {});
-  }, []);
+    setAllNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    api.put('/api/notifications/read-all').catch(() => refreshNotifications());
+  }, [refreshNotifications]);
 
   const getNotifTitle = (type) => {
     const titles = {
@@ -425,9 +419,9 @@ export default function ClientLayout() {
             <div className="notification-container" style={{ position: 'relative' }}>
               <button className="theme-toggle" onClick={openNotifications} title={t('common.notifications')} style={{ position: 'relative' }}>
                 <span className="toggle-icon"><Icon name="bell" /></span>
-                {unreadNotifications.length > 0 && (
+                {unreadBell > 0 && (
                   <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                    {unreadNotifications.length > 99 ? '99+' : unreadNotifications.length}
+                    {unreadBell > 99 ? '99+' : unreadBell}
                   </span>
                 )}
               </button>
@@ -435,14 +429,18 @@ export default function ClientLayout() {
                 <div className="dropdown-panel notification-panel" style={{ width: 420, border: darkMode ? '1px solid #334155' : '1px solid #e5e7eb', background: darkMode ? '#1e293b' : '#fff' }}>
                   <div className="dropdown-panel-header" style={{ color: darkMode ? '#e2e8f0' : 'inherit' }}>
                     <span>{t('common.notifications')}</span>
-                    {panelNotifications.length > 0 && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>{t('common.markAllRead')}</span>}
+                    {bellNotes.some(n => !n.is_read) && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>{t('common.markAllRead')}</span>}
                   </div>
-                  {panelNotifications.length === 0 ? (
+                  <div className="notif-filter-tabs">
+                    <button className={`notif-filter-btn left${notifFilter === 'unread' ? ' active' : ''}`} onClick={() => setNotifFilter('unread')}>{t('common.unread')} ({unreadBell})</button>
+                    <button className={`notif-filter-btn right${notifFilter === 'read' ? ' active' : ''}`} onClick={() => setNotifFilter('read')}>{t('common.read')} ({bellNotes.filter(n => n.is_read).length})</button>
+                  </div>
+                  {shownBell.length === 0 ? (
                     <div className="dropdown-panel-empty">{t('common.noNotifications')}</div>
                   ) : (
                     <div className="dropdown-panel-list">
-                      {panelNotifications.map((n) => (
-                        <div key={n.id} className="dropdown-panel-item" onClick={() => { setShowNotifications(false); if (n.requestId) navigate(`/client/requests/${n.requestId}`); }}>
+                      {shownBell.map((n) => (
+                        <div key={n.id} className={`dropdown-panel-item${n.is_read ? '' : ' notif-unread'}`} onClick={() => { markNotificationRead(n.id); setShowNotifications(false); if (n.requestId) navigate(`/client/requests/${n.requestId}`); }}>
                           <div className="dropdown-panel-icon"><Icon name={getNotificationIcon(n.type)} size={16} /></div>
                           <div className="dropdown-panel-content">
                             <div className="dropdown-panel-title">
@@ -455,6 +453,14 @@ export default function ClientLayout() {
                               <span className="dropdown-panel-time">{n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}</span>
                             </div>
                           </div>
+                          <div className="dropdown-panel-read">
+                            {!n.is_read && <span className="notif-unread-dot" title={t('common.unread')} />}
+                            {!n.is_read ? (
+                              <button className="notif-read-btn" onClick={(e) => { e.stopPropagation(); markNotificationRead(n.id); }}>{t('common.markRead')}</button>
+                            ) : (
+                              <span className="notif-read-state">{t('common.read')}</span>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -463,20 +469,11 @@ export default function ClientLayout() {
               )}
             </div>
             <div className="notification-container" style={{ position: 'relative' }}>
-              <button className="theme-toggle" onClick={() => {
-                const next = !showMessages;
-                setShowMessages(next);
-                setShowNotifications(false);
-                if (next) {
-                  messagesSeenRef.current = Date.now();
-                  api.put('/api/comments/read').catch(() => {});
-                  setUnreadMessages(0);
-                }
-              }} title={t('topbar.messages')} style={{ position: 'relative' }}>
+              <button className="theme-toggle" onClick={openMessages} title={t('topbar.messages')} style={{ position: 'relative' }}>
                 <span className="toggle-icon"><Icon name="mail" /></span>
-                {unreadMessages > 0 && (
+                {unreadMsgs > 0 && (
                   <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                    {unreadMessages > 99 ? '99+' : unreadMessages}
+                    {unreadMsgs > 99 ? '99+' : unreadMsgs}
                   </span>
                 )}
               </button>
@@ -484,18 +481,31 @@ export default function ClientLayout() {
                 <div className="dropdown-panel notification-panel" style={{ width: 420, border: darkMode ? '1px solid #334155' : '1px solid #e5e7eb', background: darkMode ? '#1e293b' : '#fff' }}>
                   <div className="dropdown-panel-header" style={{ color: darkMode ? '#e2e8f0' : 'inherit' }}>
                     <span>{t('topbar.messages')}</span>
+                    {commentNotes.some(n => !n.is_read) && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>{t('common.markAllRead')}</span>}
                   </div>
-                  {messages.length === 0 ? (
+                  <div className="notif-filter-tabs">
+                    <button className={`notif-filter-btn left${msgFilter === 'unread' ? ' active' : ''}`} onClick={() => setMsgFilter('unread')}>{t('common.unread')} ({unreadMsgs})</button>
+                    <button className={`notif-filter-btn right${msgFilter === 'read' ? ' active' : ''}`} onClick={() => setMsgFilter('read')}>{t('common.read')} ({commentNotes.filter(n => n.is_read).length})</button>
+                  </div>
+                  {shownMsgs.length === 0 ? (
                     <div className="dropdown-panel-empty">{t('topbar.noMessages')}</div>
                   ) : (
                     <div className="dropdown-panel-list">
-                      {messages.slice(0, 10).map((m, i) => (
-                        <div key={i} className="dropdown-panel-item" onClick={() => { navigate(`/client/requests/${m.requestId}`); setShowMessages(false); }}>
-                          <div className="dropdown-panel-avatar" style={{ overflow: 'hidden' }}>{getAvatarUrl(m.user?.avatar) ? <img src={getAvatarUrl(m.user?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (m.user?.name?.charAt(0) || 'U')}</div>
+                      {shownMsgs.slice(0, 10).map((m) => (
+                        <div key={m.id} className={`dropdown-panel-item${m.is_read ? '' : ' notif-unread'}`} onClick={() => { markNotificationRead(m.id); navigate(`/client/requests/${m.requestId}`); setShowMessages(false); }}>
+                          <div className="dropdown-panel-icon"><Icon name="comment" size={16} /></div>
                           <div className="dropdown-panel-content">
-                            <p><strong>{m.user?.name || t('common.unknown')}</strong> {t('common.commentedOn')} <strong>#{m.requestId}</strong></p>
-                            <p className="dropdown-panel-message">{m.content}</p>
-                            <span className="dropdown-panel-time">{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</span>
+                            <p><strong>{m.userName || t('common.unknown')}</strong> {t('common.commentedOn')} <strong>#{m.requestId}</strong></p>
+                            <p className="dropdown-panel-message">{translateNotification(m.message, m, t)}</p>
+                            <span className="dropdown-panel-time">{m.timestamp ? new Date(m.timestamp).toLocaleString() : ''}</span>
+                          </div>
+                          <div className="dropdown-panel-read">
+                            {!m.is_read && <span className="notif-unread-dot" title={t('common.unread')} />}
+                            {!m.is_read ? (
+                              <button className="notif-read-btn" onClick={(e) => { e.stopPropagation(); markNotificationRead(m.id); }}>{t('common.markRead')}</button>
+                            ) : (
+                              <span className="notif-read-state">{t('common.read')}</span>
+                            )}
                           </div>
                         </div>
                       ))}
