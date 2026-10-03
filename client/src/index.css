@@ -126,13 +126,19 @@ body {
   font-weight: 700;
   color: #ffffff;
   font-family: inherit;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(0, 180, 216, 0.25);
+  background: linear-gradient(135deg, rgba(0,180,216,0.12), rgba(114,9,183,0.12));
+  border: 1.5px solid rgba(0, 180, 216, 0.35);
   border-radius: 12px;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease, background 0.2s ease;
   box-sizing: border-box;
-  caret-color: #00b4d8;
+  caret-color: #00d4ff;
+}
+.otp-box:hover {
+  border-color: rgba(0, 212, 255, 0.7);
+  background: linear-gradient(135deg, rgba(0,180,216,0.22), rgba(114,9,183,0.22));
+  box-shadow: 0 2px 12px rgba(0, 180, 216, 0.25);
+  transform: translateY(-1px);
 }
 .otp-box:focus {
   border: 2px solid transparent;

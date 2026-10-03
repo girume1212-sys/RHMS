@@ -28,6 +28,14 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const otpRefs = useRef([]);
+  const [resendSeconds, setResendSeconds] = useState(0);
+
+  // Countdown for resend-code button (UI only)
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const id = setTimeout(() => setResendSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendSeconds]);
 
   useEffect(() => {
     const saved = localStorage.getItem('rhms_remember');
@@ -79,6 +87,7 @@ export default function Login() {
 
   const closeForgot = () => {
     setShowForgot(false);
+    setResendSeconds(0);
     setForgotMsg('');
     setForgotError('');
     setForgotEmail('');
@@ -99,8 +108,9 @@ export default function Login() {
     setForgotError('');
     setForgotMsg('');
     try {
-      await api.post('/api/auth/forgot-password-otp', { email: targetEmail });
+      const data = await api.post('/api/auth/forgot-password-otp', { email: targetEmail });
       setForgotMsg(t('common.otpSent'));
+      setResendSeconds(data.retryAfter || 60);
       if (!isResend) setForgotStep('otp');
     } catch (err) {
       setForgotError(err.message);
@@ -113,30 +123,34 @@ export default function Login() {
   // --- OTP 6-box UI handlers (UI only, otp string state unchanged) ---
   const handleOtpChange = (index, value) => {
     const clean = value.replace(/\D/g, '');
+    const digits = otp.padEnd(6, ' ').split('').slice(0, 6);
     if (!clean) {
-      setOtp((prev) => (prev.slice(0, index) + prev.slice(index + 1)).slice(0, 6));
+      digits[index] = ' ';
+      setOtp(digits.join('').replace(/ /g, ''));
       setErrors(prev => ({ ...prev, otp: '' }));
       return;
     }
-    const char = clean.slice(-1);
-    const digits = otp.split('');
-    while (digits.length < 6) digits.push('');
-    digits[index] = char;
-    setOtp(digits.join('').slice(0, 6));
+    // If user typed/pasted multiple digits into one box, spread them forward
+    const chars = clean.slice(0, 6 - index).split('');
+    chars.forEach((ch, k) => { digits[index + k] = ch; });
+    setOtp(digits.join('').replace(/ /g, '').slice(0, 6));
     setErrors(prev => ({ ...prev, otp: '' }));
-    if (index < 5) otpRefs.current[index + 1]?.focus();
+    const next = Math.min(index + chars.length, 5);
+    otpRefs.current[next]?.focus();
   };
 
   const handleOtpKeyDown = (index, e) => {
     if (e.key === 'Backspace') {
       e.preventDefault();
-      if (otp[index]) {
-        setOtp((prev) => (prev.slice(0, index) + prev.slice(index + 1)).slice(0, 6));
-        setErrors(prev => ({ ...prev, otp: '' }));
+      const digits = otp.padEnd(6, ' ').split('').slice(0, 6);
+      if (digits[index] !== ' ') {
+        digits[index] = ' ';
       } else if (index > 0) {
+        digits[index - 1] = ' ';
         otpRefs.current[index - 1]?.focus();
-        setOtp((prev) => (prev.slice(0, index - 1) + prev.slice(index)).slice(0, 6));
       }
+      setOtp(digits.join('').replace(/ /g, ''));
+      setErrors(prev => ({ ...prev, otp: '' }));
     } else if (e.key === 'ArrowLeft' && index > 0) {
       otpRefs.current[index - 1]?.focus();
     } else if (e.key === 'ArrowRight' && index < 5) {
@@ -184,14 +198,12 @@ export default function Login() {
   };
 
   // Step 3: validate with the existing password rules and reset.
+  // Minimum length is enforced by the backend (system_settings.passwordLength);
+  // backend errors are shown as-is so they never disagree with the UI.
   const handleResetPassword = async (e) => {
     e.preventDefault();
     if (!newPassword) {
       setErrors(prev => ({ ...prev, newPassword: t('validation.passwordRequired') }));
-      return;
-    }
-    if (newPassword.length < 6) {
-      setErrors(prev => ({ ...prev, newPassword: t('validation.passwordMin', { min: 6 }) }));
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -203,13 +215,18 @@ export default function Login() {
     setForgotError('');
     try {
       await api.post('/api/auth/reset-password-otp', { email: forgotEmail, otp: otp.trim(), password: newPassword });
+      setForgotStep('done');
       setForgotMsg(t('common.passwordResetSuccess'));
-      setTimeout(closeForgot, 2500);
     } catch (err) {
       setForgotError(err.message);
     } finally {
       setForgotLoading(false);
     }
+  };
+
+  const backToLogin = () => {
+    setUsernameOrEmail(forgotEmail);
+    closeForgot();
   };
 
   return (
@@ -352,9 +369,15 @@ export default function Login() {
                   <ValidationError message={errors.otp} />
                 </div>
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                  <button type="button" className="forgot-link" onClick={(e) => handleSendOtp(e, true)} disabled={forgotLoading}>
-                    {t('common.resendCode')}
-                  </button>
+                  {resendSeconds > 0 ? (
+                    <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+                      Resend in {resendSeconds}s
+                    </span>
+                  ) : (
+                    <button type="button" className="forgot-link" onClick={(e) => handleSendOtp(e, true)} disabled={forgotLoading}>
+                      {t('common.resendCode')}
+                    </button>
+                  )}
                   <button type="button" className="btn btn-outline" onClick={closeForgot}>{t('common.cancel')}</button>
                   <button type="submit" className="login-btn" style={{ width: 'auto', padding: '10px 24px' }} disabled={forgotLoading}>
                     {forgotLoading ? t('common.signingIn') : t('common.verifyCode')}
@@ -397,6 +420,13 @@ export default function Login() {
                   </button>
                 </div>
               </form>
+            )}
+            {forgotStep === 'done' && (
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button type="button" className="login-btn" style={{ width: 'auto', padding: '10px 24px' }} onClick={backToLogin}>
+                  {t('common.signIn')}
+                </button>
+              </div>
             )}
           </div>
         </div>

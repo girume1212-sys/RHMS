@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { validateName, validateEmail } from '../utils/validation';
@@ -19,8 +19,19 @@ export default function Signup() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [errors, setErrors] = useState({ name: '', companyName: '', email: '' });
+  const [errors, setErrors] = useState({ name: '', companyName: '', email: '', code: '' });
+  // Email-verification step (UI only): 'details' -> 'verify'. No account exists until verified.
+  const [step, setStep] = useState('details');
+  const [code, setCode] = useState('');
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const codeRefs = useRef([]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const id = setTimeout(() => setResendSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendSeconds]);
 
   const validateField = (name, value) => {
     let err = '';
@@ -31,13 +42,18 @@ export default function Signup() {
     return err;
   };
 
-  const handleSubmit = async (e) => {
+  // Step 1: validate details + mail a verification code (creates no account).
+  const handleRequestCode = async (e) => {
     e.preventDefault();
     setError('');
     const nameErr = validateField('name', name);
     const companyErr = validateField('companyName', companyName);
     const emailErr = validateField('email', email);
     if (nameErr || companyErr || emailErr) return;
+    if (password !== confirmPassword) {
+      setError(t('validation.passwordMismatch'));
+      return;
+    }
     if (!accepted) {
       setError(t('common.mustAcceptTerms'));
       return;
@@ -45,7 +61,98 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      await api.post('/api/auth/signup', { name, email, password, companyName });
+      const data = await api.post('/api/auth/request-email-verification', { name, email, password, companyName });
+      setStep('verify');
+      setCode('');
+      setResendSeconds(data.retryAfter || 60);
+      setError('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async (e) => {
+    if (e) e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const data = await api.post('/api/auth/request-email-verification', { name, email, password, companyName });
+      setCode('');
+      setResendSeconds(data.retryAfter || 60);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCodeChange = (index, value) => {
+    const clean = value.replace(/\D/g, '');
+    const digits = code.padEnd(6, ' ').split('').slice(0, 6);
+    if (!clean) {
+      digits[index] = ' ';
+      setCode(digits.join('').replace(/ /g, ''));
+      setErrors(prev => ({ ...prev, code: '' }));
+      return;
+    }
+    const chars = clean.slice(0, 6 - index).split('');
+    chars.forEach((ch, k) => { digits[index + k] = ch; });
+    setCode(digits.join('').replace(/ /g, '').slice(0, 6));
+    setErrors(prev => ({ ...prev, code: '' }));
+    const next = Math.min(index + chars.length, 5);
+    codeRefs.current[next]?.focus();
+  };
+
+  const handleCodeKeyDown = (index, e) => {
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      const digits = code.padEnd(6, ' ').split('').slice(0, 6);
+      if (digits[index] !== ' ') {
+        digits[index] = ' ';
+      } else if (index > 0) {
+        digits[index - 1] = ' ';
+        codeRefs.current[index - 1]?.focus();
+      }
+      setCode(digits.join('').replace(/ /g, ''));
+      setErrors(prev => ({ ...prev, code: '' }));
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      codeRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      codeRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleCodePaste = (e) => {
+    e.preventDefault();
+    const pasted = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    setCode(pasted);
+    setErrors(prev => ({ ...prev, code: '' }));
+    const focusIndex = Math.min(pasted.length, 5);
+    codeRefs.current[focusIndex]?.focus();
+  };
+
+  // Step 2: verify the code, then create the account with the verified code.
+  const handleVerifyAndSignup = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!/^\d{6}$/.test(code.trim())) {
+      setErrors(prev => ({ ...prev, code: t('common.otpMustBe6Digits') }));
+      return;
+    }
+    setErrors(prev => ({ ...prev, code: '' }));
+    setLoading(true);
+    try {
+      const check = await api.post('/api/auth/verify-email-code', { email, code: code.trim() });
+      if (!check.valid) {
+        if (check.reason === 'expired') setError(t('common.otpExpired'));
+        else if (check.reason === 'locked') setError(t('common.otpLocked'));
+        else setError(t('common.invalidOtp'));
+        return;
+      }
+      await api.post('/api/auth/signup', { name, email, password, companyName, code: code.trim() });
       setSuccess(true);
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
@@ -65,13 +172,14 @@ export default function Signup() {
       <LanguageSelector variant="login" />
 
       <div className="login-card signup-card">
-        <h2 className="login-title">{t('common.createAccount')}</h2>
-        <p className="login-subtitle">{t('common.fillDetails')}</p>
+        <h2 className="login-title">{step === 'verify' ? t('common.verifyEmailTitle') : t('common.createAccount')}</h2>
+        <p className="login-subtitle">{step === 'verify' ? t('common.verificationCodeSent') : t('common.fillDetails')}</p>
 
         {error && <div className="login-error">{error}</div>}
         {success && <div className="signup-success">{t('common.accountCreated')}</div>}
 
-        <form onSubmit={handleSubmit}>
+        {step === 'details' && (
+        <form onSubmit={handleRequestCode}>
           <div className="login-field">
             <div className="login-input-wrapper">
               <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -111,7 +219,7 @@ export default function Signup() {
           <div className="login-field">
             <div className="login-input-wrapper">
               <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2-2-2z"/>
                 <polyline points="22,6 12,13 2,6"/>
               </svg>
               <input
@@ -189,6 +297,50 @@ export default function Signup() {
             {loading ? t('common.creatingAccount') : t('common.createAccount')}
           </button>
         </form>
+        )}
+
+        {step === 'verify' && (
+        <form onSubmit={handleVerifyAndSignup}>
+          <div className="login-field">
+            <div className="otp-boxes" onPaste={handleCodePaste}>
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <input
+                  key={i}
+                  ref={(el) => (codeRefs.current[i] = el)}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={code[i] || ''}
+                  onChange={(e) => handleCodeChange(i, e.target.value)}
+                  onKeyDown={(e) => handleCodeKeyDown(i, e)}
+                  onFocus={(e) => e.target.select()}
+                  className={`otp-box${errors.code ? ' input-error' : ''}${code[i] ? ' otp-filled' : ''}`}
+                  aria-label={`Digit ${i + 1}`}
+                  required={i === 0}
+                />
+              ))}
+            </div>
+            <ValidationError message={errors.code} />
+          </div>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            {resendSeconds > 0 ? (
+              <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+                Resend in {resendSeconds}s
+              </span>
+            ) : (
+              <button type="button" className="forgot-link" onClick={handleResend} disabled={loading}>
+                {t('common.resendCode')}
+              </button>
+            )}
+            <button type="button" className="forgot-link" onClick={() => { setStep('details'); setError(''); }}>
+              {t('common.backToDetails')}
+            </button>
+          </div>
+          <button type="submit" className="login-btn" disabled={loading || success}>
+            {loading ? t('common.creatingAccount') : t('common.verifyCode')}
+          </button>
+        </form>
+        )}
 
         <p className="signup-link">
           {t('common.alreadyHaveAccount')} <button type="button" className="signup-btn" onClick={() => navigate('/login')}>{t('common.signIn')}</button>

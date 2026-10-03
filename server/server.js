@@ -385,6 +385,24 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_otp_expires ON password_reset_otps(expires_at)`);
     console.log('password_reset_otps table ready');
 
+    // Registration email-verification codes. Separate from password-reset OTPs:
+    // no user row exists yet, so the code is keyed by (lowercased) email address.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS email_verification_codes (
+        id VARCHAR(50) PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        code_hash VARCHAR(255) NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        used_at TIMESTAMP WITH TIME ZONE,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        created_by_ip VARCHAR(45)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_email_verify_email ON email_verification_codes(email)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_email_verify_expires ON email_verification_codes(expires_at)`);
+    console.log('email_verification_codes table ready');
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sla_tracking (
         id VARCHAR(50) PRIMARY KEY,
@@ -752,8 +770,12 @@ app.get('/api/notifications/stream', async (req, res) => {
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { name, email, password, companyName, language } = req.body;
+    const verificationCode = (req.body.code || req.body.verificationCode || '').trim();
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
+    }
+    if (!EMAIL_REGEX.test(String(email).trim())) {
+      return res.status(400).json({ error: 'This email address does not exist or cannot be verified. Please use a valid email address.' });
     }
     const pwResult = await pool.query("SELECT value FROM system_settings WHERE key = 'passwordLength'");
     const minLength = pwResult.rows.length > 0 ? parseInt(pwResult.rows[0].value) || 8 : 8;
@@ -764,12 +786,40 @@ app.post('/api/auth/signup', async (req, res) => {
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email already exists' });
     }
+    // Email must have been verified via /api/auth/request-email-verification.
+    // No user row is created until the mailbox proves it can receive the code.
+    if (!verificationCode) {
+      return res.status(400).json({ error: 'Email verification is required. Please verify your email address first.' });
+    }
+    const check = await findValidEmailCode(String(email).trim().toLowerCase(), verificationCode);
+    if (!check.ok) {
+      if (check.id && check.reason === 'mismatch') {
+        await pool.query('UPDATE email_verification_codes SET attempts = attempts + 1 WHERE id = $1', [check.id]);
+      }
+      if (check.reason === 'expired') {
+        return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
+      }
+      if (check.reason === 'locked') {
+        return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new code.' });
+      }
+      return res.status(400).json({ error: 'Email verification failed. Please verify your email address first.' });
+    }
     const id = uuidv4();
     const hashedPassword = bcrypt.hashSync(password, 10);
-    const result = await pool.query(
-      'INSERT INTO users (id, name, email, password, role, company_name, language, approved, moderated) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, email, role, avatar, created_at, company_name, language, approved, moderated',
-      [id, name, email, hashedPassword, 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en', true, false]
-    );
+    let result;
+    try {
+      result = await pool.query(
+        'INSERT INTO users (id, name, email, password, role, company_name, language, approved, moderated) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, email, role, avatar, created_at, company_name, language, approved, moderated',
+        [id, name, email, hashedPassword, 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en', true, false]
+      );
+    } catch (err) {
+      if (err.code === '23505') {
+        return res.status(400).json({ error: 'Email already exists' });
+      }
+      throw err;
+    }
+    // Consume the verification code (single-use).
+    await pool.query('UPDATE email_verification_codes SET used_at = NOW() WHERE id = $1', [check.id]);
 
     // Auto-assign to default group
     const defGroup = await pool.query("SELECT value FROM system_settings WHERE key = 'defaultGroup'");
@@ -1019,26 +1069,28 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlMinutes) {
     const r = await pool.query("SELECT value FROM system_settings WHERE key = 'systemEmail'");
     if (r.rows.length > 0 && r.rows[0].value) fromAddress = r.rows[0].value;
   } catch (e) { /* fall back to default sender */ }
-  const subject = 'RHMS password reset code';
+  const subject = 'RHMS Password Reset Code';
   const text =
-    `Hello ${userName || 'there'},\n\n` +
-    `Your RHMS password reset code is: ${otp}\n\n` +
-    `It expires in ${ttlMinutes} minutes and can be used only once. ` +
-    `If you did not request this, you can safely ignore this message.\n\n` +
-    `— ${fromAddress}`;
+    `Hello,\n\n` +
+    `Your (RHMS) Request Handling Management System password reset code is:\n\n` +
+    `${otp}\n\n` +
+    `This code will expire in ${ttlMinutes} minutes.\n\n` +
+    `If you did not request a password reset, please ignore this email.\n\n` +
+    `Regards,\nRHMS Support Team`;
   const html =
-    `<p>Hello ${userName || 'there'},</p>` +
-    `<p>Your RHMS password reset code is: <strong style="font-size:20px;letter-spacing:4px;">${otp}</strong></p>` +
-    `<p>It expires in ${ttlMinutes} minutes and can be used only once. ` +
-    `If you did not request this, you can safely ignore this message.</p>` +
-    `<p>— ${fromAddress}</p>`;
+    `<p>Hello,</p>` +
+    `<p>Your (RHMS) Request Handling Management System password reset code is:</p>` +
+    `<p><strong style="font-size:20px;letter-spacing:4px;">${otp}</strong></p>` +
+    `<p>This code will expire in ${ttlMinutes} minutes.</p>` +
+    `<p>If you did not request a password reset, please ignore this email.</p>` +
+    `<p>Regards,<br>RHMS Support Team</p>`;
   if (mailer.isSmtpConfigured()) {
     try {
       const info = await mailer.sendMail({ to: toEmail, subject, text, html });
       console.log(`[PasswordResetOTP] Email sent to ${toEmail} via SMTP (messageId: ${info.messageId || 'n/a'})`);
-      return { channel: 'email' };
     } catch (err) {
-      console.error('[PasswordResetOTP] SMTP send failed, falling back to in-app channel:', err.message);
+      console.error('[PasswordResetOTP] SMTP send failed:', err.message);
+      throw new Error('Failed to send verification code email');
     }
   } else {
     console.log(`[PasswordResetOTP] SMTP not configured; using in-app fallback. From: ${fromAddress} To: ${toEmail} Subject: ${subject}\n${text}`);
@@ -1076,7 +1128,7 @@ function otpRateLimit(key, maxHits, windowMs) {
   return true;
 }
 
-const OTP_TTL_MINUTES = 10;
+const OTP_TTL_MINUTES = Math.max(1, parseInt(process.env.OTP_EXPIRES_MINUTES || '10', 10) || 10);
 const OTP_MAX_VERIFY_ATTEMPTS = 5;
 
 async function findValidOtp(userId, otp) {
@@ -1112,27 +1164,34 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
     const userResult = await pool.query('SELECT id, name, email FROM users WHERE LOWER(email) = $1', [email]);
     if (userResult.rows.length > 0) {
       const user = userResult.rows[0];
-      // Resend cooldown: reuse is prevented by invalidating, but do not spam.
+      // Resend cooldown (matches the 60s frontend countdown): do not spam.
       const recent = await pool.query(
         `SELECT created_at FROM password_reset_otps
-         WHERE user_id = $1 AND used_at IS NULL AND created_at > NOW() - INTERVAL '2 minutes'
+         WHERE user_id = $1 AND used_at IS NULL AND created_at > NOW() - INTERVAL '60 seconds'
          ORDER BY created_at DESC LIMIT 1`,
         [user.id]
       );
-      if (recent.rows.length === 0) {
-        // Single-use protection: invalidate previously issued, unused OTPs.
-        await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [user.id]);
-        const otp = String(crypto.randomInt(100000, 1000000));
-        const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
-        await pool.query(
-          `INSERT INTO password_reset_otps (id, user_id, otp_hash, expires_at, created_by_ip, created_at)
-           VALUES ($1, $2, $3, $4, $5, NOW())`,
-          [uuidv4(), user.id, hashOtp(otp), expiresAt, ip]
-        );
-        auditLogin('password_reset_otp_requested', user.id, user.email, req);
-        await logAuthActivity('password_reset_requested', user, req, { email, channel: 'otp' });
-        await sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_MINUTES);
+      if (recent.rows.length > 0) {
+        const retryAfter = Math.max(1, 60 - Math.floor((Date.now() - new Date(recent.rows[0].created_at).getTime()) / 1000));
+        return res.json({ message: 'If an account exists with this email, a verification code has been sent.', resent: false, retryAfter });
       }
+      // Single-use protection: invalidate previously issued, unused OTPs.
+      await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [user.id]);
+      const otp = String(crypto.randomInt(100000, 1000000));
+      const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
+      await pool.query(
+        `INSERT INTO password_reset_otps (id, user_id, otp_hash, expires_at, created_by_ip, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [uuidv4(), user.id, hashOtp(otp), expiresAt, ip]
+      );
+      auditLogin('password_reset_otp_requested', user.id, user.email, req);
+      await logAuthActivity('password_reset_requested', user, req, { email, channel: 'otp' });
+      try {
+        await sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_MINUTES);
+      } catch (err) {
+        return res.status(503).json({ error: 'Failed to send verification code. Please try again later.' });
+      }
+      return res.json({ message: 'If an account exists with this email, a verification code has been sent.', resent: true });
     }
     res.json({ message: 'If an account exists with this email, a verification code has been sent.' });
   } catch (err) {
@@ -1155,7 +1214,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     if (userResult.rows.length === 0) return res.json({ valid: false });
     const check = await findValidOtp(userResult.rows[0].id, otp);
     if (!check.ok) {
-      if (check.id) {
+      if (check.id && check.reason === 'mismatch') {
         await pool.query('UPDATE password_reset_otps SET attempts = attempts + 1 WHERE id = $1', [check.id]);
       }
       return res.json({ valid: false, reason: check.reason === 'mismatch' ? 'mismatch' : check.reason });
@@ -1186,7 +1245,7 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
     const userId = userResult.rows[0].id;
     const check = await findValidOtp(userId, otp);
     if (!check.ok) {
-      if (check.id) {
+      if (check.id && check.reason === 'mismatch') {
         await pool.query('UPDATE password_reset_otps SET attempts = attempts + 1 WHERE id = $1', [check.id]);
       }
       if (check.reason === 'expired') return res.status(400).json({ error: 'Code has expired' });
@@ -1204,6 +1263,138 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
   } catch (err) {
     console.error('Reset password OTP error:', err);
     res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// ---- Registration email verification (separate from password-reset OTPs) ----
+// A user row is NOT created until the mailbox is proven reachable: a code is
+// mailed to the entered address and signup requires that code. SMTP delivery
+// failure (e.g. unknown Gmail mailbox, 550) aborts with 503 and no account.
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_VERIFY_TTL_MINUTES = OTP_TTL_MINUTES;
+const EMAIL_VERIFY_MAX_ATTEMPTS = 5;
+
+async function findValidEmailCode(emailLower, code) {
+  const result = await pool.query(
+    `SELECT id, code_hash, expires_at, used_at, attempts
+     FROM email_verification_codes
+     WHERE email = $1 AND used_at IS NULL
+     ORDER BY created_at DESC LIMIT 1`,
+    [emailLower]
+  );
+  const row = result.rows[0];
+  if (!row) return { ok: false, reason: 'not_found' };
+  if (new Date(row.expires_at).getTime() < Date.now()) return { ok: false, reason: 'expired', id: row.id };
+  if (row.attempts >= EMAIL_VERIFY_MAX_ATTEMPTS) return { ok: false, reason: 'locked', id: row.id };
+  if (hashOtp(String(code).trim()) !== row.code_hash) return { ok: false, reason: 'mismatch', id: row.id };
+  return { ok: true, id: row.id };
+}
+
+async function sendRegistrationVerificationEmail(toEmail, userName, code) {
+  const subject = 'RHMS Email Verification Code';
+  const text =
+    `Hello${userName ? ' ' + userName : ''},\n\n` +
+    `Your (RHMS) Request Handling Management System email verification code is:\n\n` +
+    `${code}\n\n` +
+    `This code will expire in ${EMAIL_VERIFY_TTL_MINUTES} minutes.\n\n` +
+    `If you did not request this, please ignore this email.\n\n` +
+    `Regards,\nRHMS Support Team`;
+  const html =
+    `<p>Hello${userName ? ' ' + userName : ''},</p>` +
+    `<p>Your (RHMS) Request Handling Management System email verification code is:</p>` +
+    `<p><strong style="font-size:20px;letter-spacing:4px;">${code}</strong></p>` +
+    `<p>This code will expire in ${EMAIL_VERIFY_TTL_MINUTES} minutes.</p>` +
+    `<p>If you did not request this, please ignore this email.</p>` +
+    `<p>Regards,<br>RHMS Support Team</p>`;
+  if (!mailer.isSmtpConfigured()) {
+    throw new Error('Email service is not configured');
+  }
+  await mailer.sendMail({ to: toEmail, subject, text, html });
+}
+
+// Step 1: validate details and mail a verification code. Creates NO user row.
+app.post('/api/auth/request-email-verification', async (req, res) => {
+  try {
+    const name = (req.body.name || '').trim();
+    const email = (req.body.email || '').trim().toLowerCase();
+    const { password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email and password are required' });
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      return res.status(400).json({ error: 'This email address does not exist or cannot be verified. Please use a valid email address.' });
+    }
+    const pwResult = await pool.query("SELECT value FROM system_settings WHERE key = 'passwordLength'");
+    const minLength = pwResult.rows.length > 0 ? parseInt(pwResult.rows[0].value) || 8 : 8;
+    if (password.length < minLength) {
+      return res.status(400).json({ error: `Password must be at least ${minLength} characters` });
+    }
+    const existing = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+    const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+    if (!otpRateLimit(`emailverify:${ip}`, 20, 60 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    }
+    if (!otpRateLimit(`emailverify:${email}`, 5, 60 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Too many verification requests for this email. Please try again later.' });
+    }
+    const recent = await pool.query(
+      `SELECT created_at FROM email_verification_codes
+       WHERE email = $1 AND used_at IS NULL AND created_at > NOW() - INTERVAL '60 seconds'
+       ORDER BY created_at DESC LIMIT 1`,
+      [email]
+    );
+    if (recent.rows.length > 0) {
+      const retryAfter = Math.max(1, 60 - Math.floor((Date.now() - new Date(recent.rows[0].created_at).getTime()) / 1000));
+      return res.json({ message: 'Verification code sent.', resent: false, retryAfter });
+    }
+    await pool.query('UPDATE email_verification_codes SET used_at = NOW() WHERE email = $1 AND used_at IS NULL', [email]);
+    const code = String(crypto.randomInt(100000, 1000000));
+    const expiresAt = new Date(Date.now() + EMAIL_VERIFY_TTL_MINUTES * 60 * 1000);
+    await pool.query(
+      `INSERT INTO email_verification_codes (id, email, code_hash, expires_at, created_by_ip, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [uuidv4(), email, hashOtp(code), expiresAt, ip]
+    );
+    try {
+      await sendRegistrationVerificationEmail(email, name, code);
+    } catch (err) {
+      console.error('[EmailVerify] send failed:', err.message);
+      return res.status(503).json({ error: 'This email address does not exist or cannot be verified. Please use a valid email address.' });
+    }
+    return res.json({ message: 'Verification code sent.', resent: true });
+  } catch (err) {
+    console.error('Request email verification error:', err);
+    res.status(500).json({ error: 'Failed to send verification code' });
+  }
+});
+
+// Step 2: check the code without consuming it.
+app.post('/api/auth/verify-email-code', async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const code = (req.body.code || '').trim();
+    if (!email || !code) return res.status(400).json({ error: 'Email and code are required' });
+    if (!EMAIL_REGEX.test(email)) {
+      return res.status(400).json({ error: 'This email address does not exist or cannot be verified. Please use a valid email address.' });
+    }
+    const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+    if (!otpRateLimit(`emailcode:${ip}`, 30, 60 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    }
+    const check = await findValidEmailCode(email, code);
+    if (!check.ok) {
+      if (check.id && check.reason === 'mismatch') {
+        await pool.query('UPDATE email_verification_codes SET attempts = attempts + 1 WHERE id = $1', [check.id]);
+      }
+      return res.json({ valid: false, reason: check.reason });
+    }
+    res.json({ valid: true });
+  } catch (err) {
+    console.error('Verify email code error:', err);
+    res.status(500).json({ error: 'Failed to verify code' });
   }
 });
 
@@ -4523,6 +4714,9 @@ app.get('*', (req, res) => {
 
 const server = app.listen(PORT, () => {
   console.log(`RHMS Server running on http://localhost:${PORT}`);
+  if (!mailer.isSmtpConfigured()) {
+    console.warn('[PasswordResetOTP] WARNING: SMTP is not configured (see server/.env.example). OTP emails will use the in-app fallback until SMTP_HOST/SMTP_USER/SMTP_PASS are set.');
+  }
 });
 
 server.on('error', (err) => {
