@@ -1100,7 +1100,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
 // (notifyUser/persistNotification) and surfaced on the server console, exactly
 // like the existing reset-link flow. If an SMTP transporter is added later,
 // sendPasswordResetOtpEmail is the single place to route through it.
-async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlMinutes) {
+async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds) {
   let fromAddress = 'support@rhms.com';
   try {
     const r = await pool.query("SELECT value FROM system_settings WHERE key = 'systemEmail'");
@@ -1111,14 +1111,14 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlMinutes) {
     `Hello,\n\n` +
     `Your (RHMS) Request Handling Management System password reset code is:\n\n` +
     `${otp}\n\n` +
-    `This code will expire in ${ttlMinutes} minutes.\n\n` +
+    `This code will expire in ${ttlSeconds} seconds.\n\n` +
     `If you did not request a password reset, please ignore this email.\n\n` +
     `Regards,\nRHMS Support Team`;
   const html =
     `<p>Hello,</p>` +
     `<p>Your (RHMS) Request Handling Management System password reset code is:</p>` +
     `<p><strong style="font-size:20px;letter-spacing:4px;">${otp}</strong></p>` +
-    `<p>This code will expire in ${ttlMinutes} minutes.</p>` +
+    `<p>This code will expire in ${ttlSeconds} seconds.</p>` +
     `<p>If you did not request a password reset, please ignore this email.</p>` +
     `<p>Regards,<br>RHMS Support Team</p>`;
   if (mailer.isSmtpConfigured()) {
@@ -1149,7 +1149,7 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlMinutes) {
   try {
     const u = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [String(toEmail).toLowerCase()]);
     if (u.rows.length > 0) {
-      notifyUser(u.rows[0].id, `Your password reset code is ${otp}. It expires in ${ttlMinutes} minutes.`,
+      notifyUser(u.rows[0].id, `Your password reset code is ${otp}. It expires in ${ttlSeconds} seconds.`,
         { type: 'password_reset_otp', title: 'Password Reset Code' });
     }
   } catch (e) { /* notification is best-effort */ }
@@ -1179,7 +1179,7 @@ function otpRateLimit(key, maxHits, windowMs) {
   return true;
 }
 
-const OTP_TTL_MINUTES = Math.max(1, parseInt(process.env.OTP_EXPIRES_MINUTES || '10', 10) || 10);
+const OTP_TTL_SECONDS = 60;
 const OTP_MAX_VERIFY_ATTEMPTS = 5;
 
 async function findValidOtp(userId, otp) {
@@ -1229,7 +1229,7 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
       // Single-use protection: invalidate previously issued, unused OTPs.
       await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [user.id]);
       const otp = String(crypto.randomInt(100000, 1000000));
-      const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
+      const expiresAt = new Date(Date.now() + OTP_TTL_SECONDS * 1000);
       const otpId = uuidv4();
       await pool.query(
         `INSERT INTO password_reset_otps (id, user_id, otp_hash, expires_at, created_by_ip, created_at)
@@ -1239,7 +1239,7 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
       auditLogin('password_reset_otp_requested', user.id, user.email, req);
       await logAuthActivity('password_reset_requested', user, req, { email, channel: 'otp' });
       const sendWithTimeout = (ms) => Promise.race([
-        sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_MINUTES),
+        sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_SECONDS),
         new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_TIMEOUT')), ms)),
       ]);
       try {
@@ -1309,7 +1309,7 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
       if (check.id && check.reason === 'mismatch') {
         await pool.query('UPDATE password_reset_otps SET attempts = attempts + 1 WHERE id = $1', [check.id]);
       }
-      if (check.reason === 'expired') return res.status(400).json({ error: 'Code has expired' });
+      if (check.reason === 'expired') return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
       return res.status(400).json({ error: 'Invalid or expired code' });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -1332,7 +1332,7 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
 // mailed to the entered address and signup requires that code. SMTP delivery
 // failure (e.g. unknown Gmail mailbox, 550) aborts with 503 and no account.
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const EMAIL_VERIFY_TTL_MINUTES = OTP_TTL_MINUTES;
+const EMAIL_VERIFY_TTL_SECONDS = OTP_TTL_SECONDS;
 const EMAIL_VERIFY_MAX_ATTEMPTS = 5;
 
 async function findValidEmailCode(emailLower, code) {
@@ -1357,14 +1357,14 @@ async function sendRegistrationVerificationEmail(toEmail, userName, code) {
     `Hello${userName ? ' ' + userName : ''},\n\n` +
     `Your (RHMS) Request Handling Management System email verification code is:\n\n` +
     `${code}\n\n` +
-    `This code will expire in ${EMAIL_VERIFY_TTL_MINUTES} minutes.\n\n` +
+    `This code will expire in ${EMAIL_VERIFY_TTL_SECONDS} seconds.\n\n` +
     `If you did not request this, please ignore this email.\n\n` +
     `Regards,\nRHMS Support Team`;
   const html =
     `<p>Hello${userName ? ' ' + userName : ''},</p>` +
     `<p>Your (RHMS) Request Handling Management System email verification code is:</p>` +
     `<p><strong style="font-size:20px;letter-spacing:4px;">${code}</strong></p>` +
-    `<p>This code will expire in ${EMAIL_VERIFY_TTL_MINUTES} minutes.</p>` +
+    `<p>This code will expire in ${EMAIL_VERIFY_TTL_SECONDS} seconds.</p>` +
     `<p>If you did not request this, please ignore this email.</p>` +
     `<p>Regards,<br>RHMS Support Team</p>`;
   if (!mailer.isSmtpConfigured()) {
@@ -1413,7 +1413,7 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
     }
     await pool.query('UPDATE email_verification_codes SET used_at = NOW() WHERE email = $1 AND used_at IS NULL', [email]);
     const code = String(crypto.randomInt(100000, 1000000));
-    const expiresAt = new Date(Date.now() + EMAIL_VERIFY_TTL_MINUTES * 60 * 1000);
+    const expiresAt = new Date(Date.now() + EMAIL_VERIFY_TTL_SECONDS * 1000);
     const codeId = uuidv4();
     await pool.query(
       `INSERT INTO email_verification_codes (id, email, code_hash, expires_at, created_by_ip, created_at)

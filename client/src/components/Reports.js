@@ -6,6 +6,7 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
 import PageNumbers from './PageNumbers';
+import Icon from './Icon';
 import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 
 const getAvatarUrl = (avatar) => {
@@ -25,6 +26,8 @@ export default function Reports() {
   const [perfPerPage, setPerfPerPage] = useState(10);
   const [tasksSort, setTasksSort] = useState({ key: '', dir: 'asc' });
   const [perfSort, setPerfSort] = useState({ key: '', dir: 'asc' });
+  const [perfSearch, setPerfSearch] = useState('');
+  const [perfRole, setPerfRole] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
@@ -92,7 +95,13 @@ export default function Reports() {
     }
   };
 
-  const sortedPerf = [...(report.userPerformance || [])].sort((a, b) => {
+  const filteredPerf = (report.userPerformance || []).filter(u => {
+    if (perfRole && u.role !== perfRole) return false;
+    if (!perfSearch.trim()) return true;
+    return (u.name || '').toLowerCase().includes(perfSearch.trim().toLowerCase());
+  });
+
+  const sortedPerf = [...filteredPerf].sort((a, b) => {
     if (!perfSort.key) return 0;
     const aVal = getPerfSortValue(a, perfSort.key);
     const bVal = getPerfSortValue(b, perfSort.key);
@@ -269,18 +278,38 @@ export default function Reports() {
 
       <div className="charts-row">
         <div className="chart-card wide">
-          <h3>{t('dashboard.userPerformance')}</h3>
+          <h3>{t('dashboard.teamPerformance')}</h3>
+          <div className="filters-bar sf-toolbar">
+            <div className="sf-toolbar-left">
+              <div className="table-search-box">
+                <span className="search-icon"><Icon name="search" size={14} /></span>
+                <input
+                  type="text"
+                  placeholder={t('common.searchUsers')}
+                  value={perfSearch}
+                  onChange={(e) => { setPerfSearch(e.target.value); setPerfPage(1); }}
+                />
+              </div>
+            </div>
+            <div className="sf-toolbar-right">
+              <select className="filter-select" value={perfRole} onChange={(e) => { setPerfRole(e.target.value); setPerfPage(1); }}>
+                <option value="">{t('common.allRoles')}</option>
+                <option value="support">{t('role.escalationTeam')}</option>
+                <option value="developer">{t('role.developer')}</option>
+              </select>
+            </div>
+          </div>
           <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sortable"><span>{t('common.user')} {getPerfSortIcon('name')}</span></th>
-                  <th className="sortable"><span>{t('common.role')} {getPerfSortIcon('role')}</span></th>
-                  <th className="sortable"><span>{t('dashboard.totalAssigned')} {getPerfSortIcon('total')}</span></th>
-                  <th className="sortable"><span>{t('common.resolved')} {getPerfSortIcon('resolved')}</span></th>
-                  <th className="sortable"><span>{t('common.inProgress')} {getPerfSortIcon('inProgress')}</span></th>
-                  <th className="sortable"><span>{t('common.pending')} {getPerfSortIcon('pending')}</span></th>
-                  <th className="sortable"><span>{t('dashboard.resolutionRate')} {getPerfSortIcon('rate')}</span></th>
+                  <th className="sortable"><span onClick={() => handlePerfSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.user')} {getPerfSortIcon('name')}</span></th>
+                  <th className="sortable"><span onClick={() => handlePerfSort('role')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.role')} {getPerfSortIcon('role')}</span></th>
+                  <th className="sortable"><span onClick={() => handlePerfSort('total')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('dashboard.totalAssigned')} {getPerfSortIcon('total')}</span></th>
+                  <th className="sortable"><span onClick={() => handlePerfSort('resolved')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.resolved')} {getPerfSortIcon('resolved')}</span></th>
+                  <th className="sortable"><span onClick={() => handlePerfSort('inProgress')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.inProgress')} {getPerfSortIcon('inProgress')}</span></th>
+                  <th className="sortable"><span onClick={() => handlePerfSort('pending')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.pending')} {getPerfSortIcon('pending')}</span></th>
+                  <th className="sortable"><span onClick={() => handlePerfSort('rate')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('dashboard.resolutionRate')} {getPerfSortIcon('rate')}</span></th>
                 </tr>
               </thead>
               <tbody>

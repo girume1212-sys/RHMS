@@ -2041,6 +2041,18 @@ body.dark-mode .detail-label {
 body.dark-mode .detail-value {
   color: #e2e8f0;
 }
+/* User Details modal: soft gradient on the Account Details card
+   (scoped to this modal so Profile pages are unaffected). */
+.user-details-modal .account-details-card {
+  background: linear-gradient(150deg, #EFF6FF 0%, #DBEAFE 45%, #F8FAFC 100%);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+body.dark-mode .user-details-modal .account-details-card {
+  background: linear-gradient(150deg, #1E3A8A 0%, #1E40AF 45%, #0F172A 100%);
+  border-color: rgba(147, 197, 253, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
 .calendar-icon-btn {
   display: flex;
   align-items: center;
@@ -3822,6 +3834,26 @@ body.dark-mode .requests-by-category-card h3 {
   color: #1a1a2e;
   padding-bottom: 16px;
   border-bottom: 2px solid rgba(0, 180, 216, 0.15);
+}
+/* Admin User Details: profile + account cards side by side, equal height,
+   top-aligned; stacked vertically on small screens. */
+.user-details-modal {
+  width: calc(100vw - 48px);
+}
+.user-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+.user-details-grid > * {
+  min-width: 0;
+  height: 100%;
+}
+@media (max-width: 700px) {
+  .user-details-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .modal .form-group {
   margin-bottom: 18px;

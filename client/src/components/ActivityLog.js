@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
 import { translateActivityMessage } from '../i18n/translateServer';
 import Icon from './Icon';
+import PageNumbers from './PageNumbers';
 import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 
 export default function ActivityLog() {
@@ -151,9 +152,7 @@ export default function ActivityLog() {
               <div className="table-pagination">
                 <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
                 <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                  <button key={p} className={`page-btn ${p === page ? 'active' : ''}`} onClick={() => setPage(p)}>{p}</button>
-                ))}
+                <PageNumbers page={page} totalPages={totalPages} onPageChange={setPage} />
                 <button className="page-btn" disabled={page === totalPages} onClick={() => setPage(page + 1)}>›</button>
                 <button className="page-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}>»</button>
               </div>

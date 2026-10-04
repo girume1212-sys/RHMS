@@ -29,6 +29,7 @@ export default function Feedback() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
+  const [satisfactionFilter, setSatisfactionFilter] = useState('');
   const [sort, setSort] = useState({ key: 'created_at', dir: 'desc' });
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -80,7 +81,17 @@ export default function Feedback() {
   feedback.forEach(f => { if (f.rating >= 1 && f.rating <= 5) distribution[f.rating - 1]++; });
   const maxDist = Math.max(...distribution, 1);
 
+  const satisfactionKeyFor = (rating) => {
+    const num = Number(rating) || 0;
+    if (num >= 4.5) return 'verySatisfied';
+    if (num >= 3.5) return 'satisfied';
+    if (num >= 2.5) return 'neutral';
+    if (num >= 1.5) return 'dissatisfied';
+    return 'veryDissatisfied';
+  };
+
   const filtered = feedback.filter(f => {
+    if (satisfactionFilter && satisfactionKeyFor(f.rating) !== satisfactionFilter) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (f.user_name || '').toLowerCase().includes(q) ||
@@ -233,7 +244,17 @@ export default function Feedback() {
                     onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
                 </div>
               </div>
-              <div className="sf-toolbar-right" />
+              <div className="sf-toolbar-right">
+                <select className="filter-select" value={satisfactionFilter}
+                  onChange={(e) => { setSatisfactionFilter(e.target.value); setPage(1); }}>
+                  <option value="">{t('feedback.allSatisfaction')}</option>
+                  <option value="verySatisfied">{t('feedback.verySatisfied')}</option>
+                  <option value="satisfied">{t('feedback.satisfied')}</option>
+                  <option value="neutral">{t('feedback.neutral')}</option>
+                  <option value="dissatisfied">{t('feedback.dissatisfied')}</option>
+                  <option value="veryDissatisfied">{t('feedback.veryDissatisfied')}</option>
+                </select>
+              </div>
             </div>
             <div className="table-header-bar">
               <h3>{t('feedback.listCount', { count: filtered.length })}</h3>

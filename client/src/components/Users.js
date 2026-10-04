@@ -344,7 +344,7 @@ export default function Users() {
                     <td><span className="truncate-cell">{u.companyName || <span style={{ color: '#9ca3af' }}>-</span>}</span></td>
                     <td>{new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td>
-                        <div className="actions-cell-inline">
+                        <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                         {u.selfRegistered && u.role === 'client' && (
                           u.approved ? (
                             <button className="action-btn-text delete" onClick={() => handleApprove(u.id, u.name, false)}>{t('common.blockUser')}</button>
@@ -412,13 +412,14 @@ export default function Users() {
 
       {viewingUser && (
         <div className="modal-overlay" onClick={() => setViewingUser(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+          <div className="modal user-details-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '920px' }}>
             <h2>{t('common.userDetails')}</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '24px' }}>
+            <div className="user-details-grid">
               <div style={{
-                background: 'linear-gradient(145deg, #3B82F6, #2563EB, #1D4ED8)',
+                background: 'linear-gradient(145deg, #2563EB 0%, #1E40AF 55%, #1E3A8A 100%)',
                 borderRadius: '20px', padding: '32px', color: '#fff',
-                boxShadow: '0 8px 32px rgba(59,130,246,0.3)',
+                boxShadow: '0 8px 32px rgba(30,58,138,0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
+                border: '1px solid rgba(255,255,255,0.18)',
                 display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center'
               }}>
                 <div style={{ marginBottom: '16px', width: '100px', height: '100px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px', fontWeight: 700, border: '4px solid rgba(255,255,255,0.3)', overflow: 'hidden' }}>

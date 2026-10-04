@@ -121,7 +121,18 @@ export default function Dashboard() {
   const [perfView, setPerfView] = useState('escalation');
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [priorities, setPriorities] = useState([]);
+  const [statuses, setStatuses] = useState([]);
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
+  const [teamPerfSearch, setTeamPerfSearch] = useState('');
+  const [teamPerfRole, setTeamPerfRole] = useState('');
+  const [teamPerfSort, setTeamPerfSort] = useState({ key: '', dir: 'asc' });
+  const [teamPerfPage, setTeamPerfPage] = useState(1);
+  const [teamPerfPerPage, setTeamPerfPerPage] = useState(10);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [rangeDays, setRangeDays] = useState('all');
   const [monthOffset, setMonthOffset] = useState(0);
@@ -144,6 +155,9 @@ export default function Dashboard() {
       setRecentRequests(filtered);
     }).catch(err => setError(t('common.failedToLoadRequests') + ' ' + err.message));
     api.get('/api/dashboard/performance?days=30').then(setPerfData).catch(err => console.error('Perf fetch error:', err));
+    api.get('/api/categories').then(setCategories).catch(() => {});
+    api.get('/api/priorities').then(setPriorities).catch(() => {});
+    api.get('/api/statuses').then(setStatuses).catch(() => {});
   }, [user]);
 
   useEffect(() => {
@@ -284,6 +298,88 @@ export default function Dashboard() {
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   }, [escPerfData?.team]);
 
+  // Combined rows for the "Escalation Team and Developer Performance" table
+  // below the charts. Same data source as the charts, so RBAC/visibility
+  // rules are identical — no extra API call.
+  const userPerfRows = useMemo(() => {
+    const rows = [];
+    escTeam.forEach(m => {
+      const total = Number(m.totalEscalated) || 0;
+      const resolved = Number(m.resolvedEscalated) || 0;
+      const pending = Number(m.pendingEscalated) || 0;
+      rows.push({
+        key: `support-${m.userId || m.name}`,
+        name: m.name,
+        role: 'support',
+        total,
+        resolved,
+        inProgress: Math.max(0, total - resolved - pending),
+        pending,
+        rate: total > 0 ? Math.round((resolved / total) * 100) : 0
+      });
+    });
+    devChartData.forEach(d => {
+      const total = Number(d.assigned) || 0;
+      const resolved = Number(d.resolved) || 0;
+      const inProgress = Number(d.inProgress) || 0;
+      rows.push({
+        key: `developer-${d.name}`,
+        name: d.name,
+        role: 'developer',
+        total,
+        resolved,
+        inProgress,
+        pending: Math.max(0, total - resolved - inProgress),
+        rate: total > 0 ? Math.round((resolved / total) * 100) : 0
+      });
+    });
+    return rows.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }, [escTeam, devChartData]);
+
+  const handleTeamPerfSort = (key) => {
+    setTeamPerfSort(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
+    setTeamPerfPage(1);
+  };
+
+  const getTeamPerfSortIcon = (key) => {
+    const isActive = teamPerfSort.key === key;
+    if (!isActive) return <span className="sort-icon" onClick={(e) => { e.stopPropagation(); handleTeamPerfSort(key); }}>⇅</span>;
+    return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleTeamPerfSort(key); }}>{teamPerfSort.dir === 'asc' ? '↑' : '↓'}</span>;
+  };
+
+  const filteredTeamPerf = useMemo(() => {
+    const q = teamPerfSearch.trim().toLowerCase();
+    return userPerfRows.filter(u => {
+      if (teamPerfRole && u.role !== teamPerfRole) return false;
+      if (!q) return true;
+      return (u.name || '').toLowerCase().includes(q);
+    });
+  }, [userPerfRows, teamPerfSearch, teamPerfRole]);
+
+  const sortedTeamPerf = useMemo(() => {
+    if (!teamPerfSort.key) return filteredTeamPerf;
+    const dir = teamPerfSort.dir === 'asc' ? 1 : -1;
+    return [...filteredTeamPerf].sort((a, b) => {
+      let aVal, bVal;
+      switch (teamPerfSort.key) {
+        case 'name': aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase(); break;
+        case 'role': aVal = a.role || ''; bVal = b.role || ''; break;
+        case 'total': aVal = a.total || 0; bVal = b.total || 0; break;
+        case 'resolved': aVal = a.resolved || 0; bVal = b.resolved || 0; break;
+        case 'inProgress': aVal = a.inProgress || 0; bVal = b.inProgress || 0; break;
+        case 'pending': aVal = a.pending || 0; bVal = b.pending || 0; break;
+        case 'rate': aVal = a.rate || 0; bVal = b.rate || 0; break;
+        default: return 0;
+      }
+      if (aVal < bVal) return -1 * dir;
+      if (aVal > bVal) return 1 * dir;
+      return 0;
+    });
+  }, [filteredTeamPerf, teamPerfSort]);
+
+  const teamPerfTotalPages = Math.ceil(sortedTeamPerf.length / teamPerfPerPage);
+  const paginatedTeamPerf = sortedTeamPerf.slice((teamPerfPage - 1) * teamPerfPerPage, teamPerfPage * teamPerfPerPage);
+
   // X-axis label: the real member name, or the unassigned label when the
   // request had nobody attached. Kept short so the axis stays readable.
   const escTeamLabel = useCallback((row) => (
@@ -393,6 +489,18 @@ export default function Dashboard() {
 
   const filteredRequests = recentRequests
     .filter(r => {
+      if (filterCategory) {
+        const c = r.category?.name || r.categoryName || r.category_name || '';
+        if (c !== filterCategory) return false;
+      }
+      if (filterPriority) {
+        const p = r.priority?.name || r.priorityName || '';
+        if (p !== filterPriority) return false;
+      }
+      if (filterStatus) {
+        const s = r.status?.name || r.statusName || '';
+        if (s !== filterStatus) return false;
+      }
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
       const str = (v) => (v === undefined || v === null) ? '' : String(v).toLowerCase();
@@ -665,7 +773,20 @@ export default function Dashboard() {
             />
           </div>
         </div>
-        <div className="sf-toolbar-right" />
+        <div className="sf-toolbar-right">
+          <select className="filter-select" value={filterCategory} onChange={(e) => { setFilterCategory(e.target.value); setPage(1); }}>
+            <option value="">{t('common.allCategories')}</option>
+            {categories.map(c => <option key={c.id} value={c.name}>{transSeeded(c.name, 'category', t)}</option>)}
+          </select>
+          <select className="filter-select" value={filterPriority} onChange={(e) => { setFilterPriority(e.target.value); setPage(1); }}>
+            <option value="">{t('common.allPriorities')}</option>
+            {priorities.map(p => <option key={p.id} value={p.name}>{transSeeded(p.name, 'priority', t)}</option>)}
+          </select>
+          <select className="filter-select" value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}>
+            <option value="">{t('common.allStatuses')}</option>
+            {statuses.map(s => <option key={s.id} value={s.name}>{transSeeded(s.name, 'status', t)}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="chart-card" style={{ marginTop: '16px' }}>
@@ -1085,6 +1206,87 @@ export default function Dashboard() {
                     </div>
                   </>
                 )}
+              </div>
+            </div>
+          )}
+          {userPerfRows.length > 0 && (
+            <div className="charts-row" style={{ marginTop: '16px' }}>
+              <div className="chart-card wide">
+                <h3>{t('dashboard.teamPerformance')}</h3>
+                <div className="filters-bar sf-toolbar">
+                  <div className="sf-toolbar-left">
+                    <div className="table-search-box">
+                      <span className="search-icon"><Icon name="search" size={14} /></span>
+                      <input
+                        type="text"
+                        placeholder={t('common.searchUsers')}
+                        value={teamPerfSearch}
+                        onChange={(e) => { setTeamPerfSearch(e.target.value); setTeamPerfPage(1); }}
+                      />
+                    </div>
+                  </div>
+                  <div className="sf-toolbar-right">
+                    <select className="filter-select" value={teamPerfRole} onChange={(e) => { setTeamPerfRole(e.target.value); setTeamPerfPage(1); }}>
+                      <option value="">{t('common.allRoles')}</option>
+                      <option value="support">{t('role.escalationTeam')}</option>
+                      <option value="developer">{t('role.developer')}</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th className="sortable"><span onClick={() => handleTeamPerfSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.user')} {getTeamPerfSortIcon('name')}</span></th>
+                        <th className="sortable"><span onClick={() => handleTeamPerfSort('role')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.role')} {getTeamPerfSortIcon('role')}</span></th>
+                        <th className="sortable"><span onClick={() => handleTeamPerfSort('total')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('dashboard.totalAssigned')} {getTeamPerfSortIcon('total')}</span></th>
+                        <th className="sortable"><span onClick={() => handleTeamPerfSort('resolved')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.resolved')} {getTeamPerfSortIcon('resolved')}</span></th>
+                        <th className="sortable"><span onClick={() => handleTeamPerfSort('inProgress')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.inProgress')} {getTeamPerfSortIcon('inProgress')}</span></th>
+                        <th className="sortable"><span onClick={() => handleTeamPerfSort('pending')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.pending')} {getTeamPerfSortIcon('pending')}</span></th>
+                        <th className="sortable"><span onClick={() => handleTeamPerfSort('rate')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('dashboard.resolutionRate')} {getTeamPerfSortIcon('rate')}</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedTeamPerf.map(u => (
+                        <tr key={u.key}>
+                          <td>
+                            <div className="assigned-user-cell">
+                              <div className="assigned-avatar" style={{ background: u.role === 'developer' ? '#8B5CF6' : '#3B82F6', overflow: 'hidden' }}>{(u.name || '?').charAt(0)}</div>
+                              <span className="truncate-cell">{u.name}</span>
+                            </div>
+                          </td>
+                          <td><span className="role-badge" style={{ background: u.role === 'developer' ? '#8B5CF620' : '#3B82F620', color: u.role === 'developer' ? '#8B5CF6' : '#3B82F6' }}>{u.role === 'developer' ? t('role.developer') : t('role.escalationTeam')}</span></td>
+                          <td>{u.total}</td>
+                          <td style={{ color: '#10B981' }}>{u.resolved}</td>
+                          <td style={{ color: '#F59E0B' }}>{u.inProgress}</td>
+                          <td style={{ color: '#EF4444' }}>{u.pending}</td>
+                          <td>{u.rate}%</td>
+                        </tr>
+                      ))}
+                      {paginatedTeamPerf.length === 0 && (
+                        <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('dashboard.noPerformanceData')}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="table-footer">
+                  <div className="table-footer-info">
+                    <span>{t('common.show')}</span>
+                    <select value={teamPerfPerPage} onChange={(e) => { setTeamPerfPerPage(Number(e.target.value)); setTeamPerfPage(1); }}>
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                    </select>
+                    <span>{t('common.ofUsers', { count: sortedTeamPerf.length })}</span>
+                  </div>
+                  <div className="table-pagination">
+                    <button className="page-btn" disabled={teamPerfPage === 1} onClick={() => setTeamPerfPage(1)}>«</button>
+                    <button className="page-btn" disabled={teamPerfPage === 1} onClick={() => setTeamPerfPage(teamPerfPage - 1)}>‹</button>
+                    <PageNumbers page={teamPerfPage} totalPages={teamPerfTotalPages} onPageChange={setTeamPerfPage} />
+                    <button className="page-btn" disabled={teamPerfPage === teamPerfTotalPages || teamPerfTotalPages === 0} onClick={() => setTeamPerfPage(teamPerfPage + 1)}>›</button>
+                    <button className="page-btn" disabled={teamPerfPage === teamPerfTotalPages || teamPerfTotalPages === 0} onClick={() => setTeamPerfPage(teamPerfTotalPages)}>»</button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
