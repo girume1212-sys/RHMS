@@ -183,6 +183,12 @@ export default function ClientDashboard() {
     });
 
   const totalPages = Math.ceil(filteredRequests.length / perPage);
+  // Keep current page valid when page size / filters change.
+  useEffect(() => {
+    if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
+    else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);
+  }, [totalPages]);
+
   const paginatedRequests = filteredRequests.slice((page - 1) * perPage, page * perPage);
 
   return (
@@ -308,10 +314,11 @@ export default function ClientDashboard() {
           <div className="table-footer-info">
             <span>{t('common.show')}</span>
             <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-            </select>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
             <span>{t('common.ofRequests', { count: filteredRequests.length })}</span>
           </div>
           <div className="table-pagination">

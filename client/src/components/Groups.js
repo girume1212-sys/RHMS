@@ -275,6 +275,12 @@ export default function Groups() {
   });
 
   const totalPages = Math.ceil(filteredGroups.length / perPage);
+  // Keep current page valid when page size / filters change.
+  useEffect(() => {
+    if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
+    else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);
+  }, [totalPages]);
+
   const paginated = filteredGroups.slice((page - 1) * perPage, page * perPage);
 
   const getRoleColor = (role) => {
@@ -367,10 +373,11 @@ export default function Groups() {
             <div className="table-footer-info">
               <span>{t('common.show')}</span>
               <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-              </select>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
               <span>{t('common.ofGroups', { count: filteredGroups.length })}</span>
             </div>
             <div className="table-pagination">
@@ -545,12 +552,7 @@ export default function Groups() {
                         <div className="table-footer">
                           <div className="table-footer-info">
                             <span>{t('common.show')}</span>
-                            <select value={memberPerPage} onChange={(e) => { setMemberPerPage(Number(e.target.value)); setMemberPage(1); }}>
-                              <option value={5}>5</option>
-                              <option value={10}>10</option>
-                              <option value={25}>25</option>
-                              <option value={50}>50</option>
-                            </select>
+                            <select value={memberPerPage} onChange={(e) => { setMemberPerPage(Number(e.target.value)); setMemberPage(1); }}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select>
                             <span>{t('common.of')} {filteredMembers.length} {t('common.members')}</span>
                           </div>
                           <div className="table-pagination">

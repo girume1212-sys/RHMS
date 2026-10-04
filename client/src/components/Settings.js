@@ -647,12 +647,7 @@ export default function Settings() {
               <div className="table-footer">
                 <div className="table-footer-info">
                   <span>{t('common.show')}</span>
-                  <select value={statusPerPage} onChange={(e) => { setStatusPerPage(Number(e.target.value)); setStatusPage(1); }}>
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                  </select>
+                  <select value={statusPerPage} onChange={(e) => { setStatusPerPage(Number(e.target.value)); setStatusPage(1); }}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select>
                   <span>{t('common.of')} {allStatuses.length} {t('common.statuses')}</span>
                 </div>
                 <div className="table-pagination">

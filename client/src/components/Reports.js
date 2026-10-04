@@ -258,11 +258,7 @@ export default function Reports() {
           <div className="table-footer">
             <div className="table-footer-info">
               <span>{t('common.show')}</span>
-              <select value={tasksPerPage} onChange={(e) => { setTasksPerPage(Number(e.target.value)); setTasksPage(1); }}>
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-              </select>
+              <select value={tasksPerPage} onChange={(e) => { setTasksPerPage(Number(e.target.value)); setTasksPage(1); }}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select>
               <span>{t('common.ofTasks', { count: sortedTasks.length })}</span>
             </div>
             <div className="table-pagination">
@@ -338,11 +334,7 @@ export default function Reports() {
           <div className="table-footer">
             <div className="table-footer-info">
               <span>{t('common.show')}</span>
-              <select value={perfPerPage} onChange={(e) => { setPerfPerPage(Number(e.target.value)); setPerfPage(1); }}>
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-              </select>
+              <select value={perfPerPage} onChange={(e) => { setPerfPerPage(Number(e.target.value)); setPerfPage(1); }}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select>
               <span>{t('common.ofUsers', { count: sortedPerf.length })}</span>
             </div>
             <div className="table-pagination">

@@ -42,6 +42,7 @@ export default function RequestDetail() {
   const commentTextareaRef = useRef(null);
   const chatRef = useRef(null);
   const lastSeenRef = useRef(null);
+  const lifecycleFlowRef = useRef(null);
   const [unreadFilterIds, setUnreadFilterIds] = useState(null);
   const [existingFeedback, setExistingFeedback] = useState(null);
   const [feedbackRating, setFeedbackRating] = useState(0);
@@ -645,6 +646,44 @@ export default function RequestDetail() {
       description: step.description
     }));
   };
+
+  // Keep the active/current status always fully visible in the Status Flow.
+  // Whenever the flow renders or the status changes, scroll horizontally
+  // so the current step is brought into view (centered when possible),
+  // without altering sequence, styling, or animations.
+  useEffect(() => {
+    if (!showHistory) return;
+    const scrollActiveIntoView = () => {
+      const container = lifecycleFlowRef.current;
+      if (!container) return;
+      const active = container.querySelector('.lifecycle-step.current');
+      if (!active) return;
+      // Only scroll the flow container horizontally; never the whole page.
+      const containerRect = container.getBoundingClientRect();
+      const activeRect = active.getBoundingClientRect();
+      const fullyVisible =
+        activeRect.left >= containerRect.left &&
+        activeRect.right <= containerRect.right;
+      if (fullyVisible) return;
+      const targetLeft =
+        container.scrollLeft +
+        (activeRect.left - containerRect.left) -
+        (container.clientWidth - activeRect.width) / 2;
+      container.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+    };
+    // Run after paint so layout/animations are settled; retry once for fonts.
+    const raf = requestAnimationFrame(scrollActiveIntoView);
+    const t1 = setTimeout(scrollActiveIntoView, 150);
+    const t2 = setTimeout(scrollActiveIntoView, 500);
+    const onResize = () => scrollActiveIntoView();
+    window.addEventListener('resize', onResize);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [showHistory, request?.statusId, request?.status?.name, activityLog.length]);
 
   const isImageFile = (path) => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(path);
   const getFileName = (path) => path.split('/').pop();
@@ -1259,7 +1298,7 @@ export default function RequestDetail() {
                     <span className="lifecycle-icon"><Icon name="refresh" size={16} /></span>
                     <span className="lifecycle-title">{t('common.statusFlow')}</span>
                   </div>
-                  <div className="lifecycle-flow">
+                  <div className="lifecycle-flow" ref={lifecycleFlowRef}>
                     {(() => {
                       const flowSteps = getStatusFlow();
                       const requestId = `REQ-${String(id).padStart(4, '0')}`;

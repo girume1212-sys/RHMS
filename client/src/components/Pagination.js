@@ -15,10 +15,11 @@ export default function Pagination({ totalItems, page, setPage, perPage, setPerP
           <div className="per-page-select">
             <label>{t('common.rowsPerPage')}</label>
             <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
-              {[5, 10, 15, 20, 25, 50].map(n => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
           </div>
           <span>{t('common.showingRange', { start, end, total: totalItems })}</span>
         </div>
