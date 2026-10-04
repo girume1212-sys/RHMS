@@ -310,8 +310,6 @@ export default function ClientLayout() {
   const menuItems = [
     { path: '/client', label: t('common.dashboard'), icon: 'home' },
     { path: '/client/requests', label: t('common.myRequests'), icon: 'requests' },
-    { path: '/client/activity', label: t('common.activityLog'), icon: 'activity' },
-    { path: '/client/profile', label: t('common.myProfile'), icon: 'user' },
   ];
 
   const activeMenuItem = menuItems.find((item) => location.pathname === item.path)
