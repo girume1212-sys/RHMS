@@ -99,6 +99,7 @@
     "unexpectedResponse": "Unexpected server response",
     "uploadFailed": "File upload failed",
     "accountLocked": "Account locked due to too many failed attempts. Try again later.",
+    "accountDeleted": "Your account no longer exists. Please register again to create a new account.",
     "userNameOrEmail": "Username or Email",
     "request": "Request",
     "user": "User",

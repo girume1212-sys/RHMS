@@ -78,6 +78,8 @@ export default function Login() {
         setError(t('common.cannotConnectServer'));
       } else if (msg.includes('Account locked')) {
         setError(t('common.accountLocked'));
+      } else if (msg.includes('no longer exists')) {
+        setError(t('common.accountDeleted'));
       } else {
         setError(msg);
       }

@@ -99,6 +99,7 @@
     "unexpectedResponse": "ያልተጠበቀ የአገልጋይ ምላሽ",
     "uploadFailed": "ፋይል መጫን አልተሳካም",
     "accountLocked": "መለያው ተቆልፏል። ብዙ ያልተሳኩ ሙከራዎች ተደርገዋል። በኋላ እንደገና ይሞክሩ።",
+    "accountDeleted": "መለያዎ ከአሁን በኋላ የለም። አዲስ መለያ ለመፍጠር እባክዎ እንደገና ይመዝገቡ።",
     "userNameOrEmail": "የተጠቃሚ ስም ወይም ኢሜይል",
     "request": "ጥያቄ",
     "user": "ተጠቃሚ",

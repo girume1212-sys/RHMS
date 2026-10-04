@@ -125,6 +125,14 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     console.log('requests columns ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255) DEFAULT ''`);
     console.log('company_name column ready');
+    // Ownership trail for account reclaim after admin deletion: stores the
+    // owner's verified email so a later verified re-registration with the same
+    // email can be re-linked to its previous requests/comments. Never exposed
+    // for auth; reclaim only touches orphaned rows (client_id/user_id IS NULL).
+    await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS client_email VARCHAR(255) DEFAULT ''`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_client_email ON requests(client_email)`);
+    await pool.query(`ALTER TABLE comments ADD COLUMN IF NOT EXISTS author_email VARCHAR(255) DEFAULT ''`);
+    console.log('ownership trail columns ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'en'`);
     console.log('language column ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN DEFAULT false`);
@@ -433,6 +441,16 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_request_watchers_user ON request_watchers(user_id)`);
     console.log('request_watchers table ready');
+    // Registry of admin-deleted accounts so login can report a clear message
+    // instead of a generic invalid-credentials error. Never blocks re-registration.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS deleted_accounts (
+        email VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255),
+        deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_deleted_accounts_name ON deleted_accounts(name)`);
     // Performance indexes for hot filters/joins (safe, IF NOT EXISTS)
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_priority ON requests(priority_id)`);
@@ -832,6 +850,27 @@ app.post('/api/auth/signup', async (req, res) => {
     }
     // Consume the verification code (single-use).
     await pool.query('UPDATE email_verification_codes SET used_at = NOW() WHERE id = $1', [check.id]);
+    // A fresh verified registration clears any prior deletion record for this
+    // email; the new row above is a brand-new account, never a restoration.
+    try {
+      await pool.query('DELETE FROM deleted_accounts WHERE email = LOWER($1)', [String(email).trim()]);
+    } catch (e) { /* best-effort */ }
+    // Re-associate this verified email's previous orphaned requests/comments
+    // (left behind by an admin deletion) with the newly created account.
+    // Only orphaned rows match, so another live account's data is untouched.
+    // IDs, dates, statuses, comments, attachments and assignments are preserved.
+    try {
+      const freshId = result.rows[0].id;
+      const verifiedEmail = String(email).trim().toLowerCase();
+      await pool.query(
+        `UPDATE requests SET client_id = $1, client_deleted = FALSE WHERE client_id IS NULL AND LOWER(client_email) = $2`,
+        [freshId, verifiedEmail]
+      );
+      await pool.query(
+        `UPDATE comments SET user_id = $1 WHERE user_id IS NULL AND LOWER(author_email) = $2`,
+        [freshId, verifiedEmail]
+      );
+    } catch (e) { console.error('Failed to reclaim previous requests:', e.message); }
 
     // Auto-assign to default group
     const defGroup = await pool.query("SELECT value FROM system_settings WHERE key = 'defaultGroup'");
@@ -848,21 +887,54 @@ app.post('/api/auth/signup', async (req, res) => {
     // signup response (and login navigation) never waits on SMTP delivery;
     // a failure is logged and never rolls back or duplicates the registration.
     const newUser = result.rows[0];
+    const escapeHtml = (v) => String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    let logoUrl = '';
+    try {
+      const logoResult = await pool.query("SELECT value FROM system_settings WHERE key = 'systemLogo'");
+      const logoPath = logoResult.rows.length > 0 ? (logoResult.rows[0].value || '') : '';
+      if (logoPath) {
+        logoUrl = logoPath.startsWith('http')
+          ? logoPath
+          : `${req.protocol}://${req.get('host')}${logoPath.startsWith('/') ? '' : '/'}${logoPath}`;
+      }
+    } catch (e) { /* logo is decorative; never block the email */ }
+    const safeName = escapeHtml(newUser.name);
+    const logoBlock = logoUrl
+      ? `<img src="${escapeHtml(logoUrl)}" alt="RHMS Logo" width="180" style="display:block;margin:0 auto;max-width:180px;width:100%;height:auto;border:0;" />`
+      : `<div style="font-size:42px;font-weight:800;letter-spacing:2px;color:#1D4ED8;">RHMS</div>`;
     mailer.sendMail({
       to: newUser.email,
       subject: 'RHMS Registration Successful',
       text:
+        `Welcome to the Request Handling Management System!\n\n` +
         `Hello ${newUser.name},\n\n` +
-        `Your registration was successful in the Request Handling Management System (RHMS).\n\n` +
-        `Your account has been successfully created.\n\n` +
-        `You can now sign in to RHMS using your registered email address and password.\n\n` +
-        `Regards,\nRHMS Support Team`,
+        `You have successfully registered.\n\n` +
+        `The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It helps users submit and track requests, while support teams and developers can manage, assign, resolve, and monitor issues efficiently from creation through completion.\n\n` +
+        `Your account is now ready to use. You can sign in to RHMS using your registered email address and password.\n\n` +
+        `Regards,\nRHMS Request Handling Management System`,
       html:
-        `<p>Hello ${newUser.name},</p>` +
-        `<p>Your registration was successful in the Request Handling Management System (RHMS).</p>` +
-        `<p>Your account has been successfully created.</p>` +
-        `<p>You can now sign in to RHMS using your registered email address and password.</p>` +
-        `<p>Regards,<br>RHMS Support Team</p>`,
+        `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+        `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
+        `<tr><td align="center">` +
+        `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">` +
+        `<tr><td style="background:linear-gradient(135deg,#1D4ED8,#2563EB);padding:36px 32px;text-align:center;">` +
+        logoBlock +
+        `<h1 style="margin:20px 0 0;font-size:24px;line-height:1.35;color:#ffffff;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
+        `</td></tr>` +
+        `<tr><td style="padding:32px;">` +
+        `<p style="margin:0 0 8px;font-size:16px;color:#0f172a;">Hello ${safeName},</p>` +
+        `<p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#1D4ED8;">You have successfully registered.</p>` +
+        `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#475569;">The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It helps users submit and track requests, while support teams and developers can manage, assign, resolve, and monitor issues efficiently from creation through completion.</p>` +
+        `<p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#475569;">Your account is now ready to use. You can sign in to RHMS using your registered email address and password.</p>` +
+        `<p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">Regards,<br><strong>RHMS Request Handling Management System</strong></p>` +
+        `</td></tr>` +
+        `<tr><td style="background-color:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #e2e8f0;">` +
+        `<p style="margin:0;font-size:12px;color:#94a3b8;">This is an automated message. Please do not reply to this email.</p>` +
+        `</td></tr>` +
+        `</table></td></tr></table></body></html>`,
     }).then(() => {
       console.log(`[Signup] Registration confirmation email sent to ${newUser.email}`);
     }).catch((err) => {
@@ -899,6 +971,19 @@ app.post('/api/auth/login', async (req, res) => {
           await logAuthActivity('account_blocked', user, req, { reason: 'too_many_failed_attempts' });
         }
       } else {
+        // The credential matches an admin-deleted account: report it clearly.
+        // Never recreate or restore the account here; a fresh verified
+        // registration is the only way back.
+        try {
+          const gone = await pool.query(
+            'SELECT email FROM deleted_accounts WHERE email = LOWER($1) OR (name IS NOT NULL AND LOWER(name) = LOWER($1)) LIMIT 1',
+            [String(credential || '')]
+          );
+          if (gone.rows.length > 0) {
+            auditLogin('login_failed', null, credential, req);
+            return res.status(410).json({ error: 'Your account no longer exists. Please register again to create a new account.' });
+          }
+        } catch (e) { /* fall through to the generic error */ }
         auditLogin('login_failed', null, credential, req);
         await logAuthActivity('login_failed', null, req, { credential });
       }
@@ -1609,8 +1694,25 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
 
 app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const existing = await pool.query('SELECT id FROM users WHERE id = $1', [req.params.id]);
+    const existing = await pool.query('SELECT id, name, email FROM users WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const doomed = existing.rows[0];
+    const doomedEmail = String(doomed.email || '').trim().toLowerCase();
+    // Preserve the ownership trail BEFORE nulling FKs so a later verified
+    // re-registration with the same email can reclaim its own history.
+    // Historical rows (requests/comments/attachments/activity) are never deleted.
+    try {
+      if (doomedEmail) {
+        await pool.query(
+          `UPDATE requests SET client_email = $2 WHERE client_id = $1 AND (client_email IS NULL OR client_email = '')`,
+          [req.params.id, doomed.email]
+        );
+        await pool.query(
+          `UPDATE comments SET author_email = $2 WHERE user_id = $1 AND (author_email IS NULL OR author_email = '')`,
+          [req.params.id, doomed.email]
+        );
+      }
+    } catch (e) { console.error('Failed to preserve ownership trail:', e.message); }
 
     await pool.query('UPDATE requests SET client_deleted = TRUE WHERE client_id = $1', [req.params.id]);
     await pool.query('UPDATE requests SET client_id = NULL WHERE client_id = $1', [req.params.id]);
@@ -1619,7 +1721,23 @@ app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req
     await pool.query('UPDATE activity_log SET user_id = NULL WHERE user_id = $1', [req.params.id]);
     await pool.query('UPDATE feedback SET user_id = NULL WHERE user_id = $1', [req.params.id]);
     await pool.query('DELETE FROM user_groups WHERE user_id = $1', [req.params.id]);
+    // Invalidate all sessions/tokens for the deleted user (rows cascade on user
+    // delete, but revoke first so currently-valid JWTs are marked revoked).
+    try {
+      await pool.query('UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL', [req.params.id]);
+      await pool.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [req.params.id]);
+      await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [req.params.id]);
+    } catch (e) { console.error('Failed to revoke deleted-user sessions:', e.message); }
     await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+    // Remember the deleted credentials so a later sign-in attempt reports that
+    // the account no longer exists. Never blocks a fresh verified registration.
+    try {
+      await pool.query(
+        `INSERT INTO deleted_accounts (email, name) VALUES ($1, $2)
+         ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, deleted_at = NOW()`,
+        [String(doomed.email || '').trim().toLowerCase(), doomed.name || null]
+      );
+    } catch (e) { console.error('Failed to record deleted account:', e.message); }
     await logUserActivity('user_deleted', { id: req.params.id }, req.user, req);
     res.json({ message: 'User deleted' });
   } catch (err) {
@@ -2318,6 +2436,16 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     const id = `REQ-2024-${String(nextNum).padStart(5, '0')}`;
     const clientId = req.user.role === 'client' ? req.user.id : req.body.clientId;
     const now = new Date().toISOString();
+    // Record the owner's verified email for future reclaim after deletion.
+    let clientEmail = '';
+    try {
+      if (req.user.role === 'client') {
+        clientEmail = req.user.email || '';
+      } else if (clientId) {
+        const ownerRow = await pool.query('SELECT email FROM users WHERE id = $1', [clientId]);
+        if (ownerRow.rows.length > 0) clientEmail = ownerRow.rows[0].email || '';
+      }
+    } catch (e) { /* best-effort */ }
 
     const defResult = await pool.query("SELECT value FROM system_settings WHERE key IN ('defaultStatus', 'defaultPriority')");
     const defMap = {};
@@ -2326,8 +2454,8 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     const defaultPriorityId = defMap.defaultPriority || '2';
 
     await pool.query(
-      'INSERT INTO requests (id, subject, description, client_id, category_id, priority_id, status_id, attachments, created_at, updated_at, custom_category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
-      [id, subject, description, clientId, effectiveCategoryId, priorityId || defaultPriorityId, defaultStatusId, JSON.stringify(attachments || []), now, now, customCategoryValue]
+      'INSERT INTO requests (id, subject, description, client_id, client_email, category_id, priority_id, status_id, attachments, created_at, updated_at, custom_category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+      [id, subject, description, clientId, clientEmail || '', effectiveCategoryId, priorityId || defaultPriorityId, defaultStatusId, JSON.stringify(attachments || []), now, now, customCategoryValue]
     );
 
     await pool.query(
@@ -2678,8 +2806,8 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
     const now = new Date().toISOString();
 
     await pool.query(
-      'INSERT INTO comments (id, request_id, user_id, content, attachments, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-      [id, req.params.id, req.user.id, content, JSON.stringify(attachments || []), now]
+      'INSERT INTO comments (id, request_id, user_id, author_email, content, attachments, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, req.params.id, req.user.id, req.user.email || '', content, JSON.stringify(attachments || []), now]
     );
 
     await pool.query(
