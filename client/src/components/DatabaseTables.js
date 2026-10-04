@@ -155,7 +155,7 @@ export default function DatabaseTables() {
               </div>
 
               <div className="table-card" style={{ boxShadow: 'none', padding: 0, border: 'none' }}>
-                <div style={{ overflowY: 'auto', overflowX: 'hidden', maxHeight: 'calc(100vh - 350px)' }}>
+                <div style={{ overflowY: 'auto', overflowX: 'auto', maxHeight: 'calc(100vh - 350px)' }}>
                   <table className="data-table">
                     <thead>
                       <tr>

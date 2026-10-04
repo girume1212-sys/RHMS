@@ -512,7 +512,8 @@ export default function Groups() {
                         {filteredMembers.length === 0 ? (
                           <div className="empty-state">{t('common.noMembersMatching', { query: memberSearch })}</div>
                         ) : (
-                      <div className="table-card" style={{ overflowX: 'hidden' }}>
+                      <>
+                      <div className="table-card" style={{ overflowX: 'auto' }}>
             <table className="data-table">
                         <thead>
                           <tr>
@@ -548,6 +549,7 @@ export default function Groups() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                       {filteredMembers.length > memberPerPage && (
                         <div className="table-footer">
                           <div className="table-footer-info">
@@ -566,7 +568,7 @@ export default function Groups() {
                           </div>
                         </div>
                       )}
-                    </div>
+                      </>
                         )}
                       </>
                     )}

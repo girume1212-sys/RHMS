@@ -392,7 +392,7 @@ export default function Company() {
                 <div className="empty-state">{t('company.noUsers')}</div>
               ) : (
                 <>
-                  <div className="table-card" style={{ overflowX: 'hidden' }}>
+                  <div className="table-card" style={{ overflowX: 'auto' }}>
                     <table className="data-table">
                       <thead>
                         <tr>

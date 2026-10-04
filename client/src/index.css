@@ -2650,14 +2650,39 @@ body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
   .filters-bar.sf-toolbar + .chart-card { padding-top: 16px; }
 }
 
-/* Table Card - Colored Accent */
+/* Table Card - Colored Accent.
+   The card itself is the horizontal scroll container so wide tables scroll
+   (header + rows stay aligned as one unit) instead of being clipped. */
 .table-card {
   background: white;
   border-radius: 12px;
   padding: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  overflow-x: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
   border: 1px solid rgba(0, 180, 216, 0.1);
+}
+.table-card::-webkit-scrollbar {
+  height: 8px;
+}
+.table-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+.table-card::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.table-card::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+/* Table keeps its natural content-based width (never squeezed/clipped);
+   it fills the card when narrow and triggers scrolling when wide. */
+.table-card .data-table {
+  width: max-content;
+  min-width: 100%;
 }
 .table-card .data-table thead tr {
   background: #1a4f85;
@@ -7192,19 +7217,35 @@ body.dark-mode .perf-toggle-btn.active {
 
 /* ========== TABLE FOOTER / PAGINATION ========== */
 .table-footer {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 12px 20px;
   border-top: 1px solid #e5e7eb;
   position: relative;
 }
+/* Keep the per-page selector above any overlapping layer so its dropdown always opens. */
 .table-footer-info {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
   color: #6b7280;
+  position: relative;
+  z-index: 2;
+  justify-self: start;
+}
+/* Pagination lives in the center grid column (visually centered like before)
+   but can no longer overlay/cover the per-page dropdown. */
+.table-footer .table-pagination {
+  position: static;
+  left: auto;
+  transform: none;
+  grid-column: 2;
+  justify-self: center;
+  width: auto;
+  max-width: 100%;
+  padding: 0;
 }
 .table-footer-info select {
   padding: 4px 8px;
@@ -7220,11 +7261,6 @@ body.dark-mode .perf-toggle-btn.active {
   gap: 4px;
   flex-shrink: 0;
   justify-content: center;
-}
-.table-footer .table-pagination {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
 }
 .page-btn {
   min-width: 28px;
@@ -8457,6 +8493,7 @@ body.dark-mode .btn-outline:hover:not(:disabled) {
     width: 100%;
   }
   .table-footer {
+    display: flex;
     flex-direction: column;
     gap: 10px;
     align-items: flex-start;
