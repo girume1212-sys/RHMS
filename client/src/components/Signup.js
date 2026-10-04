@@ -324,7 +324,10 @@ export default function Signup() {
             </div>
             <ValidationError message={errors.code} />
           </div>
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start', marginBottom: '20px' }}>
+            <button type="button" className="forgot-link" onClick={() => { setStep('details'); setError(''); }}>
+              {t('common.backToDetails')}
+            </button>
             {resendSeconds > 0 ? (
               <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
                 Resend in {resendSeconds}s
@@ -334,9 +337,6 @@ export default function Signup() {
                 {t('common.resendCode')}
               </button>
             )}
-            <button type="button" className="forgot-link" onClick={() => { setStep('details'); setError(''); }}>
-              {t('common.backToDetails')}
-            </button>
           </div>
           <button type="submit" className="login-btn" disabled={loading || success}>
             {loading ? t('common.creatingAccount') : t('common.verifyCode')}

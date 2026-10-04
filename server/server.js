@@ -740,6 +740,46 @@ const mapRequest = (r) => ({
   updatedAt: r.updated_at
 });
 
+// Shared RHMS email logo block. The logo is ALWAYS rendered first, centered,
+// in its own full-width row: [LOGO] -> Welcome heading -> brand name ->
+// content. Uses the existing systemLogo setting with the existing CID
+// inline-image method so real clients render it without fetching a URL.
+async function getEmailLogoBlock(req) {
+  const escapeHtml = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  let logoUrl = '';
+  let logoAttachment = null;
+  try {
+    const logoResult = await pool.query("SELECT value FROM system_settings WHERE key = 'systemLogo'");
+    const logoPath = logoResult.rows.length > 0 ? (logoResult.rows[0].value || '') : '';
+    if (logoPath) {
+      if (logoPath.startsWith('/uploads/')) {
+        const filePath = path.join(__dirname, 'uploads', path.basename(logoPath));
+        const ext = path.extname(filePath).toLowerCase();
+        if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext) && fs.existsSync(filePath)) {
+          logoAttachment = { filename: `rhms-logo${ext}`, path: filePath, cid: 'rhmslogo' };
+        } else if (req) {
+          logoUrl = `${req.protocol}://${req.get('host')}${logoPath}`;
+        }
+      } else if (req) {
+        logoUrl = logoPath.startsWith('http')
+          ? logoPath
+          : `${req.protocol}://${req.get('host')}${logoPath.startsWith('/') ? '' : '/'}${logoPath}`;
+      } else {
+        logoUrl = logoPath;
+      }
+    }
+  } catch (e) { /* logo is decorative; never block the email */ }
+  const imgStyle = 'display:block;margin:0 auto;height:auto;max-width:160px;border:0;';
+  const logoBlock = logoAttachment
+    ? `<img src="cid:rhmslogo" alt="RHMS Logo" width="160" style="${imgStyle}" />`
+    : logoUrl
+      ? `<img src="${escapeHtml(logoUrl)}" alt="RHMS Logo" width="160" style="${imgStyle}" />`
+      : `<div style="font-size:42px;font-weight:800;letter-spacing:2px;color:#1D4ED8;text-align:center;">RHMS</div>`;
+  return { logoBlock, logoAttachment };
+}
+
 // SSE endpoint for real-time notifications (token via query param for EventSource)
 app.get('/api/notifications/stream', async (req, res) => {
   // Auth via query param since EventSource doesn't support headers
@@ -891,36 +931,9 @@ app.post('/api/auth/signup', async (req, res) => {
     const escapeHtml = (v) => String(v == null ? '' : v)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    let logoUrl = '';
-    let logoAttachment = null;
-    try {
-      const logoResult = await pool.query("SELECT value FROM system_settings WHERE key = 'systemLogo'");
-      const logoPath = logoResult.rows.length > 0 ? (logoResult.rows[0].value || '') : '';
-      if (logoPath) {
-        if (logoPath.startsWith('/uploads/')) {
-          // Embed the existing logo file inline (CID) so clients render it
-          // without fetching any URL. Never expose the local path in the email.
-          const filePath = path.join(__dirname, 'uploads', path.basename(logoPath));
-          const ext = path.extname(filePath).toLowerCase();
-          if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext) && fs.existsSync(filePath)) {
-            logoAttachment = { filename: `rhms-logo${ext}`, path: filePath, cid: 'rhmslogo' };
-          } else {
-            logoUrl = `${req.protocol}://${req.get('host')}${logoPath}`;
-          }
-        } else {
-          logoUrl = logoPath.startsWith('http')
-            ? logoPath
-            : `${req.protocol}://${req.get('host')}${logoPath.startsWith('/') ? '' : '/'}${logoPath}`;
-        }
-      }
-    } catch (e) { /* logo is decorative; never block the email */ }
     const safeName = escapeHtml(newUser.name);
     const loginUrl = `${req.protocol}://${req.get('host')}/login`;
-    const logoBlock = logoAttachment
-      ? `<img src="cid:rhmslogo" alt="RHMS Logo" width="200" style="display:block;margin:0 auto;max-width:200px;width:100%;height:auto;border:0;" />`
-      : logoUrl
-        ? `<img src="${escapeHtml(logoUrl)}" alt="RHMS Logo" width="200" style="display:block;margin:0 auto;max-width:200px;width:100%;height:auto;border:0;" />`
-        : `<div style="font-size:42px;font-weight:800;letter-spacing:2px;color:#1D4ED8;">RHMS</div>`;
+    const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
     mailer.sendMail({
       to: newUser.email,
       subject: 'RHMS Registration Successful',
@@ -943,8 +956,11 @@ app.post('/api/auth/signup', async (req, res) => {
         `<tr><td align="center" style="background-color:#ffffff;padding:36px 32px 8px;text-align:center;">` +
         logoBlock +
         `</td></tr>` +
-        `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 28px;text-align:center;">` +
+        `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 8px;text-align:center;">` +
         `<h1 style="margin:0;font-size:24px;line-height:1.35;color:#1D4ED8;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
+        `</td></tr>` +
+        `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 28px;text-align:center;">` +
+        `<h2 style="margin:0;font-size:18px;line-height:1.35;color:#0f172a;font-weight:700;">Request Handling Management System</h2>` +
         `</td></tr>` +
         `<tr><td style="padding:32px;">` +
         `<p style="margin:0 0 8px;font-size:16px;color:#0f172a;">Hello ${safeName},</p>` +
@@ -1213,18 +1229,17 @@ app.post('/api/auth/reset-password', async (req, res) => {
 // (notifyUser/persistNotification) and surfaced on the server console, exactly
 // like the existing reset-link flow. If an SMTP transporter is added later,
 // sendPasswordResetOtpEmail is the single place to route through it.
-async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds) {
+async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req) {
   let fromAddress = 'support@rhms.com';
   try {
     const r = await pool.query("SELECT value FROM system_settings WHERE key = 'systemEmail'");
     if (r.rows.length > 0 && r.rows[0].value) fromAddress = r.rows[0].value;
   } catch (e) { /* fall back to default sender */ }
+  const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const subject = 'RHMS Password Reset Code';
   const text =
     `Request Handling Management System\n\n` +
-    `Your email verification code is:\n\n` +
-    `Hello ${userName},\n\n` +
-    `Your (RHMS) Request Handling Management System email verification code is:\n\n` +
+    `Your password reset verification code is:\n\n` +
     `${otp}\n\n` +
     `This code will expire in ${ttlSeconds} seconds.\n\n` +
     `If you did not request a password reset, please ignore this email.`;
@@ -1235,15 +1250,16 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds) {
     `<tr><td align="center">` +
     `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">` +
     `<tr><td align="center" style="background-color:#ffffff;padding:36px 32px 8px;text-align:center;">` +
-    `<div style="font-size:28px;font-weight:800;letter-spacing:2px;color:#1D4ED8;">RHMS</div>` +
+    logoBlock +
+    `</td></tr>` +
+    `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 8px;text-align:center;">` +
+    `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#1D4ED8;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
     `</td></tr>` +
     `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 28px;text-align:center;">` +
-    `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#1D4ED8;font-weight:700;">Request Handling Management System</h1>` +
+    `<h2 style="margin:0;font-size:18px;line-height:1.35;color:#0f172a;font-weight:700;">Request Handling Management System</h2>` +
     `</td></tr>` +
     `<tr><td style="padding:32px;">` +
-    `<p style="margin:0 0 8px;font-size:16px;color:#0f172a;">Your email verification code is:</p>` +
-    `<p style="margin:0 0 16px;font-size:16px;color:#0f172a;">Hello ${userName},</p>` +
-    `<p style="margin:0 0 16px;font-size:16px;color:#0f172a;">Your (RHMS) Request Handling Management System email verification code is:</p>` +
+    `<p style="margin:0 0 16px;font-size:16px;color:#0f172a;">Your password reset verification code is:</p>` +
     `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
     `<div style="display:inline-block;padding:14px 32px;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:6px;border-radius:8px;">${otp}</div>` +
     `</td></tr></table>` +
@@ -1266,14 +1282,14 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds) {
       throw new Error('SMTP_UNAVAILABLE');
     }
     try {
-      const info = await mailer.sendMail({ to: toEmail, subject, text, html });
+      const info = await mailer.sendMail({ to: toEmail, subject, text, html, ...(logoAttachment ? { attachments: [logoAttachment] } : {}) });
       console.log(`[PasswordResetOTP] Email sent to ${toEmail} via SMTP (messageId: ${info.messageId || 'n/a'})`);
       return { channel: 'smtp' };
     } catch (err) {
       const kind = (err && err.message) || '';
       console.error('[PasswordResetOTP] SMTP send failed:', kind);
       // Propagate a classified kind so the endpoint can return a clear message.
-      if (['SMTP_TIMEOUT', 'SMTP_AUTH', 'SMTP_UNAVAILABLE'].includes(kind)) throw err;
+      if (['SMTP_TIMEOUT', 'SMTP_AUTH', 'SMTP_UNAVAILABLE', 'SMTP_NO_SUCH_USER'].includes(kind)) throw err;
       throw new Error('SMTP_UNAVAILABLE');
     }
   } else {
@@ -1401,7 +1417,7 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
       auditLogin('password_reset_otp_requested', user.id, user.email, req);
       await logAuthActivity('password_reset_requested', user, req, { email, channel: 'otp' });
       const sendWithTimeout = (ms) => Promise.race([
-        sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_SECONDS),
+        sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_SECONDS, req),
         new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_TIMEOUT')), ms)),
       ]);
       try {
@@ -1412,6 +1428,7 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
         const kind = (err && err.message) || '';
         if (kind === 'SMTP_TIMEOUT') return res.status(504).json({ error: 'The email service took too long to respond. Please try again.' });
         if (kind === 'SMTP_AUTH') return res.status(503).json({ error: 'Password reset email service is not configured correctly. Please contact the administrator.' });
+        if (kind === 'SMTP_NO_SUCH_USER') return res.status(400).json({ error: 'Unable to send the email. Please check your registered email address and try again.' });
         return res.status(503).json({ error: 'Email service is temporarily unavailable. Please try again later.' });
       }
       return res.json({ message: 'Verification code sent to your email.', resent: true });
@@ -1443,6 +1460,11 @@ app.post('/api/auth/verify-otp', async (req, res) => {
       }
       return res.json({ valid: false, reason: check.reason === 'mismatch' ? 'mismatch' : check.reason });
     }
+    // The code was entered within its 60-second window. From here the user
+    // may take as long as needed on the password step: lift the countdown by
+    // extending this (already-verified) OTP, still single-use and consumed at
+    // reset. Unverified codes keep the exact 60-second expiry.
+    await pool.query("UPDATE password_reset_otps SET expires_at = NOW() + INTERVAL '30 minutes' WHERE id = $1", [check.id]);
     res.json({ valid: true });
   } catch (err) {
     console.error('Verify OTP error:', err);
@@ -1517,22 +1539,42 @@ async function findValidEmailCode(emailLower, code) {
   return { ok: true, id: row.id };
 }
 
-async function sendRegistrationVerificationEmail(toEmail, userName, code) {
+async function sendRegistrationVerificationEmail(toEmail, userName, code, req) {
+  const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const subject = 'RHMS Email Verification Code';
   const text =
-    `Hello${userName ? ' ' + userName : ''},\n\n` +
-    `Your (RHMS) Request Handling Management System email verification code is:\n\n` +
+    `Request Handling Management System\n\n` +
+    `Your email verification code is:\n\n` +
     `${code}\n\n` +
     `This code will expire in ${EMAIL_VERIFY_TTL_SECONDS} seconds.\n\n` +
-    `If you did not request this, please ignore this email.\n\n` +
-    `Regards,\nRHMS Support Team`;
+    `If you did not request this verification, please ignore this email.`;
   const html =
-    `<p>Hello${userName ? ' ' + userName : ''},</p>` +
-    `<p>Your (RHMS) Request Handling Management System email verification code is:</p>` +
-    `<p><strong style="font-size:20px;letter-spacing:4px;">${code}</strong></p>` +
-    `<p>This code will expire in ${EMAIL_VERIFY_TTL_SECONDS} seconds.</p>` +
-    `<p>If you did not request this, please ignore this email.</p>` +
-    `<p>Regards,<br>RHMS Support Team</p>`;
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+    `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
+    `<tr><td align="center">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">` +
+    `<tr><td align="center" style="background-color:#ffffff;padding:36px 32px 8px;text-align:center;">` +
+    logoBlock +
+    `</td></tr>` +
+    `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 8px;text-align:center;">` +
+    `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#1D4ED8;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
+    `</td></tr>` +
+    `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 28px;text-align:center;">` +
+    `<h2 style="margin:0;font-size:18px;line-height:1.35;color:#0f172a;font-weight:700;">Request Handling Management System</h2>` +
+    `</td></tr>` +
+    `<tr><td style="padding:32px;">` +
+    `<p style="margin:0 0 16px;font-size:16px;color:#0f172a;">Your email verification code is:</p>` +
+    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
+    `<div style="display:inline-block;padding:14px 32px;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:6px;border-radius:8px;">${code}</div>` +
+    `</td></tr></table>` +
+    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#475569;">This code will expire in ${EMAIL_VERIFY_TTL_SECONDS} seconds.</p>` +
+    `<p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">If you did not request this verification, please ignore this email.</p>` +
+    `</td></tr>` +
+    `<tr><td style="background-color:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #e2e8f0;">` +
+    `<p style="margin:0;font-size:12px;color:#94a3b8;">This is an automated message. Please do not reply to this email.</p>` +
+    `</td></tr>` +
+    `</table></td></tr></table></body></html>`;
   if (!mailer.isSmtpConfigured()) {
     throw new Error('SMTP_NOT_CONFIGURED');
   }
@@ -1541,7 +1583,7 @@ async function sendRegistrationVerificationEmail(toEmail, userName, code) {
   } catch (err) {
     throw err;
   }
-  await mailer.sendMail({ to: toEmail, subject, text, html });
+  await mailer.sendMail({ to: toEmail, subject, text, html, ...(logoAttachment ? { attachments: [logoAttachment] } : {}) });
 }
 
 // Step 1: validate details and mail a verification code. Creates NO user row.
@@ -1592,7 +1634,7 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
       [codeId, email, hashOtp(code), expiresAt, ip]
     );
     const sendWithTimeout = (ms) => Promise.race([
-      sendRegistrationVerificationEmail(email, name, code),
+      sendRegistrationVerificationEmail(email, name, code, req),
       new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_TIMEOUT')), ms)),
     ]);
     try {
@@ -1606,6 +1648,7 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
       if (kind === 'SMTP_TIMEOUT' || (err && err.code === 'ETIMEDOUT')) return res.status(504).json({ error: 'The email service took too long to respond. Please try again.' });
       if (kind === 'SMTP_AUTH') return res.status(503).json({ error: 'Email service is not configured correctly. Please contact the administrator.' });
       if (kind === 'SMTP_NOT_CONFIGURED') return res.status(503).json({ error: 'Email service is not configured. Please contact the administrator.' });
+      if (kind === 'SMTP_NO_SUCH_USER') return res.status(400).json({ error: 'Unable to send the email. Please check your registered email address and try again.' });
       return res.status(503).json({ error: 'We could not send the verification code to this email address. Please check the email address and try again.' });
     }
     return res.json({ message: 'Verification code sent.', resent: true });

@@ -25,6 +25,7 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotError, setForgotError] = useState('');
+  const [notice, setNotice] = useState('');
   const [errors, setErrors] = useState({ forgotEmail: '', otp: '', newPassword: '', confirmPassword: '' });
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -57,6 +58,7 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
     try {
       if (rememberMe) {
@@ -113,9 +115,17 @@ export default function Login() {
     setForgotMsg('');
     try {
       const data = await api.post('/api/auth/forgot-password-otp', { email: targetEmail });
-      setForgotMsg(t('common.otpSent'));
+      // Cooldown responses (resent:false) mean nothing new was mailed — don't
+      // claim success, just run the countdown until resend is allowed again.
+      if (data.resent === false) {
+        setForgotMsg('');
+      } else {
+        setForgotMsg(t('common.otpSent'));
+      }
       setResendSeconds(data.retryAfter || 60);
-      if (!isResend) setForgotStep('otp');
+      if (!isResend) {
+        setForgotStep('otp');
+      }
     } catch (err) {
       setForgotError(err.message);
     } finally {
@@ -185,8 +195,12 @@ export default function Login() {
     try {
       const data = await api.post('/api/auth/verify-otp', { email: forgotEmail, otp: code });
       if (data.valid) {
+        // Verified: the 60-second window is over — stop the countdown for good.
+        // The password step has no timer; the user may take as long as needed.
+        setResendSeconds(0);
         setForgotStep('password');
         setForgotMsg('');
+        setForgotError('');
       } else if (data.reason === 'expired') {
         setForgotError(t('common.otpExpired'));
       } else if (data.reason === 'locked') {
@@ -219,17 +233,32 @@ export default function Login() {
     setForgotError('');
     try {
       await api.post('/api/auth/reset-password-otp', { email: forgotEmail, otp: otp.trim(), password: newPassword });
-      setForgotStep('done');
-      setForgotMsg(t('common.passwordResetSuccess'));
+      // Password saved: close the reset flow and land on the Login page with
+      // a success message. The user signs in with the new password.
+      const resetEmail = forgotEmail;
+      closeForgot();
+      setUsernameOrEmail(resetEmail);
+      setNotice(t('common.passwordResetSuccess'));
     } catch (err) {
-      setForgotError(err.message);
+      const msg = err.message || '';
+      // The 60s OTP window can lapse while the user types the new password.
+      // Send them back to the code step with a resend available, not a dead end.
+      if (msg.includes('expired')) {
+        setOtp('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setResendSeconds(0);
+        setForgotStep('otp');
+        setForgotError(t('common.otpExpired'));
+      } else {
+        setForgotError(msg);
+      }
     } finally {
       setForgotLoading(false);
     }
   };
 
   const backToLogin = () => {
-    setUsernameOrEmail(forgotEmail);
     closeForgot();
   };
 
@@ -247,6 +276,7 @@ export default function Login() {
         <p className="login-subtitle">{t('common.welcomeSubtitle')}</p>
 
         {error && <div className="login-error">{error}</div>}
+        {notice && <div style={{ background: '#F0FDF4', color: '#15803D', padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{notice}</div>}
 
         <form onSubmit={handleSubmit}>
           <div className="login-field">
@@ -374,17 +404,19 @@ export default function Login() {
                   </div>
                   <ValidationError message={errors.otp} />
                 </div>
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                  {resendSeconds > 0 ? (
-                    <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
-                      Resend in {resendSeconds}s
-                    </span>
-                  ) : (
-                    <button type="button" className="forgot-link" onClick={(e) => handleSendOtp(e, true)} disabled={forgotLoading}>
-                      {t('common.resendCode')}
-                    </button>
-                  )}
-                  <button type="button" className="btn btn-outline" onClick={closeForgot}>{t('common.cancel')}</button>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                    <button type="button" className="btn btn-outline" onClick={closeForgot}>{t('common.cancel')}</button>
+                    {resendSeconds > 0 ? (
+                      <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+                        Resend in {resendSeconds}s
+                      </span>
+                    ) : (
+                      <button type="button" className="forgot-link" onClick={(e) => handleSendOtp(e, true)} disabled={forgotLoading}>
+                        {t('common.resendCode')}
+                      </button>
+                    )}
+                  </div>
                   <button type="submit" className="login-btn" style={{ width: 'auto', padding: '10px 24px' }} disabled={forgotLoading}>
                     {forgotLoading ? t('common.signingIn') : t('common.verifyCode')}
                   </button>
@@ -419,7 +451,7 @@ export default function Login() {
                   </div>
                   <ValidationError message={errors.confirmPassword} />
                 </div>
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', alignItems: 'center' }}>
                   <button type="button" className="btn btn-outline" onClick={closeForgot}>{t('common.cancel')}</button>
                   <button type="submit" className="login-btn" style={{ width: 'auto', padding: '10px 24px' }} disabled={forgotLoading}>
                     {forgotLoading ? t('common.signingIn') : t('common.resetPasswordBtn')}
@@ -434,6 +466,8 @@ export default function Login() {
                 </button>
               </div>
             )}
+            {/* 'done' is unreachable: successful resets close the modal and
+                surface the success notice on the Login page itself. */}
           </div>
         </div>
       )}

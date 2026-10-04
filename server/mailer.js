@@ -89,6 +89,13 @@ function classifySmtpError(err) {
     e.cause = err;
     return e;
   }
+  // Recipient mailbox does not exist (Gmail 550 5.1.1 NoSuchUser). The sender
+  // config is fine — the destination address is wrong or misspelled.
+  if (/5\.1\.1|nosuchuser|mailbox unavailable|recipient address rejected|user unknown|invalid recipient/i.test(msg)) {
+    const e = new Error('SMTP_NO_SUCH_USER');
+    e.cause = err;
+    return e;
+  }
   const e = new Error('SMTP_UNAVAILABLE');
   e.cause = err;
   return e;
@@ -99,15 +106,12 @@ async function sendMail({ to, subject, text, html, attachments }) {
     throw new Error('SMTP is not configured');
   }
   const s = smtpSettings();
-  // Gmail rejects a display-name-only From; always send from a real mailbox,
-  // using SMTP_FROM as the display name when it is not itself an address.
-  const fromAddr = s.from && s.from.includes('@')
-    ? s.from
-    : (s.from ? `"${s.from.replace(/"/g, '')}" <${s.user}>` : s.user);
   try {
     const info = await withTimeout(
       getTransporter().sendMail({
-        from: fromAddr,
+        from: `"Request Handling Management System" <${process.env.SMTP_FROM}>`,
+        // Reply-To matching From: consistent sender identity, no reply black hole.
+        replyTo: `"Request Handling Management System" <${process.env.SMTP_FROM}>`,
         to,
         subject,
         text,
