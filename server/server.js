@@ -956,11 +956,8 @@ app.post('/api/auth/signup', async (req, res) => {
         `<tr><td align="center" style="background-color:#ffffff;padding:36px 32px 8px;text-align:center;">` +
         logoBlock +
         `</td></tr>` +
-        `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 8px;text-align:center;">` +
-        `<h1 style="margin:0;font-size:24px;line-height:1.35;color:#1D4ED8;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
-        `</td></tr>` +
         `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 28px;text-align:center;">` +
-        `<h2 style="margin:0;font-size:18px;line-height:1.35;color:#0f172a;font-weight:700;">Request Handling Management System</h2>` +
+        `<h1 style="margin:0;font-size:24px;line-height:1.35;color:#1D4ED8;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
         `</td></tr>` +
         `<tr><td style="padding:32px;">` +
         `<p style="margin:0 0 8px;font-size:16px;color:#0f172a;">Hello ${safeName},</p>` +
@@ -1248,26 +1245,23 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
     `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
     `<tr><td align="center">` +
-    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">` +
-    `<tr><td align="center" style="background-color:#ffffff;padding:36px 32px 8px;text-align:center;">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#1E3A5F" style="max-width:600px;width:100%;background:linear-gradient(160deg,#0F172A 0%,#1E3A5F 55%,#2563EB 100%);background-color:#1E3A5F;border-radius:12px;overflow:hidden;">` +
+    `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` +
     logoBlock +
     `</td></tr>` +
-    `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 8px;text-align:center;">` +
-    `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#1D4ED8;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
-    `</td></tr>` +
-    `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 28px;text-align:center;">` +
-    `<h2 style="margin:0;font-size:18px;line-height:1.35;color:#0f172a;font-weight:700;">Request Handling Management System</h2>` +
+    `<tr><td align="center" style="padding:8px 32px 28px;text-align:center;">` +
+    `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#ffffff;font-weight:700;">Request Handling Management System</h1>` +
     `</td></tr>` +
     `<tr><td style="padding:32px;">` +
-    `<p style="margin:0 0 16px;font-size:16px;color:#0f172a;">Your password reset verification code is:</p>` +
+    `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Your password reset verification code is:</p>` +
     `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
     `<div style="display:inline-block;padding:14px 32px;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:6px;border-radius:8px;">${otp}</div>` +
     `</td></tr></table>` +
-    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#475569;">This code will expire in ${ttlSeconds} seconds.</p>` +
-    `<p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">If you did not request a password reset, please ignore this email.</p>` +
+    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#cbd5e1;">This code will expire in ${ttlSeconds} seconds.</p>` +
+    `<p style="margin:0;font-size:14px;line-height:1.7;color:#cbd5e1;">If you did not request a password reset, please ignore this email.</p>` +
     `</td></tr>` +
-    `<tr><td style="background-color:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #e2e8f0;">` +
-    `<p style="margin:0;font-size:12px;color:#94a3b8;">This is an automated message. Please do not reply to this email.</p>` +
+    `<tr><td style="background-color:rgba(255,255,255,0.08);padding:16px 32px;text-align:center;border-top:1px solid rgba(255,255,255,0.15);">` +
+    `<p style="margin:0;font-size:12px;color:#cbd5e1;">This is an automated message. Please do not reply to this email.</p>` +
     `</td></tr>` +
     `</table></td></tr></table></body></html>`;
   if (mailer.isSmtpConfigured()) {
@@ -1553,26 +1547,23 @@ async function sendRegistrationVerificationEmail(toEmail, userName, code, req) {
     `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
     `<tr><td align="center">` +
-    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">` +
-    `<tr><td align="center" style="background-color:#ffffff;padding:36px 32px 8px;text-align:center;">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#1E3A5F" style="max-width:600px;width:100%;background:linear-gradient(160deg,#0F172A 0%,#1E3A5F 55%,#2563EB 100%);background-color:#1E3A5F;border-radius:12px;overflow:hidden;">` +
+    `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` +
     logoBlock +
     `</td></tr>` +
-    `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 8px;text-align:center;">` +
-    `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#1D4ED8;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
-    `</td></tr>` +
-    `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 28px;text-align:center;">` +
-    `<h2 style="margin:0;font-size:18px;line-height:1.35;color:#0f172a;font-weight:700;">Request Handling Management System</h2>` +
+    `<tr><td align="center" style="padding:8px 32px 28px;text-align:center;">` +
+    `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#ffffff;font-weight:700;">Request Handling Management System</h1>` +
     `</td></tr>` +
     `<tr><td style="padding:32px;">` +
-    `<p style="margin:0 0 16px;font-size:16px;color:#0f172a;">Your email verification code is:</p>` +
+    `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Your email verification code is:</p>` +
     `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
     `<div style="display:inline-block;padding:14px 32px;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:6px;border-radius:8px;">${code}</div>` +
     `</td></tr></table>` +
-    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#475569;">This code will expire in ${EMAIL_VERIFY_TTL_SECONDS} seconds.</p>` +
-    `<p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">If you did not request this verification, please ignore this email.</p>` +
+    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#cbd5e1;">This code will expire in ${EMAIL_VERIFY_TTL_SECONDS} seconds.</p>` +
+    `<p style="margin:0;font-size:14px;line-height:1.7;color:#cbd5e1;">If you did not request this verification, please ignore this email.</p>` +
     `</td></tr>` +
-    `<tr><td style="background-color:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #e2e8f0;">` +
-    `<p style="margin:0;font-size:12px;color:#94a3b8;">This is an automated message. Please do not reply to this email.</p>` +
+    `<tr><td style="background-color:rgba(255,255,255,0.08);padding:16px 32px;text-align:center;border-top:1px solid rgba(255,255,255,0.15);">` +
+    `<p style="margin:0;font-size:12px;color:#cbd5e1;">This is an automated message. Please do not reply to this email.</p>` +
     `</td></tr>` +
     `</table></td></tr></table></body></html>`;
   if (!mailer.isSmtpConfigured()) {
