@@ -94,7 +94,7 @@ function classifySmtpError(err) {
   return e;
 }
 
-async function sendMail({ to, subject, text, html }) {
+async function sendMail({ to, subject, text, html, attachments }) {
   if (!isSmtpConfigured()) {
     throw new Error('SMTP is not configured');
   }
@@ -107,6 +107,7 @@ async function sendMail({ to, subject, text, html }) {
         subject,
         text,
         html,
+        attachments,
       }),
       SMTP_TIMEOUT_MS,
       'SMTP send timed out'

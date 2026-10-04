@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { OAuth2Client } = require('google-auth-library');
 const pool = require('./db');
@@ -891,19 +892,34 @@ app.post('/api/auth/signup', async (req, res) => {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     let logoUrl = '';
+    let logoAttachment = null;
     try {
       const logoResult = await pool.query("SELECT value FROM system_settings WHERE key = 'systemLogo'");
       const logoPath = logoResult.rows.length > 0 ? (logoResult.rows[0].value || '') : '';
       if (logoPath) {
-        logoUrl = logoPath.startsWith('http')
-          ? logoPath
-          : `${req.protocol}://${req.get('host')}${logoPath.startsWith('/') ? '' : '/'}${logoPath}`;
+        if (logoPath.startsWith('/uploads/')) {
+          // Embed the existing logo file inline (CID) so clients render it
+          // without fetching any URL. Never expose the local path in the email.
+          const filePath = path.join(__dirname, 'uploads', path.basename(logoPath));
+          const ext = path.extname(filePath).toLowerCase();
+          if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext) && fs.existsSync(filePath)) {
+            logoAttachment = { filename: `rhms-logo${ext}`, path: filePath, cid: 'rhmslogo' };
+          } else {
+            logoUrl = `${req.protocol}://${req.get('host')}${logoPath}`;
+          }
+        } else {
+          logoUrl = logoPath.startsWith('http')
+            ? logoPath
+            : `${req.protocol}://${req.get('host')}${logoPath.startsWith('/') ? '' : '/'}${logoPath}`;
+        }
       }
     } catch (e) { /* logo is decorative; never block the email */ }
     const safeName = escapeHtml(newUser.name);
-    const logoBlock = logoUrl
-      ? `<img src="${escapeHtml(logoUrl)}" alt="RHMS Logo" width="180" style="display:block;margin:0 auto;max-width:180px;width:100%;height:auto;border:0;" />`
-      : `<div style="font-size:42px;font-weight:800;letter-spacing:2px;color:#1D4ED8;">RHMS</div>`;
+    const logoBlock = logoAttachment
+      ? `<img src="cid:rhmslogo" alt="RHMS Logo" width="200" style="display:block;margin:0 auto;max-width:200px;width:100%;height:auto;border:0;" />`
+      : logoUrl
+        ? `<img src="${escapeHtml(logoUrl)}" alt="RHMS Logo" width="200" style="display:block;margin:0 auto;max-width:200px;width:100%;height:auto;border:0;" />`
+        : `<div style="font-size:42px;font-weight:800;letter-spacing:2px;color:#1D4ED8;">RHMS</div>`;
     mailer.sendMail({
       to: newUser.email,
       subject: 'RHMS Registration Successful',
@@ -920,9 +936,11 @@ app.post('/api/auth/signup', async (req, res) => {
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
         `<tr><td align="center">` +
         `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">` +
-        `<tr><td style="background:linear-gradient(135deg,#1D4ED8,#2563EB);padding:36px 32px;text-align:center;">` +
+        `<tr><td align="center" style="background-color:#ffffff;padding:36px 32px 8px;text-align:center;">` +
         logoBlock +
-        `<h1 style="margin:20px 0 0;font-size:24px;line-height:1.35;color:#ffffff;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
+        `</td></tr>` +
+        `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 28px;text-align:center;">` +
+        `<h1 style="margin:0;font-size:24px;line-height:1.35;color:#1D4ED8;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
         `</td></tr>` +
         `<tr><td style="padding:32px;">` +
         `<p style="margin:0 0 8px;font-size:16px;color:#0f172a;">Hello ${safeName},</p>` +
@@ -935,6 +953,7 @@ app.post('/api/auth/signup', async (req, res) => {
         `<p style="margin:0;font-size:12px;color:#94a3b8;">This is an automated message. Please do not reply to this email.</p>` +
         `</td></tr>` +
         `</table></td></tr></table></body></html>`,
+      ...(logoAttachment ? { attachments: [logoAttachment] } : {}),
     }).then(() => {
       console.log(`[Signup] Registration confirmation email sent to ${newUser.email}`);
     }).catch((err) => {
