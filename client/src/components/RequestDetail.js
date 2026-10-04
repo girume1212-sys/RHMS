@@ -386,6 +386,26 @@ export default function RequestDetail() {
     return colors[status?.name] || '#6B7280';
   };
 
+  // Abstract gradient background for each Status Flow dot (visual only).
+  // Soft radial highlight + deep blend, auto-derived from the status color
+  // so custom statuses get a matching professional gradient automatically.
+  // Existing status colors, icons, and animations are unchanged.
+  const hexAlpha = (hex, a) => {
+    let h = String(hex || '#6B7280').replace('#', '');
+    if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+    const n = parseInt(h.slice(0, 6), 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  };
+
+  // Abstract gradient background for each Status Flow STEP CARD (visual only).
+  // Soft light tints auto-derived from the status color so custom statuses
+  // get a matching professional card background automatically. The animated
+  // dot itself keeps its solid status color; icons and animations unchanged.
+  const getStatusCardBackground = (color) => {
+    const base = color || '#6B7280';
+    return `radial-gradient(circle at 20% 12%, ${hexAlpha(base, 0.22)} 0%, ${hexAlpha(base, 0)} 60%), radial-gradient(circle at 88% 90%, ${hexAlpha(base, 0.16)} 0%, ${hexAlpha(base, 0)} 55%), linear-gradient(165deg, ${hexAlpha(base, 0.12)} 0%, ${hexAlpha(base, 0.04)} 100%)`;
+  };
+
   // Abstract per-status animation for the Status Flow dots (visual only).
   // Custom statuses are matched by meaning-keywords; unknown names fall back
   // to a subtle neutral animation. Colors always come from getStatusColor.
@@ -1304,7 +1324,10 @@ export default function RequestDetail() {
                       const requestId = `REQ-${String(id).padStart(4, '0')}`;
                       return flowSteps.map((step, idx) => (
                         <React.Fragment key={idx}>
-                          <div className={`lifecycle-step visited ${step.current ? 'current' : ''} ${step.isPast ? 'past' : ''}`}>
+                          <div className={`lifecycle-step visited ${step.current ? 'current' : ''} ${step.isPast ? 'past' : ''}`} style={{
+                            background: getStatusCardBackground(step.color),
+                            border: `1px solid ${hexAlpha(step.color, 0.28)}`
+                          }}>
                             <div className={`lifecycle-dot ${step.current ? getStatusAnim(step.name) : 'anim-none'}`} style={{
                               background: step.color,
                               '--step-color': step.color,

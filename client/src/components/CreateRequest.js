@@ -32,6 +32,7 @@ export default function CreateRequest() {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [blockedError, setBlockedError] = useState(false);
 
   const isClient = user?.role === 'client';
   const basePath = isClient ? '/client' : '';
@@ -100,14 +101,30 @@ export default function CreateRequest() {
 
   const isOtherCategory = form.categoryId === '8';
 
+  const BLOCKED_SUBMIT_MSG = 'Your account is blocked.\nYou cannot submit or perform request-related actions. Please contact the administrator.';
+  const isBlockedUser = user?.role !== 'admin' && user?.approved === false;
+
+  const showBlockedError = () => {
+    setBlockedError(true);
+    setError(BLOCKED_SUBMIT_MSG);
+    addToast(BLOCKED_SUBMIT_MSG.replace('\n', ' '), 'error');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.subject.trim() || !form.description.trim() || !form.categoryId) {
+      setBlockedError(false);
       setError(t('common.fillRequiredFields'));
       addToast(t('common.fillRequiredFields'), 'error');
       return;
     }
+    // Blocked users fill the form normally; creation is refused at submit.
+    if (isBlockedUser) {
+      showBlockedError();
+      return;
+    }
     setLoading(true);
+    setBlockedError(false);
     setError('');
     try {
       let attachments = [];
@@ -121,9 +138,13 @@ export default function CreateRequest() {
       showStatusToast(t('common.newRequestCreated', { subject: form.subject }), 'request_created');
       navigate(`${basePath}/requests`);
     } catch (err) {
-      if (err.response?.status === 403) {
-        setError('Your account is blocked. You cannot submit request.');
+      // Backend also refuses blocked users (403); surface the same status message
+      // (covers sessions blocked after login). api.js translates the server text.
+      const blockedByServer = err.message === t('common.accountBlocked') || /blocked/i.test(err.message || '');
+      if (blockedByServer) {
+        showBlockedError();
       } else {
+        setBlockedError(false);
         setError(err.message);
         addToast(t('common.failedToCreateRequest') + ': ' + err.message, 'error');
       }
@@ -149,7 +170,16 @@ export default function CreateRequest() {
 
       <div className="form-card">
         <form onSubmit={handleSubmit}>
-          {error && <div className="form-error">{error}</div>}
+          {error && (
+            <div className="form-error" style={{ whiteSpace: 'pre-line', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+              {blockedError && (
+                <span style={{ color: '#DC2626', flexShrink: 0, marginTop: '2px', display: 'inline-flex' }}>
+                  <Icon name="lock" size={20} />
+                </span>
+              )}
+              <span>{error}</span>
+            </div>
+          )}
           <div className="form-group">
             <label>{t('common.requestTitle')} *</label>
             <input type="text" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder={t('common.briefDescription')} required />
