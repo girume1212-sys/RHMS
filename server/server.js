@@ -780,6 +780,42 @@ async function getEmailLogoBlock(req) {
   return { logoBlock, logoAttachment };
 }
 
+// Contact footer for RHMS notification emails. Reads the real contact details
+// from system_settings (companyName, systemEmail, phoneNumber) — nothing is
+// hard-coded. No website setting exists in the system, so no website line is
+// rendered. Black gradient background with light text for contrast.
+async function getEmailContactFooter() {
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  let companyName = 'RHMS';
+  let supportEmail = '';
+  let phone = '';
+  try {
+    const r = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('companyName','systemEmail','phoneNumber')");
+    for (const row of r.rows) {
+      if (row.key === 'companyName' && row.value) companyName = row.value;
+      if (row.key === 'systemEmail' && row.value) supportEmail = row.value;
+      if (row.key === 'phoneNumber' && row.value) phone = row.value;
+    }
+  } catch (e) { /* fall back to defaults */ }
+  const lines = [
+    `<p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#ffffff;">Request Handling Management System (${esc(companyName)})</p>`,
+  ];
+  if (supportEmail) {
+    lines.push(`<p style="margin:0 0 4px;font-size:13px;color:#d1d5db;">Support Email: <a href="mailto:${esc(supportEmail)}" style="color:#d1d5db;text-decoration:underline;">${esc(supportEmail)}</a></p>`);
+  }
+  if (phone) {
+    lines.push(`<p style="margin:0 0 4px;font-size:13px;color:#d1d5db;">Phone: ${esc(phone)}</p>`);
+  }
+  lines.push(`<p style="margin:12px 0 0;font-size:11px;color:#9ca3af;">This is an automated message. Please do not reply to this email.</p>`);
+  return (
+    `<tr><td align="center" style="background:linear-gradient(160deg,#000000 0%,#111827 55%,#1F2937 100%);background-color:#111827;padding:20px 32px;text-align:center;">` +
+    lines.join('') +
+    `</td></tr>`
+  );
+}
+
 // SSE endpoint for real-time notifications (token via query param for EventSource)
 app.get('/api/notifications/stream', async (req, res) => {
   // Auth via query param since EventSource doesn't support headers
@@ -934,6 +970,7 @@ app.post('/api/auth/signup', async (req, res) => {
     const safeName = escapeHtml(newUser.name);
     const loginUrl = `${req.protocol}://${req.get('host')}/login`;
     const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
+    const contactFooter = await getEmailContactFooter();
     mailer.sendMail({
       to: newUser.email,
       subject: 'RHMS Registration Successful',
@@ -952,28 +989,26 @@ app.post('/api/auth/signup', async (req, res) => {
         `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
         `<tr><td align="center">` +
-        `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">` +
-        `<tr><td align="center" style="background-color:#ffffff;padding:36px 32px 8px;text-align:center;">` +
+        `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111827" style="max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#111827 55%,#1F2937 100%);background-color:#111827;border-radius:12px;overflow:hidden;">` +
+        `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` +
         logoBlock +
         `</td></tr>` +
-        `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 28px;text-align:center;">` +
-        `<h1 style="margin:0;font-size:24px;line-height:1.35;color:#1D4ED8;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
+        `<tr><td align="center" style="padding:8px 32px 28px;text-align:center;">` +
+        `<h1 style="margin:0;font-size:24px;line-height:1.35;color:#ffffff;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
         `</td></tr>` +
         `<tr><td style="padding:32px;">` +
-        `<p style="margin:0 0 8px;font-size:16px;color:#0f172a;">Hello ${safeName},</p>` +
-        `<p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#1D4ED8;">🎉 You have successfully registered and verified your email.</p>` +
-        `<p style="margin:0 0 16px;font-size:16px;color:#0f172a;">Your RHMS account is now ready to use.</p>` +
-        `<p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#475569;">The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It allows users to submit and track requests while support teams and developers can efficiently manage, assign, resolve, and monitor issues from creation through completion.</p>` +
+        `<p style="margin:0 0 8px;font-size:16px;color:#f1f5f9;">Hello ${safeName},</p>` +
+        `<p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#ffffff;">🎉 You have successfully registered and verified your email.</p>` +
+        `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Your RHMS account is now ready to use.</p>` +
+        `<p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#cbd5e1;">The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It allows users to submit and track requests while support teams and developers can efficiently manage, assign, resolve, and monitor issues from creation through completion.</p>` +
         `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
         `<a href="${escapeHtml(loginUrl)}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Sign In to RHMS</a>` +
         `</td></tr></table>` +
-        `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#475569;">Your account is now ready to use. Sign in using your registered email address and password.</p>` +
-        `<p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">Regards,<br><strong>RHMS Request Handling Management System</strong></p>` +
-        `<p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:#94a3b8;">If you did not create this account, please contact the RHMS administrator.</p>` +
+        `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#cbd5e1;">Your account is now ready to use. Sign in using your registered email address and password.</p>` +
+        `<p style="margin:0;font-size:14px;line-height:1.7;color:#cbd5e1;">Regards,<br><strong>RHMS Request Handling Management System</strong></p>` +
+        `<p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:#cbd5e1;">If you did not create this account, please contact the RHMS administrator.</p>` +
         `</td></tr>` +
-        `<tr><td style="background-color:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #e2e8f0;">` +
-        `<p style="margin:0;font-size:12px;color:#94a3b8;">This is an automated message. Please do not reply to this email.</p>` +
-        `</td></tr>` +
+        contactFooter +
         `</table></td></tr></table></body></html>`,
       ...(logoAttachment ? { attachments: [logoAttachment] } : {}),
     }).then(() => {
@@ -1233,6 +1268,7 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
     if (r.rows.length > 0 && r.rows[0].value) fromAddress = r.rows[0].value;
   } catch (e) { /* fall back to default sender */ }
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
+  const contactFooter = await getEmailContactFooter();
   const subject = 'RHMS Password Reset Code';
   const text =
     `Request Handling Management System\n\n` +
@@ -1245,7 +1281,7 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
     `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
     `<tr><td align="center">` +
-    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#1E3A5F" style="max-width:600px;width:100%;background:linear-gradient(160deg,#0F172A 0%,#1E3A5F 55%,#2563EB 100%);background-color:#1E3A5F;border-radius:12px;overflow:hidden;">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111827" style="max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#111827 55%,#1F2937 100%);background-color:#111827;border-radius:12px;overflow:hidden;">` +
     `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` +
     logoBlock +
     `</td></tr>` +
@@ -1260,9 +1296,7 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
     `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#cbd5e1;">This code will expire in ${ttlSeconds} seconds.</p>` +
     `<p style="margin:0;font-size:14px;line-height:1.7;color:#cbd5e1;">If you did not request a password reset, please ignore this email.</p>` +
     `</td></tr>` +
-    `<tr><td style="background-color:rgba(255,255,255,0.08);padding:16px 32px;text-align:center;border-top:1px solid rgba(255,255,255,0.15);">` +
-    `<p style="margin:0;font-size:12px;color:#cbd5e1;">This is an automated message. Please do not reply to this email.</p>` +
-    `</td></tr>` +
+    contactFooter +
     `</table></td></tr></table></body></html>`;
   if (mailer.isSmtpConfigured()) {
     try {
@@ -1535,6 +1569,7 @@ async function findValidEmailCode(emailLower, code) {
 
 async function sendRegistrationVerificationEmail(toEmail, userName, code, req) {
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
+  const contactFooter = await getEmailContactFooter();
   const subject = 'RHMS Email Verification Code';
   const text =
     `Request Handling Management System\n\n` +
@@ -1547,7 +1582,7 @@ async function sendRegistrationVerificationEmail(toEmail, userName, code, req) {
     `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
     `<tr><td align="center">` +
-    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#1E3A5F" style="max-width:600px;width:100%;background:linear-gradient(160deg,#0F172A 0%,#1E3A5F 55%,#2563EB 100%);background-color:#1E3A5F;border-radius:12px;overflow:hidden;">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111827" style="max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#111827 55%,#1F2937 100%);background-color:#111827;border-radius:12px;overflow:hidden;">` +
     `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` +
     logoBlock +
     `</td></tr>` +
@@ -1562,9 +1597,7 @@ async function sendRegistrationVerificationEmail(toEmail, userName, code, req) {
     `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#cbd5e1;">This code will expire in ${EMAIL_VERIFY_TTL_SECONDS} seconds.</p>` +
     `<p style="margin:0;font-size:14px;line-height:1.7;color:#cbd5e1;">If you did not request this verification, please ignore this email.</p>` +
     `</td></tr>` +
-    `<tr><td style="background-color:rgba(255,255,255,0.08);padding:16px 32px;text-align:center;border-top:1px solid rgba(255,255,255,0.15);">` +
-    `<p style="margin:0;font-size:12px;color:#cbd5e1;">This is an automated message. Please do not reply to this email.</p>` +
-    `</td></tr>` +
+    contactFooter +
     `</table></td></tr></table></body></html>`;
   if (!mailer.isSmtpConfigured()) {
     throw new Error('SMTP_NOT_CONFIGURED');
