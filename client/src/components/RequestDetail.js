@@ -162,10 +162,11 @@ export default function RequestDetail() {
   useEffect(() => {
     if (!id) return;
     const timer = setInterval(() => {
+      if (document.hidden) return;
       api.get(`/api/requests/${id}`).then(data => {
         setRequest(prev => prev ? { ...prev, comments: data.comments, status: data.status, statusId: data.statusId, assignedTo: data.assignedTo } : data);
       }).catch(() => {});
-    }, 4000);
+    }, 10000);
     return () => clearInterval(timer);
   }, [id]);
 

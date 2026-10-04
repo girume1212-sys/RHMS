@@ -52,13 +52,20 @@ export default function CreateRequest() {
   }, []);
 
   useEffect(() => {
-    api.get('/api/categories').then(setCategories);
-    api.get('/api/priorities').then(setPriorities);
-    api.get('/api/settings/public').then(settings => {
+    let cancelled = false;
+    Promise.all([
+      api.get('/api/categories').catch(() => []),
+      api.get('/api/priorities').catch(() => []),
+      api.get('/api/settings/public').catch(() => ({})),
+    ]).then(([cats, pris, settings]) => {
+      if (cancelled) return;
+      setCategories(cats);
+      setPriorities(pris);
       if (settings.defaultPriority) {
         setForm(prev => ({ ...prev, priorityId: settings.defaultPriority }));
       }
-    }).catch(() => {});
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const handleFileChange = (e) => {

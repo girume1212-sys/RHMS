@@ -433,6 +433,18 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_request_watchers_user ON request_watchers(user_id)`);
     console.log('request_watchers table ready');
+    // Performance indexes for hot filters/joins (safe, IF NOT EXISTS)
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_priority ON requests(priority_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_category ON requests(category_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_client ON requests(client_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_assigned ON requests(assigned_to)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_created ON requests(created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_comments_request ON comments(request_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_groups_user ON user_groups(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_groups_group ON user_groups(group_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC)`);
   } catch (err) {
     console.log('Init error:', err.message);
   }
@@ -805,7 +817,7 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: 'Email verification failed. Please verify your email address first.' });
     }
     const id = uuidv4();
-    const hashedPassword = bcrypt.hashSync(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
     let result;
     try {
       result = await pool.query(
@@ -876,7 +888,7 @@ app.post('/api/auth/login', async (req, res) => {
     const attemptResult = await pool.query("SELECT value FROM system_settings WHERE key = 'maxLoginAttempts'");
     const maxAttempts = attemptResult.rows.length > 0 ? parseInt(attemptResult.rows[0].value) || 5 : 5;
 
-    if (!user || !bcrypt.compareSync(password, user.password)) {
+    if (!user || !(await bcrypt.compare(password, user.password))) {
       if (user) {
         const currentAttempts = (user.login_attempts || 0) + 1;
         await pool.query('UPDATE users SET login_attempts = $1 WHERE id = $2', [currentAttempts, user.id]);
@@ -953,7 +965,7 @@ app.post('/api/auth/google', async (req, res) => {
       const id = uuidv4();
       result = await pool.query(
         'INSERT INTO users (id, name, email, password, role, avatar) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-        [id, name, email, bcrypt.hashSync(googleId, 10), 'client', picture || null]
+        [id, name, email, await bcrypt.hash(googleId, 10), 'client', picture || null]
       );
       user = result.rows[0];
     }
@@ -1064,7 +1076,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
     if (row.used_at) return res.status(400).json({ error: 'Invalid or expired reset token' });
     if (new Date(row.expires_at).getTime() < Date.now()) return res.status(400).json({ error: 'Reset token has expired' });
 
-    const hashedPassword = bcrypt.hashSync(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
     await pool.query('UPDATE users SET password = $1, login_attempts = 0 WHERE id = $2', [hashedPassword, row.user_id]);
     await pool.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1', [row.token_id]);
     // Revoke all existing sessions for the user so the new password takes effect.
@@ -1300,7 +1312,7 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
       if (check.reason === 'expired') return res.status(400).json({ error: 'Code has expired' });
       return res.status(400).json({ error: 'Invalid or expired code' });
     }
-    const hashedPassword = bcrypt.hashSync(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
     await pool.query('UPDATE users SET password = $1, login_attempts = 0 WHERE id = $2', [hashedPassword, userId]);
     // Invalidate the OTP after successful reset (single-use).
     await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE id = $1', [check.id]);
@@ -1501,7 +1513,7 @@ app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res)
       return res.status(400).json({ error: 'Email already exists' });
     }
     const id = uuidv4();
-    const hashedPassword = bcrypt.hashSync(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
     await pool.query(
       'INSERT INTO users (id, name, email, password, role, company_name, language, approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [id, name, email, hashedPassword, role || 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en', true]
@@ -1549,7 +1561,7 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
     const lang = ['en', 'am'].includes(language) ? language : undefined;
     let query, params;
     if (password) {
-      const hashedPassword = bcrypt.hashSync(password, 10);
+      const hashedPassword = await bcrypt.hash(password, 10);
       query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role), password = $4, company_name = COALESCE($5, company_name), language = COALESCE($6, language) WHERE id = $7 RETURNING *';
       params = [name, email, role, hashedPassword, companyName, lang, req.params.id];
     } else {
@@ -1657,7 +1669,7 @@ app.put('/api/profile', authMiddleware, upload.single('avatar'), async (req, res
     const lang = ['en', 'am'].includes(language) ? language : undefined;
     let query, params;
     if (password) {
-      const hashedPassword = bcrypt.hashSync(password, 10);
+      const hashedPassword = await bcrypt.hash(password, 10);
       if (avatarPath) {
         query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), password = $3, company_name = COALESCE($4, company_name), language = COALESCE($5, language), avatar = $6 WHERE id = $7 RETURNING *';
         params = [name, email, hashedPassword, companyName || '', lang, avatarPath, userId];
@@ -4831,11 +4843,15 @@ async function runAutoEscalation() {
     .filter(Boolean);
 
   const candidates = await pool.query(
-    `SELECT r.id, r.status_id, r.assigned_to, r.client_id, r.updated_at, s.name AS status_name, u.name AS assignee_name
+    `SELECT r.id, r.status_id, r.assigned_to, r.assigned_group, r.client_id, r.updated_at,
+            s.name AS status_name, u.name AS assignee_name, g.name AS group_name
      FROM requests r
-     JOIN users u ON u.id = r.assigned_to AND u.role = 'developer'
+     LEFT JOIN users u ON u.id = r.assigned_to
+     LEFT JOIN groups g ON g.id = r.assigned_group
      JOIN statuses s ON s.id = r.status_id
-     WHERE r.assigned_to IS NOT NULL AND r.status_id <> ALL($1)`,
+     WHERE r.status_id <> ALL($1)
+       AND ((r.assigned_to IS NOT NULL AND u.role = 'developer')
+         OR (r.assigned_to IS NULL AND r.assigned_group IS NOT NULL))`,
     [terminalIds.length > 0 ? terminalIds : ['__none__']]
   );
   if (candidates.rows.length === 0) return;
@@ -4843,10 +4859,13 @@ async function runAutoEscalation() {
 
   for (const req of candidates.rows) {
     try {
+      // Individual assignment: exact DB timestamp of the latest assignment.
+      // Group assignment: exact DB timestamp of the latest group assignment.
+      const isGroup = !req.assigned_to && !!req.assigned_group;
       const assignedRows = await pool.query(
-        `SELECT created_at FROM activity_log WHERE request_id = $1 AND type = 'assigned'
+        `SELECT created_at FROM activity_log WHERE request_id = $1 AND type = $2
          ORDER BY created_at DESC LIMIT 1`,
-        [req.id]
+        [req.id, isGroup ? 'assigned_group_changed' : 'assigned']
       );
       const assignedAt = assignedRows.rows.length > 0
         ? new Date(assignedRows.rows[0].created_at).getTime()
@@ -4854,9 +4873,12 @@ async function runAutoEscalation() {
       if (!Number.isFinite(assignedAt) || now - assignedAt < minutes * 60 * 1000) continue;
 
       // Re-check status inside the loop so a concurrent resolve wins.
-      const fresh = await pool.query('SELECT status_id FROM requests WHERE id = $1', [req.id]);
+      const fresh = await pool.query('SELECT status_id, assigned_to, assigned_group FROM requests WHERE id = $1', [req.id]);
       if (fresh.rows.length === 0 || fresh.rows[0].status_id !== req.status_id) continue;
       if (terminalIds.includes(fresh.rows[0].status_id)) continue;
+      // Skip if the assignment changed since the candidate was selected.
+      if ((fresh.rows[0].assigned_to || null) !== (req.assigned_to || null)) continue;
+      if ((fresh.rows[0].assigned_group || null) !== (req.assigned_group || null)) continue;
 
       const timestamp = new Date().toISOString();
       await pool.query('UPDATE requests SET status_id = $1, updated_at = $2 WHERE id = $3', [escalatedId, timestamp, req.id]);
@@ -4864,18 +4886,35 @@ async function runAutoEscalation() {
         'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
         [uuidv4(), 'status_update', req.id, null, `Changed status from ${req.status_name} to Escalated`, timestamp]
       );
+      const reason = isGroup
+        ? `This request was automatically escalated because the assigned group (${req.group_name || 'group'}) did not complete it within the configured time (${minutes} minutes).`
+        : `This request was automatically escalated because the Developer did not complete it within the configured time (${minutes} minutes).`;
       await pool.query(
         'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-        [uuidv4(), 'escalated', req.id, null, `This request was automatically escalated because the Developer did not complete it within the configured time (${minutes} minutes).`, timestamp]
+        [uuidv4(), 'escalated', req.id, null, reason, timestamp]
       );
-      notifyAdmins(`Request #${req.id} was automatically escalated (${req.assignee_name || 'developer'} exceeded ${minutes} minutes)`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
+      const adminMsg = isGroup
+        ? `Request #${req.id} was automatically escalated (group ${req.group_name || 'assignment'} exceeded ${minutes} minutes)`
+        : `Request #${req.id} was automatically escalated (${req.assignee_name || 'developer'} exceeded ${minutes} minutes)`;
+      notifyAdmins(adminMsg, { type: 'status_change', requestId: req.id, status: 'Escalated' });
       if (req.assigned_to) {
         notifyUser(req.assigned_to, `Request #${req.id} was automatically escalated because it was not completed within ${minutes} minutes`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
+      }
+      if (isGroup && req.assigned_group) {
+        // Notify the developers of the assigned group (existing group system).
+        const members = await pool.query(
+          `SELECT u.id FROM users u JOIN user_groups ug ON ug.user_id = u.id
+           WHERE ug.group_id = $1 AND u.role = 'developer'`,
+          [req.assigned_group]
+        );
+        for (const m of members.rows) {
+          notifyUser(m.id, `Request #${req.id} assigned to your group was automatically escalated after ${minutes} minutes`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
+        }
       }
       if (req.client_id) {
         notifyUser(req.client_id, `Your request #${req.id} status changed to Escalated`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
       }
-      console.log(`[AutoEscalation] Request #${req.id} escalated after ${minutes} minutes assigned to developer.`);
+      console.log(`[AutoEscalation] Request #${req.id} escalated after ${minutes} minutes (${isGroup ? 'group' : 'developer'} assignment).`);
     } catch (err) {
       console.error(`[AutoEscalation] Failed for request #${req.id}:`, err.message);
     }

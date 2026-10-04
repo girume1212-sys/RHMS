@@ -134,10 +134,13 @@ export default function GlobalSearchResults({ clientMode = false }) {
     setLoading(true);
     setError('');
     const effectivePage = type === 'all' ? 1 : page;
-    api.get(`/api/search?q=${encodeURIComponent(q)}&type=${type}&page=${effectivePage}&limit=10`)
-      .then(setData)
-      .catch(err => setError(t('search.failedSearch') + ': ' + err.message))
-      .finally(() => setLoading(false));
+    const timer = setTimeout(() => {
+      api.get(`/api/search?q=${encodeURIComponent(q)}&type=${type}&page=${effectivePage}&limit=10`)
+        .then(setData)
+        .catch(err => setError(t('search.failedSearch') + ': ' + err.message))
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
   }, [q, type, page]);
 
   const availableTypes = [

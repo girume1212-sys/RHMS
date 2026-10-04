@@ -6,6 +6,9 @@ const pool = new Pool({
   database: 'rhms',
   user: 'etech',
   password: 'etech',
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
 });
 
 pool.on('error', (err) => {
