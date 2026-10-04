@@ -248,7 +248,7 @@ export default function ClientDashboard() {
         <div className="sf-toolbar-left">
           <div className="table-search-box">
             <span className="search-icon"><Icon name="search" size={14} /></span>
-            <input type="text" className="filter-search" placeholder={t('common.searchMyRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+            <input type="text" placeholder={t('common.searchMyRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
           </div>
         </div>
         <div className="sf-toolbar-right" />

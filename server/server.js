@@ -915,6 +915,7 @@ app.post('/api/auth/signup', async (req, res) => {
       }
     } catch (e) { /* logo is decorative; never block the email */ }
     const safeName = escapeHtml(newUser.name);
+    const loginUrl = `${req.protocol}://${req.get('host')}/login`;
     const logoBlock = logoAttachment
       ? `<img src="cid:rhmslogo" alt="RHMS Logo" width="200" style="display:block;margin:0 auto;max-width:200px;width:100%;height:auto;border:0;" />`
       : logoUrl
@@ -926,10 +927,13 @@ app.post('/api/auth/signup', async (req, res) => {
       text:
         `Welcome to the Request Handling Management System!\n\n` +
         `Hello ${newUser.name},\n\n` +
-        `You have successfully registered.\n\n` +
-        `The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It helps users submit and track requests, while support teams and developers can manage, assign, resolve, and monitor issues efficiently from creation through completion.\n\n` +
-        `Your account is now ready to use. You can sign in to RHMS using your registered email address and password.\n\n` +
-        `Regards,\nRHMS Request Handling Management System`,
+        `🎉 You have successfully registered and verified your email.\n\n` +
+        `Your RHMS account is now ready to use.\n\n` +
+        `The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It allows users to submit and track requests while support teams and developers can efficiently manage, assign, resolve, and monitor issues from creation through completion.\n\n` +
+        `Sign in to RHMS: ${loginUrl}\n\n` +
+        `Your account is now ready to use. Sign in using your registered email address and password.\n\n` +
+        `Regards,\nRHMS Request Handling Management System\n\n` +
+        `If you did not create this account, please contact the RHMS administrator.`,
       html:
         `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
         `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
@@ -944,10 +948,15 @@ app.post('/api/auth/signup', async (req, res) => {
         `</td></tr>` +
         `<tr><td style="padding:32px;">` +
         `<p style="margin:0 0 8px;font-size:16px;color:#0f172a;">Hello ${safeName},</p>` +
-        `<p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#1D4ED8;">You have successfully registered.</p>` +
-        `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#475569;">The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It helps users submit and track requests, while support teams and developers can manage, assign, resolve, and monitor issues efficiently from creation through completion.</p>` +
-        `<p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#475569;">Your account is now ready to use. You can sign in to RHMS using your registered email address and password.</p>` +
+        `<p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#1D4ED8;">🎉 You have successfully registered and verified your email.</p>` +
+        `<p style="margin:0 0 16px;font-size:16px;color:#0f172a;">Your RHMS account is now ready to use.</p>` +
+        `<p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#475569;">The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It allows users to submit and track requests while support teams and developers can efficiently manage, assign, resolve, and monitor issues from creation through completion.</p>` +
+        `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
+        `<a href="${escapeHtml(loginUrl)}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Sign In to RHMS</a>` +
+        `</td></tr></table>` +
+        `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#475569;">Your account is now ready to use. Sign in using your registered email address and password.</p>` +
         `<p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">Regards,<br><strong>RHMS Request Handling Management System</strong></p>` +
+        `<p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:#94a3b8;">If you did not create this account, please contact the RHMS administrator.</p>` +
         `</td></tr>` +
         `<tr><td style="background-color:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #e2e8f0;">` +
         `<p style="margin:0;font-size:12px;color:#94a3b8;">This is an automated message. Please do not reply to this email.</p>` +
@@ -1212,19 +1221,39 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds) {
   } catch (e) { /* fall back to default sender */ }
   const subject = 'RHMS Password Reset Code';
   const text =
-    `Hello,\n\n` +
-    `Your (RHMS) Request Handling Management System password reset code is:\n\n` +
+    `Request Handling Management System\n\n` +
+    `Your email verification code is:\n\n` +
+    `Hello ${userName},\n\n` +
+    `Your (RHMS) Request Handling Management System email verification code is:\n\n` +
     `${otp}\n\n` +
     `This code will expire in ${ttlSeconds} seconds.\n\n` +
-    `If you did not request a password reset, please ignore this email.\n\n` +
-    `Regards,\nRHMS Support Team`;
+    `If you did not request a password reset, please ignore this email.`;
   const html =
-    `<p>Hello,</p>` +
-    `<p>Your (RHMS) Request Handling Management System password reset code is:</p>` +
-    `<p><strong style="font-size:20px;letter-spacing:4px;">${otp}</strong></p>` +
-    `<p>This code will expire in ${ttlSeconds} seconds.</p>` +
-    `<p>If you did not request a password reset, please ignore this email.</p>` +
-    `<p>Regards,<br>RHMS Support Team</p>`;
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+    `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
+    `<tr><td align="center">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;">` +
+    `<tr><td align="center" style="background-color:#ffffff;padding:36px 32px 8px;text-align:center;">` +
+    `<div style="font-size:28px;font-weight:800;letter-spacing:2px;color:#1D4ED8;">RHMS</div>` +
+    `</td></tr>` +
+    `<tr><td align="center" style="background-color:#ffffff;padding:8px 32px 28px;text-align:center;">` +
+    `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#1D4ED8;font-weight:700;">Request Handling Management System</h1>` +
+    `</td></tr>` +
+    `<tr><td style="padding:32px;">` +
+    `<p style="margin:0 0 8px;font-size:16px;color:#0f172a;">Your email verification code is:</p>` +
+    `<p style="margin:0 0 16px;font-size:16px;color:#0f172a;">Hello ${userName},</p>` +
+    `<p style="margin:0 0 16px;font-size:16px;color:#0f172a;">Your (RHMS) Request Handling Management System email verification code is:</p>` +
+    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
+    `<div style="display:inline-block;padding:14px 32px;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:6px;border-radius:8px;">${otp}</div>` +
+    `</td></tr></table>` +
+    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#475569;">This code will expire in ${ttlSeconds} seconds.</p>` +
+    `<p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">If you did not request a password reset, please ignore this email.</p>` +
+    `</td></tr>` +
+    `<tr><td style="background-color:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #e2e8f0;">` +
+    `<p style="margin:0;font-size:12px;color:#94a3b8;">This is an automated message. Please do not reply to this email.</p>` +
+    `</td></tr>` +
+    `</table></td></tr></table></body></html>`;
   if (mailer.isSmtpConfigured()) {
     try {
       // Fast-fail when the SMTP server is unreachable instead of hanging.
@@ -1302,12 +1331,16 @@ async function findValidOtp(userId, otp) {
   return { ok: true, id: row.id };
 }
 
-// Step 1: verify the account exists, generate a secure 6-digit OTP, store only
-// its hash with expiry, and send it. Generic response prevents enumeration.
+// Step 1: verify the account is registered and verified, generate a secure
+// 6-digit OTP, store only its hash with expiry, and send it. Distinct errors
+// tell the user whether the account is missing or verification is incomplete.
 app.post('/api/auth/forgot-password-otp', async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
     if (!email) return res.status(400).json({ error: 'Email is required' });
+    if (!EMAIL_REGEX.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
     const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
     if (!otpRateLimit(`send:${ip}`, 20, 60 * 60 * 1000)) {
       return res.status(429).json({ error: 'Too many requests. Please try again later.' });
@@ -1316,9 +1349,34 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
       return res.status(429).json({ error: 'Too many reset requests for this email. Please try again later.' });
     }
 
-    const userResult = await pool.query('SELECT id, name, email FROM users WHERE LOWER(email) = $1', [email]);
-    if (userResult.rows.length > 0) {
-      const user = userResult.rows[0];
+    // Account must be registered AND verified before any reset OTP is issued.
+    // No user row is created until signup email verification completes, so a
+    // missing row means never registered — unless verification was started
+    // but never finished (codes exist, none consumed).
+    const userResult = await pool.query('SELECT id, name, email, approved FROM users WHERE LOWER(email) = $1', [email]);
+    if (userResult.rows.length === 0) {
+      const verifiedOnce = await pool.query(
+        'SELECT id FROM email_verification_codes WHERE email = $1 AND used_at IS NOT NULL LIMIT 1',
+        [email]
+      );
+      if (verifiedOnce.rows.length === 0) {
+        const attempted = await pool.query(
+          'SELECT id FROM email_verification_codes WHERE email = $1 LIMIT 1',
+          [email]
+        );
+        if (attempted.rows.length > 0) {
+          return res.status(400).json({ error: 'Account is not registered or email verification is incomplete.' });
+        }
+      }
+      return res.status(404).json({ error: 'Account not registered.' });
+    }
+    const otpUser = userResult.rows[0];
+    // Blocked / never-approved accounts are not eligible for password reset.
+    if (otpUser.approved === false) {
+      return res.status(400).json({ error: 'Account is not registered or email verification is incomplete.' });
+    }
+    {
+      const user = otpUser;
       // Resend cooldown (matches the 60s frontend countdown): do not spam.
       const recent = await pool.query(
         `SELECT created_at FROM password_reset_otps
@@ -1358,7 +1416,6 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
       }
       return res.json({ message: 'Verification code sent to your email.', resent: true });
     }
-    res.json({ message: 'If an account exists with this email, a verification code has been sent.' });
   } catch (err) {
     console.error('Forgot password OTP error:', err);
     res.status(500).json({ error: 'Failed to send verification code' });
@@ -1375,8 +1432,10 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     if (!otpRateLimit(`verify:${ip}`, 30, 60 * 60 * 1000)) {
       return res.status(429).json({ error: 'Too many requests. Please try again later.' });
     }
-    const userResult = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
+    const userResult = await pool.query('SELECT id, approved FROM users WHERE LOWER(email) = $1', [email]);
     if (userResult.rows.length === 0) return res.json({ valid: false });
+    // No OTPs are issued to unregistered/unverified accounts; nothing to verify.
+    if (userResult.rows[0].approved === false) return res.json({ valid: false });
     const check = await findValidOtp(userResult.rows[0].id, otp);
     if (!check.ok) {
       if (check.id && check.reason === 'mismatch') {
@@ -1405,8 +1464,11 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
     if (password.length < minLength) {
       return res.status(400).json({ error: `Password must be at least ${minLength} characters` });
     }
-    const userResult = await pool.query('SELECT id, email FROM users WHERE LOWER(email) = $1', [email]);
+    const userResult = await pool.query('SELECT id, email, approved FROM users WHERE LOWER(email) = $1', [email]);
     if (userResult.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired code' });
+    if (userResult.rows[0].approved === false) {
+      return res.status(400).json({ error: 'Account is not registered or email verification is incomplete.' });
+    }
     const userId = userResult.rows[0].id;
     const check = await findValidOtp(userId, otp);
     if (!check.ok) {
@@ -1472,7 +1534,12 @@ async function sendRegistrationVerificationEmail(toEmail, userName, code) {
     `<p>If you did not request this, please ignore this email.</p>` +
     `<p>Regards,<br>RHMS Support Team</p>`;
   if (!mailer.isSmtpConfigured()) {
-    throw new Error('Email service is not configured');
+    throw new Error('SMTP_NOT_CONFIGURED');
+  }
+  try {
+    await mailer.verifySmtp();
+  } catch (err) {
+    throw err;
   }
   await mailer.sendMail({ to: toEmail, subject, text, html });
 }
@@ -1524,13 +1591,21 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, NOW())`,
       [codeId, email, hashOtp(code), expiresAt, ip]
     );
+    const sendWithTimeout = (ms) => Promise.race([
+      sendRegistrationVerificationEmail(email, name, code),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_TIMEOUT')), ms)),
+    ]);
     try {
-      await sendRegistrationVerificationEmail(email, name, code);
+      await sendWithTimeout(25000);
     } catch (err) {
       console.error('[EmailVerify] SMTP send failed for', email, ':', err.message);
       // The email was NOT delivered: remove the unsent code so a retry sends
       // fresh instead of hitting the resend cooldown and falsely reporting success.
       await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]);
+      const kind = (err && err.message) || '';
+      if (kind === 'SMTP_TIMEOUT' || (err && err.code === 'ETIMEDOUT')) return res.status(504).json({ error: 'The email service took too long to respond. Please try again.' });
+      if (kind === 'SMTP_AUTH') return res.status(503).json({ error: 'Email service is not configured correctly. Please contact the administrator.' });
+      if (kind === 'SMTP_NOT_CONFIGURED') return res.status(503).json({ error: 'Email service is not configured. Please contact the administrator.' });
       return res.status(503).json({ error: 'We could not send the verification code to this email address. Please check the email address and try again.' });
     }
     return res.json({ message: 'Verification code sent.', resent: true });

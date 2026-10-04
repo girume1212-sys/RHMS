@@ -99,10 +99,15 @@ async function sendMail({ to, subject, text, html, attachments }) {
     throw new Error('SMTP is not configured');
   }
   const s = smtpSettings();
+  // Gmail rejects a display-name-only From; always send from a real mailbox,
+  // using SMTP_FROM as the display name when it is not itself an address.
+  const fromAddr = s.from && s.from.includes('@')
+    ? s.from
+    : (s.from ? `"${s.from.replace(/"/g, '')}" <${s.user}>` : s.user);
   try {
     const info = await withTimeout(
       getTransporter().sendMail({
-        from: s.from || s.user,
+        from: fromAddr,
         to,
         subject,
         text,

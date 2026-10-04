@@ -2636,7 +2636,7 @@ body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
   border-top-left-radius: 0;
   border-top-right-radius: 0;
   margin-top: 0 !important;
-  border-top: 1px solid #eef2f7;
+  border-top: none;
 }
 /* Toolbar already nested inside the table card: flatten to a single row */
 .chart-card > .filters-bar.sf-toolbar {
