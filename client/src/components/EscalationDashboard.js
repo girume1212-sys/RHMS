@@ -215,7 +215,7 @@ export default function EscalationDashboard() {
   useEffect(() => {
     if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
     else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);
-  }, [totalPages]);
+  }, [totalPages, page]);
 
   const paginatedRequests = filteredRequests.slice((page - 1) * perPage, page * perPage);
 

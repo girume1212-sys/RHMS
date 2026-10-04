@@ -30,7 +30,7 @@ export default function Company() {
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'client' });
   const [userSort, setUserSort] = useState({ key: '', dir: 'asc' });
   const [userPage, setUserPage] = useState(1);
-  const [userPerPage, setUserPerPage] = useState(5);
+  const [userPerPage, setUserPerPage] = useState(10);
   const [toasts, setToasts] = useState([]);
   const [form, setForm] = useState({
     companyId: '',

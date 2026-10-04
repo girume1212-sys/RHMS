@@ -12,7 +12,7 @@ export default function DatabaseTables() {
   const [loading, setLoading] = useState(true);
   const [loadingTable, setLoadingTable] = useState(false);
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(20);
+  const [perPage, setPerPage] = useState(10);
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
 
   useEffect(() => {
@@ -78,7 +78,7 @@ export default function DatabaseTables() {
   useEffect(() => {
     if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
     else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);
-  }, [totalPages]);
+  }, [totalPages, page]);
 
   const paginated = sortedRows.slice((page - 1) * perPage, page * perPage);
 

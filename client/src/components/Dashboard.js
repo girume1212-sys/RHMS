@@ -541,13 +541,9 @@ export default function Dashboard() {
     });
 
   const totalPages = Math.ceil(filteredRequests.length / perPage);
-  // Keep current page valid when page size / filters change.
-  useEffect(() => {
-    if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
-    else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);
-  }, [totalPages]);
+  const safePage = totalPages > 0 ? Math.min(page, totalPages) : 1;
 
-  const paginatedRequests = filteredRequests.slice((page - 1) * perPage, page * perPage);
+  const paginatedRequests = filteredRequests.slice((safePage - 1) * perPage, safePage * perPage);
 
   return (
     <div className="dashboard">
@@ -899,11 +895,11 @@ export default function Dashboard() {
             <span>{t('common.ofRequests', { count: filteredRequests.length })}</span>
           </div>
           <div className="table-pagination">
-            <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
-            <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
-            <PageNumbers page={page} totalPages={totalPages} onPageChange={setPage} />
-            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>›</button>
-            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>»</button>
+            <button className="page-btn" disabled={safePage === 1} onClick={() => setPage(1)}>«</button>
+            <button className="page-btn" disabled={safePage === 1} onClick={() => setPage(safePage - 1)}>‹</button>
+            <PageNumbers page={safePage} totalPages={totalPages} onPageChange={setPage} />
+            <button className="page-btn" disabled={safePage === totalPages || totalPages === 0} onClick={() => setPage(safePage + 1)}>›</button>
+            <button className="page-btn" disabled={safePage === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>»</button>
           </div>
         </div>
       </div>
