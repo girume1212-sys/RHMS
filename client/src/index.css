@@ -2651,21 +2651,23 @@ body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
 }
 
 /* Table Card - Colored Accent.
-   The card itself is the horizontal scroll container so wide tables scroll
-   (header + rows stay aligned as one unit) instead of being clipped. */
+   The card itself is the scroll container (both axes) so wide tables scroll
+   horizontally and tall viewports can scroll vertically (header + rows stay
+   aligned as one unit) instead of being clipped or compressed. */
 .table-card {
   background: white;
   border-radius: 12px;
   padding: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
   border: 1px solid rgba(0, 180, 216, 0.1);
 }
 .table-card::-webkit-scrollbar {
+  width: 10px;
   height: 8px;
 }
 .table-card::-webkit-scrollbar-track {
@@ -2683,6 +2685,41 @@ body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
 .table-card .data-table {
   width: max-content;
   min-width: 100%;
+}
+
+/* Horizontal-scroll indicator: a small professional ↔ pill rendered in the
+   table footer (never covers table content). It appears only while the
+   table actually overflows (footer gets data-hscroll="true" from the
+   TableScrollHints observer) and disappears otherwise. */
+.table-footer .table-footer-info::after {
+  content: '';
+  display: none;
+}
+.table-footer[data-hscroll="true"] .table-footer-info::after {
+  content: '↔';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+  animation: hscroll-nudge 1.8s ease-in-out infinite;
+}
+@keyframes hscroll-nudge {
+  0%, 100% { transform: translateX(-2px); }
+  50% { transform: translateX(2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .table-footer[data-hscroll="true"] .table-footer-info::after {
+    animation: none;
+  }
 }
 .table-card .data-table thead tr {
   background: #1a4f85;

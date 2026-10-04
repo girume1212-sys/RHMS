@@ -26,6 +26,7 @@ import ClientLayout from './components/ClientLayout';
 import ClientDashboard from './components/ClientDashboard';
 import ClientProfile from './components/ClientProfile';
 import GlobalSearchResults from './components/GlobalSearchResults';
+import TableScrollHints from './components/TableScrollHints';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -87,6 +88,7 @@ export default function App() {
     <LanguageProvider>
       <AuthProvider>
         <BrowserRouter>
+          <TableScrollHints />
           <AppRoutes />
         </BrowserRouter>
       </AuthProvider>
