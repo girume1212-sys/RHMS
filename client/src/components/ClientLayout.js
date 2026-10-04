@@ -516,7 +516,14 @@ export default function ClientLayout() {
             </div>
             <div className="user-menu-container">
               <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
-                <div className="user-avatar-tiny" style={{ background: '#7c3aed', overflow: 'hidden' }}>{getAvatarUrl(user?.avatar) ? <img src={getAvatarUrl(user?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (user?.name?.charAt(0) || 'U')}</div>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <div className="user-avatar-tiny" style={{ background: '#7c3aed', overflow: 'hidden' }}>{getAvatarUrl(user?.avatar) ? <img src={getAvatarUrl(user?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (user?.name?.charAt(0) || 'U')}</div>
+                  {user?.approved === false && (
+                    <div title={t('common.blocked')} style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 2px 6px rgba(0,0,0,0.3)', color: '#fff' }}>
+                      <Icon name="lock" size={10} />
+                    </div>
+                  )}
+                </div>
                 <span>{user?.name}</span>
                 <span className="dropdown-arrow">▾</span>
               </button>
