@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -30,7 +29,6 @@ const DAYS_OF_WEEK = [
 const FILE_TYPE_OPTIONS = ['jpg', 'png', 'gif', 'svg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'mp4', 'csv'];
 
 export default function Settings() {
-  const navigate = useNavigate();
   const goBack = useBackNavigation(getMenuAbove('/settings'));
   const { applyTheme } = useAuth();
   const { changeLanguage } = useLanguage();
@@ -153,20 +151,11 @@ export default function Settings() {
     }).catch(err => {
       addToast(t('common.failedToLoadSettings'), 'error');
     }).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleChange = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }));
-  };
-
-  const handleArrayToggle = (key, item) => {
-    setForm(prev => {
-      const arr = [...(prev[key] || [])];
-      const idx = arr.indexOf(item);
-      if (idx === -1) arr.push(item);
-      else arr.splice(idx, 1);
-      return { ...prev, [key]: arr };
-    });
   };
 
   const handleSave = async () => {
@@ -737,37 +726,6 @@ export default function Settings() {
             </div>
             <label className="toggle">
               <input type="checkbox" checked={form.notifyDeveloperAssignment} onChange={e => handleChange('notifyDeveloperAssignment', e.target.checked)} />
-              <span className="slider"></span>
-            </label>
-          </div>
-        </div>
-
-        {/* SLA Settings */}
-        <div className="settings-card">
-          <h3>{t('settings.sla')}</h3>
-          <div className="settings-field">
-            <label>{t('settings.responseHours')}</label>
-            <div className="input-with-unit">
-              <input type="number" value={form.responseHours} onChange={e => handleChange('responseHours', parseInt(e.target.value) || 0)} min="1" />
-              <span className="input-unit">{t('settings.hours')}</span>
-            </div>
-            <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.responseHoursDesc')}</span>
-          </div>
-          <div className="settings-field">
-            <label>{t('settings.resolutionHours')}</label>
-            <div className="input-with-unit">
-              <input type="number" value={form.resolutionHours} onChange={e => handleChange('resolutionHours', parseInt(e.target.value) || 0)} min="1" />
-              <span className="input-unit">{t('settings.hours')}</span>
-            </div>
-            <span style={{ fontSize: '12px', color: '#9ca3af' }}>{t('settings.resolutionHoursDesc')}</span>
-          </div>
-          <div className="toggle-row-settings">
-            <div>
-              <span className="toggle-label">{t('settings.escalationEnabled')}</span>
-              <span className="toggle-sublabel">{t('settings.escalationEnabledDesc')}</span>
-            </div>
-            <label className="toggle">
-              <input type="checkbox" checked={form.escalationEnabled} onChange={e => handleChange('escalationEnabled', e.target.checked)} />
               <span className="slider"></span>
             </label>
           </div>
