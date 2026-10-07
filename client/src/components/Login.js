@@ -39,6 +39,13 @@ export default function Login() {
     return () => clearTimeout(id);
   }, [resendSeconds]);
 
+  // Auto-dismiss the green success notice so it doesn't linger on screen.
+  useEffect(() => {
+    if (!forgotMsg) return;
+    const id = setTimeout(() => setForgotMsg(''), 5000);
+    return () => clearTimeout(id);
+  }, [forgotMsg]);
+
   useEffect(() => {
     const saved = localStorage.getItem('rhms_remember');
     if (saved) {
