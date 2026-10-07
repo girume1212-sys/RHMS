@@ -8,7 +8,7 @@ import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
 import Icon from './Icon';
 import { SIDEBAR_MENUS, useTrackPrevMenu } from '../utils/sidebarNav';
-import { isCriticalUnworked } from '../utils/criticalIndicator';
+import { isCriticalUnworked, isCriticalActionable } from '../utils/criticalIndicator';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -136,10 +136,14 @@ export default function Layout() {
   }, [critRequests]);
   const notifIsCritical = useCallback((n) => {
     if (!n || !n.requestId) return false;
-    if (n.is_read) return false;
     return isCriticalUnworked(critReqById[String(n.requestId)]);
   }, [critReqById]);
-  const hasCriticalBell = bellNotes.some(notifIsCritical);
+  // Bell counts only requests actionable for the logged-in user:
+  // Critical + (New|Assigned) AND assigned to them (or still claimable).
+  // Recalculated from live request data on every refresh — claiming one and
+  // moving it to In Progress drops it from the count immediately.
+  const criticalCount = critRequests.filter((r) => isCriticalActionable(r, user)).length;
+  const hasCriticalBell = criticalCount > 0;
 
   const getNotificationType = useCallback((msg) => {
     if (!msg) return 'default';
@@ -281,8 +285,10 @@ export default function Layout() {
 
           if (!isOwnAction) {
             refreshNotifications();
-            refreshCritRequests();
           }
+          // Always refresh request states (even for own actions like
+          // claiming) so the Critical bell dot tracks Priority + Status.
+          refreshCritRequests();
 
           if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
@@ -489,7 +495,7 @@ export default function Layout() {
               <button className="topbar-icon" title={t('topbar.notifications')} onClick={openNotifications}>
                 <Icon name="bell" />
                 {unreadBell > 0 && <span className="badge">{unreadBell > 99 ? '99+' : unreadBell}</span>}
-                {hasCriticalBell && <span className="critical-dot critical-bell-dot" title="Critical request needs work" />}
+                {hasCriticalBell && <span className="critical-dot critical-bell-dot" title={`${criticalCount} critical request${criticalCount === 1 ? '' : 's'} need${criticalCount === 1 ? 's' : ''} work`}>{criticalCount > 99 ? '99+' : criticalCount}</span>}
               </button>
               {showNotifications && (
                 <div className="dropdown-panel notification-panel">

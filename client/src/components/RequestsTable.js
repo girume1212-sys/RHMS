@@ -144,6 +144,7 @@ const RequestsTable = forwardRef(function RequestsTable({
       await api.put(`/api/requests/${requestId}/claim`);
       const assignedStatus = statuses.find(s => s.name === 'Assigned');
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, assignedTo: user.id, assignee: { id: user.id, name: user.name }, status: assignedStatus || r.status, statusId: '2' } : r));
+      window.dispatchEvent(new CustomEvent('refresh-requests'));
       showStatusToast(t('common.requestClaimed'), 'assignment', requestId);
     } catch (err) {
       showStatusToast(t('common.failedToClaim') + ': ' + err.message, 'error');
@@ -160,6 +161,7 @@ const RequestsTable = forwardRef(function RequestsTable({
     try {
       await api.put(`/api/requests/${requestId}`, { statusId: status.id });
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status, statusId: status.id, assignedTo: statusName === 'New' ? null : r.assignedTo, assignee: statusName === 'New' ? null : r.assignee } : r));
+      window.dispatchEvent(new CustomEvent('refresh-requests'));
       showStatusToast(t('common.requestMarkedStatus', { id: requestId, status: statusName }), 'status', requestId);
     } catch (err) {
       showStatusToast(t('common.failedToUpdateStatus') + ': ' + err.message, 'error');

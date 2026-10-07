@@ -8,6 +8,7 @@ import { transSeeded } from '../i18n/translateServer';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
 import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
+import { isCriticalUnworked } from '../utils/criticalIndicator';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -225,8 +226,8 @@ export default function Reports() {
                         <span className="muted-text">{t('common.clientDeleted')}</span>
                       ) : (
                         <div className="assigned-user-cell">
-                          <div className="assigned-avatar" style={{ background: '#10B981', overflow: 'hidden' }}>
-                            {getAvatarUrl(r.client_avatar) ? <img src={getAvatarUrl(r.client_avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ((r.client_name || '?').charAt(0))}
+                          <div className="assigned-avatar" style={{ background: '#10B981', overflow: 'visible', position: 'relative' }}>
+                            <span style={{ display: 'block', width: '100%', height: '100%', overflow: 'hidden', borderRadius: '50%' }}>{getAvatarUrl(r.client_avatar) ? <img src={getAvatarUrl(r.client_avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ((r.client_name || '?').charAt(0))}</span>{isCriticalUnworked({ priority: r.priority_name, status: r.status_name }) && <span className="critical-dot critical-dot-avatar" title="Critical — needs work" />}
                           </div>
                           <span className="truncate-cell">{r.client_name || '-'}</span>
                         </div>

@@ -11,6 +11,7 @@ import { transSeeded } from '../i18n/translateServer';
 import RequestCalendar from './RequestCalendar';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+import { isCriticalUnworked } from '../utils/criticalIndicator';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -819,8 +820,8 @@ export default function Dashboard() {
                   <td>
                     {r.assignee && r.status?.name !== 'New' ? (
                       <div className="assigned-user-cell">
-                        <div className="assigned-avatar" style={{ background: '#3B82F6', overflow: 'hidden' }}>
-                          {getAvatarUrl(r.assignee.avatar) ? <img src={getAvatarUrl(r.assignee.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : r.assignee.name.charAt(0)}
+                        <div className="assigned-avatar" style={{ background: '#3B82F6', overflow: 'visible', position: 'relative' }}>
+                          <span style={{ display: 'block', width: '100%', height: '100%', overflow: 'hidden', borderRadius: '50%' }}>{getAvatarUrl(r.assignee.avatar) ? <img src={getAvatarUrl(r.assignee.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : r.assignee.name.charAt(0)}</span>{isCriticalUnworked(r) && <span className="critical-dot critical-dot-avatar" title="Critical — needs work" />}
                         </div>
                         <span className="truncate-cell">{r.assignee.name}</span>
                       </div>
@@ -831,8 +832,8 @@ export default function Dashboard() {
                       <span className="muted-text">{t('common.clientDeleted')}</span>
                     ) : r.client?.name || r.clientName || r.client_name ? (
                       <div className="assigned-user-cell">
-                        <div className="assigned-avatar" style={{ background: '#10B981', overflow: 'hidden' }}>
-                          {getAvatarUrl(r.client?.avatar) ? <img src={getAvatarUrl(r.client?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ((r.client?.name || r.clientName || r.client_name).charAt(0) || '?')}
+                        <div className="assigned-avatar" style={{ background: '#10B981', overflow: 'visible', position: 'relative' }}>
+                          <span style={{ display: 'block', width: '100%', height: '100%', overflow: 'hidden', borderRadius: '50%' }}>{getAvatarUrl(r.client?.avatar) ? <img src={getAvatarUrl(r.client?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ((r.client?.name || r.clientName || r.client_name).charAt(0) || '?')}</span>{isCriticalUnworked(r) && <span className="critical-dot critical-dot-avatar" title="Critical — needs work" />}
                         </div>
                         <span className="truncate-cell">{r.client?.name || r.clientName || r.client_name}</span>
                       </div>
