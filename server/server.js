@@ -1676,12 +1676,13 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
     try {
       await sendWithTimeout(25000);
     } catch (err) {
-      console.error('[EmailVerify] SMTP send failed for', email, ':', err.message);
+      console.error('[EmailVerify] SMTP send failed for', email, ':', err.message, '| cause:', (err && err.cause && (err.cause.response || err.cause.message)) || (err && err.response) || 'n/a');
       // The email was NOT delivered: remove the unsent code so a retry sends
       // fresh instead of hitting the resend cooldown and falsely reporting success.
       await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]);
       const kind = (err && err.message) || '';
-      if (kind === 'SMTP_TIMEOUT' || (err && err.code === 'ETIMEDOUT')) return res.status(504).json({ error: 'The email service took too long to respond. Please try again.' });
+      const code = String((err && err.code) || '').toUpperCase();
+      if (kind === 'SMTP_TIMEOUT' || code.includes('TIMEOUT') || code.includes('ETIMEDOUT') || code.includes('ESOCKET') || /timed out|timeout/i.test(kind)) return res.status(504).json({ error: 'The email service took too long to respond. Please try again.' });
       if (kind === 'SMTP_AUTH') return res.status(503).json({ error: 'Email service is not configured correctly. Please contact the administrator.' });
       if (kind === 'SMTP_NOT_CONFIGURED') return res.status(503).json({ error: 'Email service is not configured. Please contact the administrator.' });
       if (kind === 'SMTP_NO_SUCH_USER') return res.status(400).json({ error: 'Unable to send the email. Please check your registered email address and try again.' });

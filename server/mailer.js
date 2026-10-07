@@ -7,7 +7,7 @@ const nodemailer = require('nodemailer');
 // Fail fast instead of hanging for minutes on an unreachable SMTP host.
 const SMTP_TIMEOUT_MS = Math.max(
   1000,
-  parseInt(process.env.SMTP_TIMEOUT_MS || '10000', 10) || 10000
+  parseInt(process.env.SMTP_TIMEOUT_MS || '30000', 10) || 30000
 );
 
 let cachedTransporter = null;
@@ -30,7 +30,11 @@ function isSmtpConfigured() {
 }
 
 function settingsKey(s) {
-  return [s.host, s.port, s.secure, s.user, String(s.pass || '').length].join('|');
+  // Hash the password so a changed app-password busts the cached transporter
+  // (length alone is not enough) without keeping the secret in memory as-is.
+  const crypto = require('crypto');
+  const passHash = crypto.createHash('sha256').update(String(s.pass || '')).digest('hex').slice(0, 16);
+  return [s.host, s.port, s.secure, s.user, passHash].join('|');
 }
 
 function getTransporter() {
@@ -68,11 +72,15 @@ function withTimeout(promise, ms, label) {
 
 async function verifySmtp() {
   if (!isSmtpConfigured()) {
-    const err = new Error('SMTP is not configured');
+    const err = new Error('SMTP_NOT_CONFIGURED');
     err.code = 'SMTP_NOT_CONFIGURED';
     throw err;
   }
-  return withTimeout(getTransporter().verify(), SMTP_TIMEOUT_MS, 'SMTP verify timed out');
+  try {
+    return await withTimeout(getTransporter().verify(), SMTP_TIMEOUT_MS, 'SMTP verify timed out');
+  } catch (err) {
+    throw classifySmtpError(err);
+  }
 }
 
 // Classify nodemailer errors without leaking credentials/host details.
