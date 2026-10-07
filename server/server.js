@@ -1456,22 +1456,15 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
       );
       auditLogin('password_reset_otp_requested', user.id, user.email, req);
       await logAuthActivity('password_reset_requested', user, req, { email, channel: 'otp' });
-      const sendWithTimeout = (ms) => Promise.race([
-        sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_SECONDS, req),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_TIMEOUT')), ms)),
-      ]);
-      try {
-        await sendWithTimeout(25000);
-      } catch (err) {
-        // Do not leave an undeliverable OTP active; it must not count as an attempt.
+      // Respond immediately so the UI never waits on slow SMTP; the email
+      // is delivered in the background. If delivery fails, the OTP is
+      // invalidated (same as before) so a retry issues a fresh code.
+      res.json({ message: 'Verification code sent to your email.', resent: true });
+      sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_SECONDS, req).catch(async (err) => {
+        console.error('[ForgotOTP] background SMTP send failed for', user.email, ':', (err && err.message) || err);
         try { await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE id = $1', [otpId]); } catch (e) { /* ignore */ }
-        const kind = (err && err.message) || '';
-        if (kind === 'SMTP_TIMEOUT') return res.status(504).json({ error: 'The email service took too long to respond. Please try again.' });
-        if (kind === 'SMTP_AUTH') return res.status(503).json({ error: 'Password reset email service is not configured correctly. Please contact the administrator.' });
-        if (kind === 'SMTP_NO_SUCH_USER') return res.status(400).json({ error: 'Unable to send the email. Please check your registered email address and try again.' });
-        return res.status(503).json({ error: 'Email service is temporarily unavailable. Please try again later.' });
-      }
-      return res.json({ message: 'Verification code sent to your email.', resent: true });
+      });
+      return;
     }
   } catch (err) {
     console.error('Forgot password OTP error:', err);
@@ -1614,11 +1607,9 @@ async function sendRegistrationVerificationEmail(toEmail, userName, code, req) {
   if (!mailer.isSmtpConfigured()) {
     throw new Error('SMTP_NOT_CONFIGURED');
   }
-  try {
-    await mailer.verifySmtp();
-  } catch (err) {
-    throw err;
-  }
+  // NOTE: no explicit verifySmtp() here — on slow networks verify (~8s) +
+  // send (~15s) together exceed the route budget. sendMail() below opens the
+  // connection itself and its classified error is sufficient.
   await mailer.sendMail({ to: toEmail, subject, text, html, ...(logoAttachment ? { attachments: [logoAttachment] } : {}) });
 }
 
@@ -1669,26 +1660,16 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, NOW())`,
       [codeId, email, hashOtp(code), expiresAt, ip]
     );
-    const sendWithTimeout = (ms) => Promise.race([
-      sendRegistrationVerificationEmail(email, name, code, req),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_TIMEOUT')), ms)),
-    ]);
-    try {
-      await sendWithTimeout(25000);
-    } catch (err) {
-      console.error('[EmailVerify] SMTP send failed for', email, ':', err.message, '| cause:', (err && err.cause && (err.cause.response || err.cause.message)) || (err && err.response) || 'n/a');
-      // The email was NOT delivered: remove the unsent code so a retry sends
-      // fresh instead of hitting the resend cooldown and falsely reporting success.
-      await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]);
-      const kind = (err && err.message) || '';
-      const code = String((err && err.code) || '').toUpperCase();
-      if (kind === 'SMTP_TIMEOUT' || code.includes('TIMEOUT') || code.includes('ETIMEDOUT') || code.includes('ESOCKET') || /timed out|timeout/i.test(kind)) return res.status(504).json({ error: 'The email service took too long to respond. Please try again.' });
-      if (kind === 'SMTP_AUTH') return res.status(503).json({ error: 'Email service is not configured correctly. Please contact the administrator.' });
-      if (kind === 'SMTP_NOT_CONFIGURED') return res.status(503).json({ error: 'Email service is not configured. Please contact the administrator.' });
-      if (kind === 'SMTP_NO_SUCH_USER') return res.status(400).json({ error: 'Unable to send the email. Please check your registered email address and try again.' });
-      return res.status(503).json({ error: 'We could not send the verification code to this email address. Please check the email address and try again.' });
-    }
-    return res.json({ message: 'Verification code sent.', resent: true });
+    // Respond immediately so the UI never waits on slow SMTP; the email
+    // is delivered in the background. If delivery fails, the unsent code
+    // is removed (same as before) so a retry sends fresh instead of
+    // hitting the cooldown and falsely reporting success.
+    res.json({ message: 'Verification code sent.', resent: true });
+    sendRegistrationVerificationEmail(email, name, code, req).catch(async (err) => {
+      console.error('[EmailVerify] background SMTP send failed for', email, ':', (err && err.message) || err);
+      try { await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]); } catch (e) { /* ignore */ }
+    });
+    return;
   } catch (err) {
     console.error('Request email verification error:', err);
     res.status(500).json({ error: 'Failed to send verification code' });

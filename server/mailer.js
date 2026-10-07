@@ -7,7 +7,7 @@ const nodemailer = require('nodemailer');
 // Fail fast instead of hanging for minutes on an unreachable SMTP host.
 const SMTP_TIMEOUT_MS = Math.max(
   1000,
-  parseInt(process.env.SMTP_TIMEOUT_MS || '30000', 10) || 30000
+  parseInt(process.env.SMTP_TIMEOUT_MS || '20000', 10) || 20000
 );
 
 let cachedTransporter = null;
