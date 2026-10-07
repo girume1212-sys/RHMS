@@ -774,12 +774,12 @@ async function getEmailLogoBlock(req) {
   } catch (e) { /* logo is decorative; never block the email */ }
   // Profile-style: fixed square + 50% radius so Gmail renders a circle avatar,
   // not a stretched rectangle. object-fit:cover keeps any logo aspect cropped.
-  const imgStyle = 'display:block;margin:0 auto;width:80px;height:80px;min-width:80px;min-height:80px;max-width:80px;max-height:80px;border-radius:50%;border-radius:9999px;object-fit:cover;border:0;outline:none;text-decoration:none;';
+  const imgStyle = 'display:block;margin:0 auto;width:120px;height:120px;min-width:120px;min-height:120px;max-width:120px;max-height:120px;border-radius:50%;border-radius:9999px;object-fit:cover;border:0;outline:none;text-decoration:none;';
   const logoBlock = logoAttachment
     ? `<div style="text-align:center;padding:0 0 12px 0;"><img src="cid:rhmslogo" alt="RHMS Logo" width="80" height="80" style="${imgStyle}" /></div>`
     : logoUrl
       ? `<div style="text-align:center;padding:0 0 12px 0;"><img src="${escapeHtml(logoUrl)}" alt="RHMS Logo" width="80" height="80" style="${imgStyle}" /></div>`
-      : `<div style="text-align:center;padding:0 0 12px 0;"><div style="width:80px;height:80px;line-height:80px;margin:0 auto;border-radius:50%;background:#1D4ED8;color:#ffffff;font-size:24px;font-weight:800;letter-spacing:1px;text-align:center;">RHMS</div></div>`;
+      : `<div style="text-align:center;padding:0 0 12px 0;"><div style="width:120px;height:120px;line-height:120px;margin:0 auto;border-radius:50%;background:#1D4ED8;color:#ffffff;font-size:32px;font-weight:800;letter-spacing:1px;text-align:center;">RHMS</div></div>`;
   return { logoBlock, logoAttachment };
 }
 

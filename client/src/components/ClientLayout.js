@@ -8,7 +8,6 @@ import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
 import Icon from './Icon';
 import { useTrackPrevMenu } from '../utils/sidebarNav';
-import { isCriticalUnworked, isCriticalActionable } from '../utils/criticalIndicator';
 
 const CLIENT_MENUS = ['/client', '/client/requests', '/client/activity', '/client/profile'];
 
@@ -124,23 +123,6 @@ export default function ClientLayout() {
   const [msgFilter, setMsgFilter] = useState('unread');
   const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.is_read);
   const shownMsgs = commentNotes.filter(n => msgFilter === 'read' ? n.is_read : !n.is_read);
-  // Critical-dot helpers: resolve each notification's request to its live
-  // Priority + Status. Dots appear ONLY for Critical + (New|Assigned).
-  const critReqById = useMemo(() => {
-    const m = {};
-    for (const r of critRequests) m[String(r.id)] = r;
-    return m;
-  }, [critRequests]);
-  const notifIsCritical = useCallback((n) => {
-    if (!n || !n.requestId) return false;
-    return isCriticalUnworked(critReqById[String(n.requestId)]);
-  }, [critReqById]);
-  // Bell counts only requests actionable for the logged-in user:
-  // Critical + (New|Assigned) AND assigned to them (or still claimable).
-  // Recalculated from live request data on every refresh — claiming one and
-  // moving it to In Progress drops it from the count immediately.
-  const criticalCount = critRequests.filter((r) => isCriticalActionable(r, user)).length;
-  const hasCriticalBell = criticalCount > 0;
 
   const getNotificationIcon = useCallback((type) => {
     const icons = { status_change: 'refresh', assigned: 'user', comment: 'comment', request_created: 'requests', request_deleted: 'delete', default: 'bell' };
@@ -456,7 +438,6 @@ export default function ClientLayout() {
                     {unreadBell > 99 ? '99+' : unreadBell}
                   </span>
                 )}
-                {hasCriticalBell && <span className="critical-dot critical-bell-dot" style={{ bottom: -2, top: 'auto' }} title={`${criticalCount} critical request${criticalCount === 1 ? '' : 's'} need${criticalCount === 1 ? 's' : ''} work`}>{criticalCount > 99 ? '99+' : criticalCount}</span>}
               </button>
               {showNotifications && (
                 <div className="dropdown-panel notification-panel" style={{ width: 420, border: darkMode ? '1px solid #334155' : '1px solid #e5e7eb', background: darkMode ? '#1e293b' : '#fff' }}>
@@ -477,7 +458,6 @@ export default function ClientLayout() {
                           <div className="dropdown-panel-icon"><Icon name={getNotificationIcon(n.type)} size={16} /></div>
                           <div className="dropdown-panel-content">
                             <div className="dropdown-panel-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {notifIsCritical(n) && <span className="critical-dot" title="Critical request needs work" />}
                               {getNotifTitle(n.type)}
                               {n.requestId && <span className="dropdown-panel-request">{t('common.requestPrefixLabel')}-{String(n.requestId).padStart(4, '0')}</span>}
                             </div>
