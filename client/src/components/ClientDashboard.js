@@ -1,0 +1,348 @@
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { getStatusIcon } from '../utils/statusIcons';
+import { shareOfTotalPercent } from '../utils/statusShare';
+import { useAuth } from '../AuthContext';
+import { api } from '../api';
+import Toast from './Toast';
+import { showStatusToast } from '../notify';
+import { useTranslation } from '../i18n/useTranslation';
+import { transSeeded } from '../i18n/translateServer';
+import RequestCalendar from './RequestCalendar';
+import PageNumbers from './PageNumbers';
+import Icon from './Icon';
+import { usePageBack } from '../utils/sidebarNav';
+
+export default function ClientDashboard() {
+  const { t } = useTranslation();
+  const shareLabel = t('common.ofTotal');
+  const [requests, setRequests] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [sort, setSort] = useState({ key: '', dir: 'asc' });
+  const [toasts, setToasts] = useState([]);
+  const [updatingStatus, setUpdatingStatus] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const goBack = usePageBack('/client');
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+
+  const addToast = useCallback((message, type = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+  }, []);
+
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/api/requests'),
+      api.get('/api/statuses')
+    ]).then(([requestsData, statusesData]) => {
+      setRequests(requestsData);
+      setStatuses(statusesData);
+    }).catch(err => setError(t('common.failedToLoadData') + ' ' + err.message));
+  }, []);
+
+  // Derived from `requests` rather than snapshotted in the fetch above, so the
+  // cards stay correct when a status is changed or a request deleted inline.
+  const stats = useMemo(() => {
+    const byStatus = name => requests.filter(r => r.status?.name === name).length;
+    return {
+      total: requests.length,
+      open: byStatus('New'),
+      assigned: byStatus('Assigned'),
+      inProgress: byStatus('In Progress'),
+      resolved: byStatus('Resolved'),
+      closed: byStatus('Closed'),
+      rejected: byStatus('Rejected'),
+      waitingClient: byStatus('Waiting for Client'),
+      escalated: byStatus('Escalated')
+    };
+  }, [requests]);
+
+  const getStatusColor = (status) => {
+    const colors = { New: '#3B82F6', Assigned: '#8B5CF6', 'In Progress': '#F59E0B', 'Waiting for Client': '#F97316', Resolved: '#10B981', Closed: '#6B7280', Rejected: '#DC2626' };
+    return colors[status?.name] || '#6B7280';
+  };
+
+  const getPriorityColor = (priority) => {
+    const colors = { Low: '#3B82F6', Medium: '#F59E0B', High: '#EF4444', Critical: '#DC2626' };
+    return colors[priority?.name] || '#6B7280';
+  };
+
+  const handleSort = (key) => {
+    setSort(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
+    setPage(1);
+  };
+
+  const ClientStatCard = ({ icon, value, label, color, onClick, share, shareLabel }) => {
+    const shareNum = parseFloat(share) || 0;
+    return (
+      <div className={`stat-card${onClick ? ' stat-card-interactive' : ''}`}
+        style={{
+          cursor: onClick ? 'pointer' : 'default',
+          '--stat-accent': color,
+          '--stat-shadow': `${color}30`
+        }}
+        onClick={onClick}
+      >
+        <div className="stat-icon" style={{ background: color + '15', color: color }}>{icon}</div>
+        <div className="stat-content">
+          <h3>{value}</h3>
+          <p>{label}</p>
+          <span className="stat-change up">
+            {'↑'} {shareNum}% {shareLabel}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  const getSortIcon = (key) => {
+    const isActive = sort.key === key;
+    if (!isActive) return <span className="sort-icon" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>⇅</span>;
+    return <span className="sort-icon active" onClick={(e) => { e.stopPropagation(); handleSort(key); }}>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
+  };
+
+  const handleEdit = (e, id) => {
+    e.stopPropagation();
+    navigate(`/client/requests/${id}?edit=true`);
+  };
+
+  const handleClientStatusChange = async (e, requestId, statusName) => {
+    e.stopPropagation();
+    const status = statuses.find(s => s.name === statusName);
+    if (!status) return;
+    setUpdatingStatus(requestId);
+    try {
+      await api.put(`/api/requests/${requestId}`, { statusId: status.id });
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status } : r));
+      addToast(t('common.statusChangedTo', { id: requestId, status: statusName }));
+      showStatusToast(t('common.statusChangedTo', { id: requestId, status: statusName }), 'status', requestId);
+    } catch (err) {
+      addToast(t('common.failedToUpdateStatus') + ': ' + err.message, 'error');
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await api.delete(`/api/requests/${id}`);
+      setRequests(prev => prev.filter(r => r.id !== id));
+      addToast(t('common.requestDeleted'));
+      showStatusToast(t('common.requestDeletedWithId', { id }), 'request_deleted', id);
+      setDeleteTarget(null);
+    } catch (err) {
+      setError(t('common.failedToDeleteRequest') + ': ' + err.message);
+      addToast(t('common.failedToDeleteRequest') + ': ' + err.message, 'error');
+      setDeleteTarget(null);
+    }
+  };
+
+  const filteredRequests = requests
+    .filter(r => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      const str = (v) => (v === undefined || v === null) ? '' : String(v).toLowerCase();
+      return [
+        str(r.id),
+        str(r.subject),
+        str(r.description),
+        str(r.status?.name),
+        str(r.priority?.name),
+        str(r.category?.name),
+        r.createdAt ? str(new Date(r.createdAt).toLocaleString()) : '',
+        r.updatedAt ? str(new Date(r.updatedAt).toLocaleString()) : ''
+      ].some(s => s.includes(q));
+    })
+    .sort((a, b) => {
+      if (!sort.key) return 0;
+      let aVal, bVal;
+      switch (sort.key) {
+        case 'id': aVal = a.id; bVal = b.id; break;
+        case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
+        case 'group': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
+        case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
+        case 'priority': aVal = a.priority?.level || 0; bVal = b.priority?.level || 0; break;
+        case 'status': aVal = (a.status?.name || '').toLowerCase(); bVal = (b.status?.name || '').toLowerCase(); break;
+        case 'createdAt': aVal = new Date(a.createdAt || 0); bVal = new Date(b.createdAt || 0); break;
+        default: return 0;
+      }
+      if (aVal < bVal) return sort.dir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+  const totalPages = Math.ceil(filteredRequests.length / perPage);
+  // Keep current page valid when page size / filters change.
+  useEffect(() => {
+    if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
+    else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);
+  }, [totalPages, page]);
+
+  const paginatedRequests = filteredRequests.slice((page - 1) * perPage, page * perPage);
+
+  return (
+    <div className="dashboard">
+      <div className="toast-container">
+        {toasts.map(t => (
+          <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)} />
+        ))}
+      </div>
+      <div className="page-header">
+        <div>
+          {location.pathname !== '/client' && (
+            <button className="back-link" onClick={goBack}>← {t('common.back')}</button>
+          )}
+          <h1>{t('common.myDashboard')}</h1>
+          <p>{t('common.welcomeBackRequests', { name: user?.name?.split(' ')[0] })}</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+          <RequestCalendar />
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '16px 20px', borderRadius: '8px', fontSize: '14px', marginBottom: '20px' }}>
+          {error}
+        </div>
+      )}
+
+      {(() => {
+        const statusCards = (statuses || []).filter(s => s.is_active !== false && s.name.toLowerCase() !== 'reopened');
+        const totalCards = statusCards.length + 1;
+        const perRow = Math.ceil(totalCards / 2);
+        const countByStatusId = (list, id) => list.filter(r => r.status?.id === id).length;
+        const makeCard = (s) => (
+          <ClientStatCard
+            key={s.id}
+            icon={<Icon name={getStatusIcon(s.name)} />}
+            value={countByStatusId(requests, s.id)}
+            label={s.name}
+            color={s.color || '#6B7280'}
+            onClick={() => navigate(`/client/requests?status=${s.name}`)}
+            share={shareOfTotalPercent(countByStatusId(requests, s.id), requests.length)}
+            shareLabel={shareLabel}
+          />
+        );
+        const row1 = [<ClientStatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} color="#3B82F6" onClick={() => navigate('/client/requests')} share={shareOfTotalPercent(stats.total, requests.length)} shareLabel={shareLabel} />, ...statusCards.slice(0, perRow - 1).map(makeCard)];
+        const row2 = statusCards.slice(perRow - 1).map(makeCard);
+        return (
+          <>
+            <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${perRow}, 1fr)`, marginBottom: '12px' }}>{row1}</div>
+            <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${row2.length}, 1fr)` }}>{row2}</div>
+          </>
+        );
+      })()}
+
+      <div className="filters-bar sf-toolbar" style={{ marginTop: '24px' }}>
+        <div className="sf-toolbar-left">
+          <div className="table-search-box">
+            <span className="search-icon"><Icon name="search" size={14} /></span>
+            <input type="text" placeholder={t('common.searchMyRequests')} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+          </div>
+        </div>
+        <div className="sf-toolbar-right" />
+      </div>
+
+      <div className="chart-card" style={{ marginTop: '16px' }}>
+        <div className="table-header-bar">
+          <h3>{t('common.myRequestsCount', { count: filteredRequests.length })}</h3>
+        </div>
+
+        <div className="table-card" style={{ boxShadow: 'none', padding: 0 }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')} {getSortIcon('id')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')} {getSortIcon('subject')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('group')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')} {getSortIcon('group')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')} {getSortIcon('category')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')} {getSortIcon('priority')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')} {getSortIcon('status')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('createdAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.created')} {getSortIcon('createdAt')}</span></th>
+                <th>{t('common.actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedRequests.length === 0 && !error && (
+                <tr><td colSpan="8" className="muted-text" style={{ textAlign: 'center', padding: '24px' }}>{t('common.noRequestsFound')}</td></tr>
+              )}
+              {paginatedRequests.map((r) => (
+                <tr key={r.id} onClick={() => navigate(`/client/requests/${r.id}`)} className="clickable-row">
+                  <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
+                  <td><span className="truncate-cell">{r.subject}</span></td>
+                  <td>
+                    {r.groups && r.groups.length > 0 ? (
+                      <span className="truncate-cell">{r.groups.map((g, i) => (
+                        <span key={g.id} className="group-tag" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', marginRight: i < r.groups.length - 1 ? '4px' : 0 }}>
+                          {g.name}
+                        </span>
+                      ))}</span>
+                    ) : <span style={{ color: '#9ca3af' }}>-</span>}
+                  </td>
+                  <td><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{transSeeded(r.category?.name, 'category', t) || '-'}</span></td>
+                  <td><span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>{transSeeded(r.priority?.name, 'priority', t) || '-'}</span></td>
+                  <td><span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>{transSeeded(r.status?.name, 'status', t) || '-'}</span></td>
+                  <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
+                  <td>
+                    <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
+                      {r.status?.name === 'New' && (
+                        <>
+                          <button className="action-btn-text edit" onClick={(e) => handleEdit(e, r.id)}>{t('common.edit')}</button>
+                          <button className="action-btn-text delete" onClick={() => setDeleteTarget(r.id)}>{t('common.delete')}</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="table-footer">
+          <div className="table-footer-info">
+            <span>{t('common.show')}</span>
+            <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+            <span>{t('common.ofRequests', { count: filteredRequests.length })}</span>
+          </div>
+          <div className="table-pagination">
+            <button className="page-btn" disabled={page === 1} onClick={() => setPage(1)}>«</button>
+            <button className="page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
+            <PageNumbers page={page} totalPages={totalPages} onPageChange={setPage} />
+            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(page + 1)}>›</button>
+            <button className="page-btn" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(totalPages)}>»</button>
+          </div>
+        </div>
+      </div>
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>{t('common.deleteRequestConfirm')}</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={() => handleDelete(deleteTarget)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.delete')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
