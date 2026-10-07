@@ -62,7 +62,7 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      const data = await api.post('/api/auth/request-email-verification', { name, email, password, companyName }, { timeoutMs: 50000 });
+      const data = await api.post('/api/auth/request-email-verification', { name, email, password, companyName });
       setStep('verify');
       setCode('');
       setResendSeconds(data.retryAfter || 60);
@@ -79,7 +79,7 @@ export default function Signup() {
     setLoading(true);
     setError('');
     try {
-      const data = await api.post('/api/auth/request-email-verification', { name, email, password, companyName }, { timeoutMs: 50000 });
+      const data = await api.post('/api/auth/request-email-verification', { name, email, password, companyName });
       setCode('');
       setResendSeconds(data.retryAfter || 60);
     } catch (err) {
