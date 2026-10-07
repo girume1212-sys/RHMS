@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
@@ -8,6 +8,7 @@ import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
 import Icon from './Icon';
 import { useTrackPrevMenu } from '../utils/sidebarNav';
+import { isCriticalUnworked } from '../utils/criticalIndicator';
 
 const CLIENT_MENUS = ['/client', '/client/requests', '/client/activity', '/client/profile'];
 
@@ -95,6 +96,15 @@ export default function ClientLayout() {
       setAllNotifications(mapNotifRows(data.notifications));
     }).catch(() => {});
   }, [mapNotifRows]);
+  // Request lookup for the Critical-dot rule (Priority=Critical AND
+  // Status=New|Assigned). Scoped by the same /api/requests RBAC/group
+  // visibility — no group logic changed here.
+  const [critRequests, setCritRequests] = useState([]);
+  const refreshCritRequests = useCallback(() => {
+    api.get('/api/requests').then(data => {
+      setCritRequests(Array.isArray(data) ? data : []);
+    }).catch(() => {});
+  }, []);
 
   // Mark exactly one item read (persisted). Badge derives from state, so it
   // decreases by exactly 1 per item.
@@ -114,6 +124,19 @@ export default function ClientLayout() {
   const [msgFilter, setMsgFilter] = useState('unread');
   const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.is_read);
   const shownMsgs = commentNotes.filter(n => msgFilter === 'read' ? n.is_read : !n.is_read);
+  // Critical-dot helpers: resolve each notification's request to its live
+  // Priority + Status. Dots appear ONLY for Critical + (New|Assigned).
+  const critReqById = useMemo(() => {
+    const m = {};
+    for (const r of critRequests) m[String(r.id)] = r;
+    return m;
+  }, [critRequests]);
+  const notifIsCritical = useCallback((n) => {
+    if (!n || !n.requestId) return false;
+    if (n.is_read) return false;
+    return isCriticalUnworked(critReqById[String(n.requestId)]);
+  }, [critReqById]);
+  const hasCriticalBell = bellNotes.some(notifIsCritical);
 
   const getNotificationIcon = useCallback((type) => {
     const icons = { status_change: 'refresh', assigned: 'user', comment: 'comment', request_created: 'requests', request_deleted: 'delete', default: 'bell' };
@@ -138,7 +161,11 @@ export default function ClientLayout() {
   useEffect(() => {
     if (!user) return;
     refreshNotifications();
-  }, [user, refreshNotifications]);
+    refreshCritRequests();
+    const h = () => { refreshNotifications(); refreshCritRequests(); };
+    window.addEventListener('refresh-requests', h);
+    return () => window.removeEventListener('refresh-requests', h);
+  }, [user, refreshNotifications, refreshCritRequests]);
 
   // SSE real-time notifications
   useEffect(() => {
@@ -192,6 +219,7 @@ export default function ClientLayout() {
           // rows (with DB ids) so badges stay exact and read state is kept.
           if (!isOwnAction) {
             refreshNotifications();
+            refreshCritRequests();
           }
 
           if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
@@ -422,6 +450,7 @@ export default function ClientLayout() {
                     {unreadBell > 99 ? '99+' : unreadBell}
                   </span>
                 )}
+                {hasCriticalBell && <span className="critical-dot" style={{ position: 'absolute', bottom: -2, right: -2, border: '2px solid #fff' }} title="Critical request needs work" />}
               </button>
               {showNotifications && (
                 <div className="dropdown-panel notification-panel" style={{ width: 420, border: darkMode ? '1px solid #334155' : '1px solid #e5e7eb', background: darkMode ? '#1e293b' : '#fff' }}>
@@ -441,7 +470,8 @@ export default function ClientLayout() {
                         <div key={n.id} className={`dropdown-panel-item${n.is_read ? '' : ' notif-unread'}`} onClick={() => { markNotificationRead(n.id); setShowNotifications(false); if (n.requestId) navigate(`/client/requests/${n.requestId}`); }}>
                           <div className="dropdown-panel-icon"><Icon name={getNotificationIcon(n.type)} size={16} /></div>
                           <div className="dropdown-panel-content">
-                            <div className="dropdown-panel-title">
+                            <div className="dropdown-panel-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {notifIsCritical(n) && <span className="critical-dot" title="Critical request needs work" />}
                               {getNotifTitle(n.type)}
                               {n.requestId && <span className="dropdown-panel-request">{t('common.requestPrefixLabel')}-{String(n.requestId).padStart(4, '0')}</span>}
                             </div>
