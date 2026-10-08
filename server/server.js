@@ -895,7 +895,7 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
   const appLink = req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '';
-  const badgeColors = { ASSIGNED: '#8B5CF6', RESOLVED: '#10B981' };
+  const badgeColors = { NEW: '#3B82F6', ASSIGNED: '#8B5CF6', RESOLVED: '#10B981' };
   const badgeColor = (statusBadge && badgeColors[statusBadge]) || '#3B82F6';
   const para = (t) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#e2e8f0;">${t}</p>`;
   const escPara = (t) => para(escapeEmailHtml(t));
@@ -952,9 +952,10 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
   return { html, logoAttachment };
 }
 
-function buildRequestWorkflowText({ title, greetingName, lead, statusBadge, infoText, detailsTitle, detailsBody, resolution, closing }) {
+function buildRequestWorkflowText({ title, greetingName, lead, groupLine, statusBadge, infoText, detailsTitle, detailsBody, resolution, closing }) {
   return (
     `${title}\n\nHello ${greetingName},\n\n${lead}\n\n` +
+    (groupLine ? `Group: ${groupLine}\n\n` : '') +
     (statusBadge ? `Request Status: ${statusBadge}\n\n` : '') +
     `Request Information\n${infoText}\n\n` +
     `Request Details\n${detailsTitle}\n\n${detailsBody}\n\n` +
@@ -1000,6 +1001,66 @@ async function getAdminEmailRecipients() {
     const r = await pool.query("SELECT email FROM users WHERE role = 'admin' AND email IS NOT NULL AND email <> ''");
     return r.rows.map((row) => row.email).filter(Boolean);
   } catch (e) { return []; }
+}
+
+// 1b. Client submits a new request -> group members email.
+// Follows the existing group assignment: the request's groups come from the
+// request_groups rows written at creation from the client's group
+// memberships, and recipients come from getAssignmentGroupRecipients (the
+// same developer/support membership logic as notifyGroupMembers and the
+// dashboards). Members of other groups are never emailed. The submitter is
+// excluded so they never email themselves.
+async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
+  try {
+    const ctx = await getRequestEmailContext(requestId);
+    if (!ctx) return;
+    const grp = await pool.query(
+      'SELECT g.id, g.name FROM request_groups rg JOIN groups g ON g.id = rg.group_id WHERE rg.request_id = $1',
+      [requestId]
+    );
+    if (grp.rows.length === 0) { console.log('[WorkflowEmail:group-new] skipped — request has no group'); return; }
+    const category = workflowCategoryOf(ctx);
+    const submittedOn = formatEmailDateTime(ctx.created_at);
+    const alreadyEmailed = new Set();
+    for (const g of grp.rows) {
+      const members = await getAssignmentGroupRecipients(g.id);
+      for (const m of members) {
+        if (submitterId && String(m.id) === String(submitterId)) continue;
+        const key = `${m.id}|${g.id}`;
+        if (alreadyEmailed.has(key)) continue;
+        alreadyEmailed.add(key);
+        fireWorkflowEmail({
+          to: m.email,
+          subject: `New Support Request for Your Group - #${requestId}`,
+          tag: 'group-new', req, requestId,
+          body: {
+            title: 'New Support Request for Your Group',
+            greetingName: m.name || 'Team Member',
+            lead: 'A new support request has been received for your group and requires your attention.',
+            groupLine: g.name,
+            statusBadge: 'NEW',
+            infoRows:
+              workflowInfoRow('Request ID', `#${requestId}`) +
+              workflowInfoRow('Client', ctx.client_name || 'N/A') +
+              workflowInfoRow('Group', g.name) +
+              workflowInfoRow('Category', category) +
+              workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+              workflowInfoRow('Submitted On', submittedOn),
+            infoText:
+              `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nGroup: ${g.name}\nCategory: ${category}\n` +
+              `Priority: ${ctx.priority_name || 'N/A'}\nSubmitted On: ${submittedOn}`,
+            detailsTitle: ctx.subject,
+            detailsBody: ctx.description || 'N/A',
+            resolution: null,
+            closing: ['Please review the request and proceed with the necessary action.'],
+          },
+        });
+      }
+    }
+    if (alreadyEmailed.size === 0) console.log('[WorkflowEmail:group-new] skipped — no group member emails');
+  } catch (err) {
+    console.error('[WorkflowEmail:group-new] failed:', err.message);
+  }
 }
 
 // 1. Client submits a new request -> Admin email.
@@ -1119,7 +1180,8 @@ async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName,
         body: {
           title: 'New Support Request for Your Group',
           greetingName: m.name || 'Team Member',
-          lead: `A new support request has been received and assigned to your group.\nGroup: ${groupName}\nPlease review the request details below and take the appropriate action according to the RHMS support workflow.`,
+          lead: 'A new support request has been received and assigned to your group.',
+          groupLine: groupName,
           statusBadge: 'ASSIGNED',
           infoRows:
             workflowInfoRow('Request ID', `#${requestId}`) +
@@ -3042,6 +3104,9 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     // Automatic email to the configured Admin address (fire-and-forget;
     // never blocks or rolls back request creation on SMTP failure).
     emailAdminOnNewRequest(id, req);
+    // Automatic email to the Developer/Escalation Team members of the
+    // group(s) the new request belongs to (fire-and-forget).
+    emailGroupMembersOnNewRequest(id, req.user.id, req);
 
     res.status(201).json({ id, subject, description, clientId, categoryId: effectiveCategoryId, customCategory: customCategoryValue, priorityId: priorityId || '2', statusId: '1', assignedTo: null, attachments: attachments || [], createdAt: now, updatedAt: now });
   } catch (err) {
