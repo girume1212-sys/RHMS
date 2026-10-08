@@ -85,6 +85,7 @@ async function verifySmtp() {
 
 // Classify nodemailer errors without leaking credentials/host details.
 function classifySmtpError(err) {
+  if (err && err.message === 'SMTP_INVALID_DOMAIN') return err;
   const msg = String((err && err.message) || '');
   const code = String((err && (err.code || err.responseCode)) || '').toUpperCase();
   if (code.includes('EAUTH') || /auth|535|534|535-5|username|password|credentials/i.test(msg)) {
@@ -109,10 +110,31 @@ function classifySmtpError(err) {
   return e;
 }
 
+// Domains that can never receive mail (RFC 2606 reserved names, local-only
+// names, and malformed hosts). Sending to them only produces a bounce in
+// the sender inbox, so refuse them locally before any SMTP traffic.
+function assertDeliverableRecipients(to) {
+  const list = Array.isArray(to) ? to : String(to || '').split(',');
+  for (const addr of list) {
+    const domain = String(addr || '').trim().split('@')[1] || '';
+    if (
+      !/^[^\s@]+\.[^\s@]+$/.test(domain) ||
+      /\.(test|local|example|invalid)$/i.test(domain) ||
+      /^(localhost|test|example|invalid)$/i.test(domain) ||
+      /^(example\.com|example\.net|example\.org)$/i.test(domain)
+    ) {
+      const e = new Error('SMTP_INVALID_DOMAIN');
+      e.cause = new Error(`Undeliverable recipient domain: ${domain || '(missing)'}`);
+      throw e;
+    }
+  }
+}
+
 async function sendMail({ to, subject, text, html, attachments }) {
   if (!isSmtpConfigured()) {
     throw new Error('SMTP is not configured');
   }
+  assertDeliverableRecipients(to);
   const s = smtpSettings();
   try {
     const info = await withTimeout(

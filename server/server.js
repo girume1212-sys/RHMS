@@ -656,27 +656,30 @@ async function syncUserRequestGroups(userId, groupIds) {
     }
     for (const gid of groupList) {
       const result = await pool.query(
-        'INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        'INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING request_id',
         [r.id, gid]
       );
-      if (result.rowCount > 0) added[gid] = (added[gid] || 0) + result.rowCount;
+      if (result.rowCount > 0) (added[gid] = added[gid] || []).push(r.id);
     }
   }
   return added;
 }
 
-// Incrementally associate one group with a user's existing requests
+// Incrementally associate one group with a user's existing requests.
+// Returns the IDs of requests newly linked to the group (empty when the
+// user has no linkable requests or they were already linked).
 async function addUserRequestGroup(userId, groupId) {
-  if (!userId || !groupId) return 0;
+  if (!userId || !groupId) return [];
   const result = await pool.query(
     `INSERT INTO request_groups (request_id, group_id)
      SELECT r.id, $2
      FROM requests r
      WHERE r.client_id = $1 AND r.assigned_group IS NULL
-     ON CONFLICT DO NOTHING`,
+     ON CONFLICT DO NOTHING
+     RETURNING request_id`,
     [userId, groupId]
   );
-  return result.rowCount || 0;
+  return result.rows.map((row) => row.request_id);
 }
 
 // Remove a group association from a user's existing requests (unless the
@@ -722,7 +725,7 @@ async function isEmailVerified(email) {
 // not email. The email triggers filter by isEmailVerified() themselves.
 async function getAssignmentGroupRecipients(groupId) {
   const membersResult = await pool.query(
-    "SELECT u.id, u.name, u.email FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support') AND u.email IS NOT NULL AND u.email <> ''",
+    "SELECT u.id, u.name, u.email, u.role FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support') AND u.email IS NOT NULL AND u.email <> ''",
     [groupId]
   );
   return membersResult.rows;
@@ -844,7 +847,7 @@ async function getEmailContactFooter() {
   }
   lines.push(`<p style="margin:12px 0 0;font-size:11px;color:#9ca3af;">This is an automated message. Please do not reply to this email.</p>`);
   return (
-    `<tr><td align="center" style="background:linear-gradient(160deg,#000000 0%,#111827 55%,#1F2937 100%);background-color:#111827;padding:20px 32px;text-align:center;">` +
+    `<tr><td align="center" style="${EMAIL_FOOTER_STYLE}">` +
     lines.join('') +
     `</td></tr>`
   );
@@ -858,6 +861,12 @@ async function getEmailContactFooter() {
 const escapeEmailHtml = (v) => String(v == null ? '' : v)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+// Shared bright blue/black email theme: vivid blue gradient over black with
+// light, high-contrast text. bgcolor fallbacks match for clients that strip
+// CSS gradients.
+const EMAIL_CARD_STYLE = 'max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#0A1F44 55%,#1D4ED8 135%);background-color:#0A1F44;border-radius:12px;overflow:hidden;';
+const EMAIL_FOOTER_STYLE = 'background:linear-gradient(160deg,#000000 0%,#0A1F44 60%,#1E40AF 140%);background-color:#0A1F44;padding:20px 32px;text-align:center;';
 
 // Enriched request context for workflow emails: client profile + request
 // details, resolved from existing tables. Returns null when the request
@@ -896,35 +905,35 @@ function formatEmailDateTime(v) {
 // Renders one "Request Information" bullet row for the professional template.
 function workflowInfoRow(label, value) {
   return (
-    `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#cbd5e1;">` +
-    `<span style="color:#ffffff;">&#8226;&nbsp;&nbsp;</span>` +
-    `<strong style="color:#ffffff;">${escapeEmailHtml(label)}:</strong> ${escapeEmailHtml(value)}` +
+    `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;">` +
+    `<span style="color:#60A5FA;">&#8226;&nbsp;&nbsp;</span>` +
+    `<strong style="color:#BFDBFE;">${escapeEmailHtml(label)}:</strong> ${escapeEmailHtml(value)}` +
     `</td></tr>`
   );
 }
 
 function workflowSectionTitle(title) {
-  return `<p style="margin:0 0 10px;font-size:15px;font-weight:700;color:#ffffff;">${escapeEmailHtml(title)}</p>`;
+  return `<p style="margin:0 0 10px;font-size:15px;font-weight:700;color:#93C5FD;letter-spacing:0.3px;">${escapeEmailHtml(title)}</p>`;
 }
 
 // Professional RHMS workflow email: greeting, optional status badge, Request
 // Information bullets, Request Details (title + description), optional
 // Resolution section, closing, View Request button, professional footer.
 // Responsive table-based HTML suitable for Gmail.
-async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, statusBadge, infoRows, detailsTitle, detailsBody, resolution, closing, req, requestId }) {
+async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, statusBadge, infoRows, detailsTitle, detailsBody, resolution, extraSection, closing, req, requestId }) {
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
   const appLink = req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '';
-  const badgeColors = { NEW: '#3B82F6', ASSIGNED: '#8B5CF6', RESOLVED: '#10B981' };
+  const badgeColors = { NEW: '#3B82F6', ASSIGNED: '#8B5CF6', ESCALATED: '#EF4444', RESOLVED: '#10B981' };
   const badgeColor = (statusBadge && badgeColors[statusBadge]) || '#3B82F6';
-  const para = (t) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#e2e8f0;">${t}</p>`;
+  const para = (t) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#E8EEFF;">${t}</p>`;
   const escPara = (t) => para(escapeEmailHtml(t));
   const html =
     `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
     `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
     `<tr><td align="center">` +
-    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111827" style="max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#111827 55%,#1F2937 100%);background-color:#111827;border-radius:12px;overflow:hidden;">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#0A1F44" style="${EMAIL_CARD_STYLE}">` +
     `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` + logoBlock + `</td></tr>` +
     `<tr><td align="center" style="padding:8px 32px 24px;text-align:center;">` +
     `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#ffffff;font-weight:700;">${escapeEmailHtml(title)}</h1>` +
@@ -933,7 +942,7 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
     escPara(`Hello ${greetingName},`) +
     escPara(lead) +
     (groupLine
-      ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#e2e8f0;"><strong style="color:#ffffff;">Group:</strong> ${escapeEmailHtml(groupLine)}</p>`
+      ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#E8EEFF;"><strong style="color:#ffffff;">Group:</strong> ${escapeEmailHtml(groupLine)}</p>`
       : '') +
     (statusBadge
       ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;"><tr><td bgcolor="${badgeColor}" style="border-radius:6px;padding:8px 18px;">` +
@@ -948,21 +957,27 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
     `<tr><td style="padding:18px 32px 0;">` +
     workflowSectionTitle('Request Details') +
     `<p style="margin:0 0 8px;font-size:15px;font-weight:700;line-height:1.6;color:#ffffff;">${escapeEmailHtml(detailsTitle)}</p>` +
-    `<p style="margin:0;font-size:14px;line-height:1.7;color:#e2e8f0;white-space:pre-line;">${escapeEmailHtml(detailsBody)}</p>` +
+    `<p style="margin:0;font-size:14px;line-height:1.7;color:#E8EEFF;white-space:pre-line;">${escapeEmailHtml(detailsBody)}</p>` +
     `</td></tr>` +
     (resolution != null
       ? `<tr><td style="padding:18px 32px 0;">` +
         workflowSectionTitle('Resolution') +
-        `<p style="margin:0;font-size:14px;line-height:1.7;color:#e2e8f0;white-space:pre-line;">${escapeEmailHtml(resolution)}</p>` +
+        `<p style="margin:0;font-size:14px;line-height:1.7;color:#E8EEFF;white-space:pre-line;">${escapeEmailHtml(resolution)}</p>` +
+        `</td></tr>`
+      : '') +
+    (extraSection != null
+      ? `<tr><td style="padding:18px 32px 0;">` +
+        workflowSectionTitle(extraSection.title) +
+        `<p style="margin:0;font-size:14px;line-height:1.7;color:#E8EEFF;white-space:pre-line;">${escapeEmailHtml(extraSection.body)}</p>` +
         `</td></tr>`
       : '') +
     `<tr><td style="padding:18px 32px 0;">` +
     closing.map(escPara).join('') +
-    `<p style="margin:16px 0 0;font-size:14px;line-height:1.7;color:#e2e8f0;"><strong style="color:#ffffff;">Best regards,</strong><br><strong style="color:#ffffff;">RHMS Support Team</strong></p>` +
+    `<p style="margin:16px 0 0;font-size:14px;line-height:1.7;color:#E8EEFF;"><strong style="color:#ffffff;">Best regards,</strong><br><strong style="color:#ffffff;">RHMS Support Team</strong></p>` +
     `</td></tr>` +
     (appLink
       ? `<tr><td align="center" style="padding:24px 32px 8px;">` +
-        `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
+        `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;"><tr><td align="center" bgcolor="#2563EB" style="border-radius:8px;">` +
         `<a href="${escapeEmailHtml(appLink)}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">View Request</a>` +
         `</td></tr></table></td></tr>`
       : '') +
@@ -972,7 +987,7 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
   return { html, logoAttachment };
 }
 
-function buildRequestWorkflowText({ title, greetingName, lead, groupLine, statusBadge, infoText, detailsTitle, detailsBody, resolution, closing }) {
+function buildRequestWorkflowText({ title, greetingName, lead, groupLine, statusBadge, infoText, detailsTitle, detailsBody, resolution, extraSection, closing }) {
   return (
     `${title}\n\nHello ${greetingName},\n\n${lead}\n\n` +
     (groupLine ? `Group: ${groupLine}\n\n` : '') +
@@ -980,6 +995,7 @@ function buildRequestWorkflowText({ title, greetingName, lead, groupLine, status
     `Request Information\n${infoText}\n\n` +
     `Request Details\n${detailsTitle}\n\n${detailsBody}\n\n` +
     (resolution != null ? `Resolution\n${resolution}\n\n` : '') +
+    (extraSection != null ? `${extraSection.title}\n${extraSection.body}\n\n` : '') +
     closing.join('\n\n') +
     `\n\nBest regards,\nRHMS Support Team`
   );
@@ -1023,13 +1039,15 @@ async function getAdminEmailRecipients() {
   } catch (e) { return []; }
 }
 
-// 1b. Client submits a new request -> group members email.
+// 1b. Client submits a new request -> Developers in the same group.
 // Follows the existing group assignment: the request's groups come from the
 // request_groups rows written at creation from the client's group
-// memberships, and recipients come from getAssignmentGroupRecipients (the
-// same developer/support membership logic as notifyGroupMembers and the
-// dashboards). Members of other groups are never emailed. The submitter is
-// excluded so they never email themselves.
+// memberships, and recipients are the developer-role members returned by
+// getAssignmentGroupRecipients (the same membership logic as
+// notifyGroupMembers and the dashboards). Escalation Team members do NOT
+// receive this initial email — they are notified only on escalation.
+// Members of other groups are never emailed. The submitter is excluded so
+// they never email themselves.
 async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
   try {
     const ctx = await getRequestEmailContext(requestId);
@@ -1039,100 +1057,163 @@ async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
       [requestId]
     );
     if (grp.rows.length === 0) { console.log('[WorkflowEmail:group-new] skipped — request has no group'); return; }
-    const category = workflowCategoryOf(ctx);
-    const submittedOn = formatEmailDateTime(ctx.created_at);
-    const alreadyEmailed = new Set();
+    const emailed = new Set();
     for (const g of grp.rows) {
-      const members = await getAssignmentGroupRecipients(g.id);
-      for (const m of members) {
-        if (submitterId && String(m.id) === String(submitterId)) continue;
-        if (!(await isEmailVerified(m.email))) {
-          console.log(`[WorkflowEmail:group-new] skipped — ${m.email} is not a verified email`);
-          continue;
-        }
-        const key = `${m.id}|${g.id}`;
-        if (alreadyEmailed.has(key)) continue;
-        alreadyEmailed.add(key);
-        const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
-        const isDeveloper = m.role === 'developer';
-        const subject = isDeveloper
-          ? `New Support Request Assigned to Your Group - #${requestId}`
-          : `New Support Request for Your Group - #${requestId}`;
-        const workflow = isDeveloper ? 'support' : 'escalation';
-        fireWorkflowEmail({
-          to: m.email,
-          subject,
-          tag: 'group-new', req, requestId,
-          body: {
-            title: subject.replace(` - #${requestId}`, ''),
-            greetingName: m.name || 'Team Member',
-            lead: `A new support request has been submitted by ${ctx.client_name || 'a client'} and is associated with your group.`,
-            groupLine: g.name,
-            statusBadge: 'NEW',
-            infoRows:
-              workflowInfoRow('Request ID', `#${requestId}`) +
-              workflowInfoRow('Client', ctx.client_name || 'N/A') +
-              workflowInfoRow('Client Email', clientEmail) +
-              workflowInfoRow('Group', g.name) +
-              workflowInfoRow('Category', category) +
-              workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
-              workflowInfoRow('Submitted On', submittedOn),
-            infoText:
-              `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\nGroup: ${g.name}\nCategory: ${category}\n` +
-              `Priority: ${ctx.priority_name || 'N/A'}\nSubmitted On: ${submittedOn}`,
-            detailsTitle: ctx.subject,
-            detailsBody: ctx.description || 'N/A',
-            resolution: null,
-            closing: [
-              isDeveloper
-                ? 'Please review the request and proceed with the necessary action.'
-                : 'Please review the request and proceed with the necessary action according to the escalation workflow.',
-            ],
-          },
-        });
+      for (const key of await emailGroupDevelopersForRequestGroup(requestId, g.id, g.name, submitterId, req, emailed)) {
+        emailed.add(key);
       }
     }
-    if (alreadyEmailed.size === 0) console.log('[WorkflowEmail:group-new] skipped — no group member emails');
+    if (emailed.size === 0) console.log('[WorkflowEmail:group-new] skipped — no group developer emails');
   } catch (err) {
     console.error('[WorkflowEmail:group-new] failed:', err.message);
   }
 }
 
-// 1. Client submits a new request -> Admin email.
+// Sends the new-request developer email for ONE (request, group) pair to the
+// developer-role members of that group (verified emails only, submitter
+// excluded). Shared by the creation trigger and the member-add sync path so
+// both follow identical recipient rules. Returns the emailed member|group
+// keys. Never throws.
+async function emailGroupDevelopersForRequestGroup(requestId, groupId, groupName, submitterId, req, alreadyEmailed = new Set()) {
+  const emailedKeys = [];
+  try {
+    const ctx = await getRequestEmailContext(requestId);
+    if (!ctx) return emailedKeys;
+    const category = workflowCategoryOf(ctx);
+    const submittedOn = formatEmailDateTime(ctx.created_at);
+    const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
+    const members = await getAssignmentGroupRecipients(groupId);
+    for (const m of members) {
+      if (m.role !== 'developer') continue;
+      if (submitterId && String(m.id) === String(submitterId)) continue;
+      if (!(await isEmailVerified(m.email))) {
+        console.log(`[WorkflowEmail:group-new] skipped — ${m.email} is not a verified email`);
+        continue;
+      }
+      const key = `${m.id}|${groupId}`;
+      if (alreadyEmailed.has(key)) continue;
+      alreadyEmailed.add(key);
+      emailedKeys.push(key);
+      fireWorkflowEmail({
+        to: m.email,
+        subject: `New Support Request Assigned to Your Group - #${requestId}`,
+        tag: 'group-new', req, requestId,
+        body: {
+          title: 'New Support Request Assigned to Your Group',
+          greetingName: m.name || 'Developer',
+          lead: `A new support request has been submitted by ${ctx.client_name || 'a client'} and is associated with your group.`,
+          groupLine: groupName,
+          statusBadge: 'NEW',
+          infoRows:
+            workflowInfoRow('Request ID', `#${requestId}`) +
+            workflowInfoRow('Client', ctx.client_name || 'N/A') +
+            workflowInfoRow('Client Email', clientEmail) +
+            workflowInfoRow('Group', groupName) +
+            workflowInfoRow('Category', category) +
+            workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+            workflowInfoRow('Submitted On', submittedOn),
+          infoText:
+            `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\nGroup: ${groupName}\nCategory: ${category}\n` +
+            `Priority: ${ctx.priority_name || 'N/A'}\nSubmitted On: ${submittedOn}`,
+          detailsTitle: ctx.subject,
+          detailsBody: ctx.description || 'N/A',
+          resolution: null,
+          closing: ['Please review the request and proceed with the necessary action.'],
+        },
+      });
+    }
+  } catch (err) {
+    console.error('[WorkflowEmail:group-new] failed:', err.message);
+  }
+  return emailedKeys;
+}
+
+// Emails a group's developers about requests that became visible to the
+// group because a member was added (user update or member-add endpoint).
+// Only newly linked, still-open requests are emailed: closed/rejected/
+// resolved ones would be noise, and already-linked requests were emailed
+// when they were first associated. Fire-and-forget; never throws.
+async function emailGroupDevelopersForSyncedRequests(requestIds, groupId, req) {
+  try {
+    if (!Array.isArray(requestIds) || requestIds.length === 0) return;
+    const grp = await pool.query('SELECT name FROM groups WHERE id = $1', [groupId]);
+    const groupName = grp.rows.length > 0 ? grp.rows[0].name : groupId;
+    const emailed = new Set();
+    for (const requestId of requestIds) {
+      const st = await pool.query('SELECT client_id, status_id FROM requests WHERE id = $1', [requestId]);
+      if (st.rows.length === 0) continue;
+      if (['5', '6', '8'].includes(String(st.rows[0].status_id))) continue;
+      for (const key of await emailGroupDevelopersForRequestGroup(requestId, groupId, groupName, st.rows[0].client_id, req, emailed)) {
+        emailed.add(key);
+      }
+    }
+  } catch (err) {
+    console.error('[WorkflowEmail:group-new] failed:', err.message);
+  }
+}
+
+// 1. Client submits a new request -> ALL Admin users.
+// Every registered admin-role user receives a personalized notification at
+// their registered, verified email (falls back to the configured systemEmail
+// only when no admin account exists). Group names come from the request's
+// request_groups rows — never hard-coded.
 async function emailAdminOnNewRequest(requestId, req) {
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
-    const recipients = await getAdminEmailRecipients();
-    if (recipients.length === 0) { console.log('[WorkflowEmail:new-request] skipped — no admin recipient'); return; }
+    const admins = await pool.query(
+      "SELECT id, name, email FROM users WHERE role = 'admin' AND email IS NOT NULL AND email <> ''"
+    );
+    let recipients = admins.rows;
+    if (recipients.length === 0) {
+      const fallback = await getAdminEmailRecipients();
+      if (fallback.length === 0) { console.log('[WorkflowEmail:new-request] skipped — no admin recipient'); return; }
+      recipients = fallback.map((email) => ({ id: null, name: 'Admin', email }));
+    }
+    const grp = await pool.query(
+      'SELECT g.name FROM request_groups rg JOIN groups g ON g.id = rg.group_id WHERE rg.request_id = $1',
+      [requestId]
+    );
+    const groupNames = grp.rows.map((r) => r.name).filter(Boolean).join(', ') || 'N/A';
     const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
     const category = workflowCategoryOf(ctx);
     const submittedOn = formatEmailDateTime(ctx.created_at);
-    fireWorkflowEmail({
-      to: recipients.join(', '),
-      subject: `New Support Request Submitted - #${requestId}`,
-      tag: 'new-request', req, requestId,
-      body: {
-        title: 'New Support Request Submitted',
-        greetingName: 'Admin',
-        lead: 'A new support request has been successfully submitted through the RHMS Support Request System and requires your review.',
-        statusBadge: null,
-        infoRows:
-          workflowInfoRow('Request ID', `#${requestId}`) +
-          workflowInfoRow('Client', ctx.client_name || 'N/A') +
-          workflowInfoRow('Client Email', clientEmail) +
-          workflowInfoRow('Category', category) +
-          workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
-          workflowInfoRow('Submitted On', submittedOn),
-        infoText:
-          `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\n` +
-          `Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\nSubmitted On: ${submittedOn}`,
-        detailsTitle: ctx.subject,
-        detailsBody: ctx.description || 'N/A',
-        resolution: null,
-        closing: ['Please review the request and assign it to the appropriate Developer or Escalation Team.'],
-      },
-    });
+    let sent = 0;
+    for (const a of recipients) {
+      if (!(await isEmailVerified(a.email))) {
+        console.log(`[WorkflowEmail:new-request] skipped — ${a.email} is not a verified email`);
+        continue;
+      }
+      sent += 1;
+      fireWorkflowEmail({
+        to: a.email,
+        subject: `New Support Request Received - #${requestId}`,
+        tag: 'new-request', req, requestId,
+        body: {
+          title: 'New Support Request Received',
+          greetingName: a.name || 'Admin',
+          lead: `A new support request has been submitted by ${ctx.client_name || 'a client'} and is awaiting your review.`,
+          statusBadge: 'NEW',
+          infoRows:
+            workflowInfoRow('Request ID', `#${requestId}`) +
+            workflowInfoRow('Client', ctx.client_name || 'N/A') +
+            workflowInfoRow('Client Email', clientEmail) +
+            workflowInfoRow('Group', groupNames) +
+            workflowInfoRow('Category', category) +
+            workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+            workflowInfoRow('Status', ctx.status_name || 'N/A') +
+            workflowInfoRow('Submitted On', submittedOn),
+          infoText:
+            `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\n` +
+            `Group: ${groupNames}\nCategory: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\nStatus: ${ctx.status_name || 'N/A'}\nSubmitted On: ${submittedOn}`,
+          detailsTitle: ctx.subject,
+          detailsBody: ctx.description || 'N/A',
+          resolution: null,
+          closing: ['Please review the request and assign or process it according to the existing RHMS workflow.'],
+        },
+      });
+    }
+    if (sent === 0) console.log('[WorkflowEmail:new-request] skipped — no verified admin emails');
   } catch (err) {
     console.error('[WorkflowEmail:new-request] failed:', err.message);
   }
@@ -1248,6 +1329,100 @@ async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName,
     }
   } catch (err) {
     console.error('[WorkflowEmail:assign-team] failed:', err.message);
+  }
+}
+
+// Developer's escalation note: the most recent stored comment, falling back
+// to the latest activity entry. RHMS has no dedicated escalation-note
+// column, so existing data sources are reused.
+async function getEscalationNote(requestId) {
+  try {
+    const c = await pool.query(
+      'SELECT content FROM comments WHERE request_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [requestId]
+    );
+    if (c.rows.length > 0 && c.rows[0].content) return String(c.rows[0].content);
+  } catch (e) { /* fall through */ }
+  try {
+    const a = await pool.query(
+      'SELECT message FROM activity_log WHERE request_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [requestId]
+    );
+    if (a.rows.length > 0 && a.rows[0].message) return String(a.rows[0].message);
+  } catch (e) { /* fall through */ }
+  return 'No escalation note was provided.';
+}
+
+// 3b. Developer escalates the request -> Escalation Team members in the same
+// group. Triggered by the status transition to Escalated (never by creation
+// or assignment), so the Escalation Team receives no earlier email.
+// Recipients are the support-role members of the request's request_groups
+// rows via getAssignmentGroupRecipients; the escalator is excluded so they
+// never email themselves.
+async function emailEscalationTeamOnEscalation(requestId, escalator, req) {
+  try {
+    const ctx = await getRequestEmailContext(requestId);
+    if (!ctx) return;
+    const grp = await pool.query(
+      'SELECT g.id, g.name FROM request_groups rg JOIN groups g ON g.id = rg.group_id WHERE rg.request_id = $1',
+      [requestId]
+    );
+    if (grp.rows.length === 0) { console.log('[WorkflowEmail:escalated] skipped — request has no group'); return; }
+    const category = workflowCategoryOf(ctx);
+    const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
+    const escalatedOn = formatEmailDateTime(ctx.updated_at);
+    const note = await getEscalationNote(requestId);
+    const escalatorName = (escalator && escalator.name) || 'A developer';
+    const escalatorId = escalator && escalator.id;
+    let sent = 0;
+    const alreadyEmailed = new Set();
+    for (const g of grp.rows) {
+      const members = await getAssignmentGroupRecipients(g.id);
+      for (const m of members) {
+        if (m.role !== 'support') continue;
+        if (escalatorId && String(m.id) === String(escalatorId)) continue;
+        if (!(await isEmailVerified(m.email))) {
+          console.log(`[WorkflowEmail:escalated] skipped — ${m.email} is not a verified email`);
+          continue;
+        }
+        const key = `${m.id}|${g.id}`;
+        if (alreadyEmailed.has(key)) continue;
+        alreadyEmailed.add(key);
+        sent += 1;
+        fireWorkflowEmail({
+          to: m.email,
+          subject: `Support Request Escalated to Your Team - #${requestId}`,
+          tag: 'escalated', req, requestId,
+          body: {
+            title: 'Support Request Escalated to Your Team',
+            greetingName: m.name || 'Team Member',
+            lead: `A support request from ${ctx.client_name || 'a client'} has been escalated to your team and requires your attention.`,
+            groupLine: g.name,
+            statusBadge: 'ESCALATED',
+            infoRows:
+              workflowInfoRow('Request ID', `#${requestId}`) +
+              workflowInfoRow('Client', ctx.client_name || 'N/A') +
+              workflowInfoRow('Client Email', clientEmail) +
+              workflowInfoRow('Group', g.name) +
+              workflowInfoRow('Category', category) +
+              workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+              workflowInfoRow('Escalated By', escalatorName) +
+              workflowInfoRow('Escalated On', escalatedOn),
+            infoText:
+              `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\nGroup: ${g.name}\nCategory: ${category}\n` +
+              `Priority: ${ctx.priority_name || 'N/A'}\nEscalated By: ${escalatorName}\nEscalated On: ${escalatedOn}`,
+            detailsTitle: ctx.subject,
+            detailsBody: ctx.description || 'N/A',
+            resolution: null,
+            extraSection: { title: "Developer's Escalation Note", body: note },
+            closing: ['Please review the request and take the necessary action.'],
+          },
+        });
+      }
+    }
+    if (sent === 0) console.log('[WorkflowEmail:escalated] skipped — no verified escalation member emails');
+  } catch (err) {
+    console.error('[WorkflowEmail:escalated] failed:', err.message);
   }
 }
 
@@ -1462,59 +1637,64 @@ app.post('/api/auth/signup', async (req, res) => {
     // signup response (and login navigation) never waits on SMTP delivery;
     // a failure is logged and never rolls back or duplicates the registration.
     const newUser = result.rows[0];
-    const escapeHtml = (v) => String(v == null ? '' : v)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    const safeName = escapeHtml(newUser.name);
-    const loginUrl = `${req.protocol}://${req.get('host')}/login`;
-    const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
-    const contactFooter = await getEmailContactFooter();
-    mailer.sendMail({
-      to: newUser.email,
-      subject: 'RHMS Registration Successful',
-      text:
-        `Welcome to the Request Handling Management System!\n\n` +
-        `Hello ${newUser.name},\n\n` +
-        `🎉 You have successfully registered and verified your email.\n\n` +
-        `Your RHMS account is now ready to use.\n\n` +
-        `The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It allows users to submit and track requests while support teams and developers can efficiently manage, assign, resolve, and monitor issues from creation through completion.\n\n` +
-        `Sign in to RHMS: ${loginUrl}\n\n` +
-        `Your account is now ready to use. Sign in using your registered email address and password.\n\n` +
-        `Regards,\nRHMS Request Handling Management System\n\n` +
-        `If you did not create this account, please contact the RHMS administrator.`,
-      html:
-        `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
-        `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
-        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
-        `<tr><td align="center">` +
-        `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111827" style="max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#111827 55%,#1F2937 100%);background-color:#111827;border-radius:12px;overflow:hidden;">` +
-        `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` +
-        logoBlock +
-        `</td></tr>` +
-        `<tr><td align="center" style="padding:8px 32px 28px;text-align:center;">` +
-        `<h1 style="margin:0;font-size:24px;line-height:1.35;color:#ffffff;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
-        `</td></tr>` +
-        `<tr><td style="padding:32px;">` +
-        `<p style="margin:0 0 8px;font-size:16px;color:#f1f5f9;">Hello ${safeName},</p>` +
-        `<p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#ffffff;">🎉 You have successfully registered and verified your email.</p>` +
-        `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Your RHMS account is now ready to use.</p>` +
-        `<p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#cbd5e1;">The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It allows users to submit and track requests while support teams and developers can efficiently manage, assign, resolve, and monitor issues from creation through completion.</p>` +
-        `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
-        `<a href="${escapeHtml(loginUrl)}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Sign In to RHMS</a>` +
-        `</td></tr></table>` +
-        `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#cbd5e1;">Your account is now ready to use. Sign in using your registered email address and password.</p>` +
-        `<p style="margin:0;font-size:14px;line-height:1.7;color:#cbd5e1;">Regards,<br><strong>RHMS Request Handling Management System</strong></p>` +
-        `<p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:#cbd5e1;">If you did not create this account, please contact the RHMS administrator.</p>` +
-        `</td></tr>` +
-        contactFooter +
-        `</table></td></tr></table></body></html>`,
-      ...(logoAttachment ? { attachments: [logoAttachment] } : {}),
-    }).then(() => {
-      console.log(`[Signup] Registration confirmation email sent to ${newUser.email}`);
-    }).catch((err) => {
-      console.error('[Signup] Registration confirmation email failed:', err.message);
-    });
+    // Respond immediately so clicking Register never waits on email
+    // composition or SMTP delivery; the confirmation email (same content,
+    // same recipients) is built and sent in the background. A failure is
+    // logged and never rolls back the registration.
     res.status(201).json({ message: 'Account created successfully', user: mapUser(result.rows[0]) });
+    (async () => {
+      const escapeHtml = (v) => String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      const safeName = escapeHtml(newUser.name);
+      const loginUrl = `${req.protocol}://${req.get('host')}/login`;
+      const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
+      const contactFooter = await getEmailContactFooter();
+      await mailer.sendMail({
+        to: newUser.email,
+        subject: 'RHMS Registration Successful',
+        text:
+          `Welcome to the Request Handling Management System!\n\n` +
+          `Hello ${newUser.name},\n\n` +
+          `🎉 You have successfully registered and verified your email.\n\n` +
+          `Your RHMS account is now ready to use.\n\n` +
+          `The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It allows users to submit and track requests while support teams and developers can efficiently manage, assign, resolve, and monitor issues from creation through completion.\n\n` +
+          `Sign in to RHMS: ${loginUrl}\n\n` +
+          `Your account is now ready to use. Sign in using your registered email address and password.\n\n` +
+          `Regards,\nRHMS Request Handling Management System\n\n` +
+          `If you did not create this account, please contact the RHMS administrator.`,
+        html:
+          `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+          `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
+          `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
+          `<tr><td align="center">` +
+          `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#0A1F44" style="${EMAIL_CARD_STYLE}">` +
+          `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` +
+          logoBlock +
+          `</td></tr>` +
+          `<tr><td align="center" style="padding:8px 32px 28px;text-align:center;">` +
+          `<h1 style="margin:0;font-size:24px;line-height:1.35;color:#ffffff;font-weight:700;">Welcome to the Request Handling Management System!</h1>` +
+          `</td></tr>` +
+          `<tr><td style="padding:32px;">` +
+          `<p style="margin:0 0 8px;font-size:16px;color:#f1f5f9;">Hello ${safeName},</p>` +
+          `<p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#ffffff;">🎉 You have successfully registered and verified your email.</p>` +
+          `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Your RHMS account is now ready to use.</p>` +
+          `<p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#D7E3FF;">The Request Handling Management System (RHMS) provides a centralized platform for managing support requests and issues. It allows users to submit and track requests while support teams and developers can efficiently manage, assign, resolve, and monitor issues from creation through completion.</p>` +
+          `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#2563EB" style="border-radius:8px;">` +
+          `<a href="${escapeHtml(loginUrl)}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Sign In to RHMS</a>` +
+          `</td></tr></table>` +
+          `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#D7E3FF;">Your account is now ready to use. Sign in using your registered email address and password.</p>` +
+          `<p style="margin:0;font-size:14px;line-height:1.7;color:#D7E3FF;">Regards,<br><strong>RHMS Request Handling Management System</strong></p>` +
+          `<p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:#D7E3FF;">If you did not create this account, please contact the RHMS administrator.</p>` +
+          `</td></tr>` +
+          contactFooter +
+          `</table></td></tr></table></body></html>`,
+        ...(logoAttachment ? { attachments: [logoAttachment] } : {}),
+      });
+      console.log(`[Signup] Registration confirmation email sent to ${newUser.email}`);
+    })().catch((err) => {
+      console.error('[Signup] Registration confirmation email failed:', (err && err.message) || err);
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Please try again' });
@@ -1790,7 +1970,7 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
     `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
     `<tr><td align="center">` +
-    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111827" style="max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#111827 55%,#1F2937 100%);background-color:#111827;border-radius:12px;overflow:hidden;">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#0A1F44" style="${EMAIL_CARD_STYLE}">` +
     `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` +
     logoBlock +
     `</td></tr>` +
@@ -1799,11 +1979,11 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
     `</td></tr>` +
     `<tr><td style="padding:32px;">` +
     `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Your password reset verification code is:</p>` +
-    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
+    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#2563EB" style="border-radius:8px;">` +
     `<div style="display:inline-block;padding:14px 32px;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:6px;border-radius:8px;">${otp}</div>` +
     `</td></tr></table>` +
-    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#cbd5e1;">This code will expire in ${ttlSeconds} seconds.</p>` +
-    `<p style="margin:0;font-size:14px;line-height:1.7;color:#cbd5e1;">If you did not request a password reset, please ignore this email.</p>` +
+    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#D7E3FF;">This code will expire in ${ttlSeconds} seconds.</p>` +
+    `<p style="margin:0;font-size:14px;line-height:1.7;color:#D7E3FF;">If you did not request a password reset, please ignore this email.</p>` +
     `</td></tr>` +
     contactFooter +
     `</table></td></tr></table></body></html>`;
@@ -2047,8 +2227,10 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
 
 // ---- Registration email verification (separate from password-reset OTPs) ----
 // A user row is NOT created until the mailbox is proven reachable: a code is
-// mailed to the entered address and signup requires that code. SMTP delivery
-// failure (e.g. unknown Gmail mailbox, 550) aborts with 503 and no account.
+// mailed to the entered address and signup requires that code. The endpoint
+// responds immediately (background SMTP delivery) so Register stays fast; a
+// background delivery failure only discards the unsent code, never an
+// account, and the retry sends fresh.
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_VERIFY_TTL_SECONDS = OTP_TTL_SECONDS;
 const EMAIL_VERIFY_MAX_ATTEMPTS = 5;
@@ -2084,7 +2266,7 @@ async function sendRegistrationVerificationEmail(toEmail, userName, code, req) {
     `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
     `<tr><td align="center">` +
-    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111827" style="max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#111827 55%,#1F2937 100%);background-color:#111827;border-radius:12px;overflow:hidden;">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#0A1F44" style="${EMAIL_CARD_STYLE}">` +
     `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` +
     logoBlock +
     `</td></tr>` +
@@ -2093,11 +2275,11 @@ async function sendRegistrationVerificationEmail(toEmail, userName, code, req) {
     `</td></tr>` +
     `<tr><td style="padding:32px;">` +
     `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Your email verification code is:</p>` +
-    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
+    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#2563EB" style="border-radius:8px;">` +
     `<div style="display:inline-block;padding:14px 32px;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:6px;border-radius:8px;">${code}</div>` +
     `</td></tr></table>` +
-    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#cbd5e1;">This code will expire in ${EMAIL_VERIFY_TTL_SECONDS} seconds.</p>` +
-    `<p style="margin:0;font-size:14px;line-height:1.7;color:#cbd5e1;">If you did not request this verification, please ignore this email.</p>` +
+    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#D7E3FF;">This code will expire in ${EMAIL_VERIFY_TTL_SECONDS} seconds.</p>` +
+    `<p style="margin:0;font-size:14px;line-height:1.7;color:#D7E3FF;">If you did not request this verification, please ignore this email.</p>` +
     `</td></tr>` +
     contactFooter +
     `</table></td></tr></table></body></html>`;
@@ -2157,32 +2339,20 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, NOW())`,
       [codeId, email, hashOtp(code), expiresAt, ip]
     );
-    // Deliver synchronously so a nonexistent mailbox (Gmail 550 5.1.1
-    // NoSuchUser) is reported to the user immediately instead of a false
-    // "code sent" success plus a bounce in the sender inbox. Gmail answers
-    // RCPT TO within seconds, so the UI only waits briefly; the mailer
-    // still caps the attempt at SMTP_TIMEOUT_MS.
-    try {
-      await sendRegistrationVerificationEmail(email, name, code, req);
-    } catch (err) {
-      const kind = (err && err.message) || '';
-      console.error('[EmailVerify] SMTP send failed for', email, ':', kind);
+    // Fail fast (no network I/O) when SMTP is not configured at all.
+    if (!mailer.isSmtpConfigured()) {
       try { await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]); } catch (e) { /* ignore */ }
-      if (kind === 'SMTP_NO_SUCH_USER') {
-        return res.status(400).json({ error: 'This email address does not exist or cannot receive mail. Please check for typos and use a valid email address.' });
-      }
-      if (kind === 'SMTP_NOT_CONFIGURED') {
-        return res.status(503).json({ error: 'Email service is not configured. Please contact the administrator.' });
-      }
-      if (kind === 'SMTP_TIMEOUT' || (err && err.code === 'ETIMEDOUT')) {
-        return res.status(503).json({ error: 'Email service timed out. Please try again.' });
-      }
-      if (kind === 'SMTP_AUTH') {
-        return res.status(503).json({ error: 'Email service is unavailable. Please try again later.' });
-      }
-      return res.status(503).json({ error: 'Failed to send verification code. Please try again.' });
+      return res.status(503).json({ error: 'Email service is not configured. Please contact the administrator.' });
     }
+    // Respond immediately so clicking Register never waits on SMTP; the
+    // email is delivered in the background. If delivery fails, the unsent
+    // code is removed so a retry sends fresh instead of hitting the
+    // cooldown and falsely reporting success.
     res.json({ message: 'Verification code sent.', resent: true });
+    sendRegistrationVerificationEmail(email, name, code, req).catch(async (err) => {
+      console.error('[EmailVerify] background SMTP send failed for', email, ':', (err && err.message) || err);
+      try { await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]); } catch (e) { /* ignore */ }
+    });
     return;
   } catch (err) {
     console.error('Request email verification error:', err);
@@ -2335,7 +2505,11 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
       // Sync request_groups for user's existing requests (only if not explicitly group-assigned)
       const addedGroups = await syncUserRequestGroups(req.params.id, groupIds);
       for (const gid of Object.keys(addedGroups)) {
-        notifyGroupMembers(gid, `${addedGroups[gid]} new request${addedGroups[gid] > 1 ? 's' : ''} available for your group`, { groupId: gid });
+        const count = addedGroups[gid].length;
+        notifyGroupMembers(gid, `${count} new request${count > 1 ? 's' : ''} available for your group`, { groupId: gid });
+        // Email the group's developers about the newly visible requests
+        // (fire-and-forget; never blocks the user update).
+        emailGroupDevelopersForSyncedRequests(addedGroups[gid], gid, req);
       }
     } catch (e) { console.log('user_groups save error:', e.message); }
     const user = mapUser(result.rows[0]);
@@ -3322,6 +3496,13 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       // Resolved (fire-and-forget; the status update already succeeded).
       if (statusId === '5' || statusName === 'Resolved') {
         emailClientOnResolved(req.params.id, req);
+      }
+      // Automatic email to the Escalation Team members of the same group
+      // when the request becomes Escalated (fire-and-forget). This is the
+      // only point at which the Escalation Team is emailed for an
+      // escalation-driven flow.
+      if (statusId === '9' || statusName === 'Escalated') {
+        emailEscalationTeamOnEscalation(req.params.id, { id: req.user.id, name: req.user.name }, req);
       }
     }
 
@@ -4575,9 +4756,12 @@ app.post('/api/groups/:id/members', authMiddleware, roleMiddleware('admin'), asy
     await logGroupActivity('member_added', { id: req.params.id }, req.user, req, { memberId: user_id });
     // Associate the user's previously submitted requests with this group so
     // they become visible to the group's developers/escalation members
-    const synced = await addUserRequestGroup(user_id, req.params.id);
-    if (synced > 0) {
-      notifyGroupMembers(req.params.id, `${synced} new request${synced > 1 ? 's' : ''} available for your group`);
+    const syncedIds = await addUserRequestGroup(user_id, req.params.id);
+    if (syncedIds.length > 0) {
+      notifyGroupMembers(req.params.id, `${syncedIds.length} new request${syncedIds.length > 1 ? 's' : ''} available for your group`);
+      // Email the group's developers about the newly visible requests
+      // (fire-and-forget; never blocks the member add).
+      emailGroupDevelopersForSyncedRequests(syncedIds, req.params.id, req);
     }
     res.status(201).json({ message: 'Member added' });
   } catch (err) {
