@@ -694,18 +694,29 @@ async function removeUserRequestGroup(userId, groupId) {
   );
 }
 
+// Single shared resolver for "who works a group-assigned request": members of
+// the group whose role is developer/support (the same roles the RHMS
+// dashboards grant request visibility to). Used by BOTH the in-app
+// notifyGroupMembers channel and the assignment email trigger, so email
+// recipients always follow the existing group-assignment method — never a
+// separate recipient system. Excludes read-only/unrelated users by role.
+async function getAssignmentGroupRecipients(groupId) {
+  const membersResult = await pool.query(
+    "SELECT u.id, u.name, u.email FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support') AND u.email IS NOT NULL AND u.email <> ''",
+    [groupId]
+  );
+  return membersResult.rows;
+}
+
 // Notify developer/support members of a group so their dashboards update
 async function notifyGroupMembers(groupId, message, data = {}) {
   try {
     const groupResult = await pool.query('SELECT name FROM groups WHERE id = $1', [groupId]);
     const groupName = groupResult.rows[0]?.name || '';
-    const membersResult = await pool.query(
-      "SELECT u.id FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support')",
-      [groupId]
-    );
+    const members = await getAssignmentGroupRecipients(groupId);
     const payload = { type: 'group_assigned', groupId, groupName, ...data };
-    for (const row of membersResult.rows) {
-      notifyUser(row.id, message, payload);
+    for (const m of members) {
+      notifyUser(m.id, message, payload);
     }
   } catch (err) {
     console.error('notifyGroupMembers error:', err.message);
@@ -880,7 +891,7 @@ function workflowSectionTitle(title) {
 // Information bullets, Request Details (title + description), optional
 // Resolution section, closing, View Request button, professional footer.
 // Responsive table-based HTML suitable for Gmail.
-async function buildRequestWorkflowHtml({ title, greetingName, lead, statusBadge, infoRows, detailsTitle, detailsBody, resolution, closing, req, requestId }) {
+async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, statusBadge, infoRows, detailsTitle, detailsBody, resolution, closing, req, requestId }) {
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
   const appLink = req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '';
@@ -901,6 +912,9 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, statusBadge
     `<tr><td style="padding:0 32px 8px;">` +
     escPara(`Hello ${greetingName},`) +
     escPara(lead) +
+    (groupLine
+      ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#e2e8f0;"><strong style="color:#ffffff;">Group:</strong> ${escapeEmailHtml(groupLine)}</p>`
+      : '') +
     (statusBadge
       ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;"><tr><td bgcolor="${badgeColor}" style="border-radius:6px;padding:8px 18px;">` +
         `<span style="font-size:13px;font-weight:700;letter-spacing:1px;color:#ffffff;">Request Status: ${escapeEmailHtml(statusBadge)}</span>` +
@@ -1029,14 +1043,22 @@ async function emailAdminOnNewRequest(requestId, req) {
 }
 
 // 2. Admin assigns request -> assigned Developer's email.
+// Only developer/support assignees are emailed: those are the roles the RHMS
+// dashboards grant worker visibility to, so clients, unrelated staff and
+// read-only users never receive assignment details.
 async function emailDeveloperOnAssignment(requestId, assigneeId, assignerName, req) {
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
-    const u = await pool.query('SELECT name, email FROM users WHERE id = $1', [assigneeId]);
+    const u = await pool.query('SELECT name, email, role FROM users WHERE id = $1', [assigneeId]);
     const to = u.rows.length > 0 ? u.rows[0].email : null;
+    const role = u.rows.length > 0 ? u.rows[0].role : null;
     const devName = (u.rows.length > 0 && u.rows[0].name) || ctx.assignee_name || 'Developer';
     if (!to) { console.log('[WorkflowEmail:assign-dev] skipped — assignee has no email'); return; }
+    if (role !== 'developer' && role !== 'support') {
+      console.log(`[WorkflowEmail:assign-dev] skipped — assignee role '${role}' has no worker visibility`);
+      return;
+    }
     const category = workflowCategoryOf(ctx);
     const assignedOn = formatEmailDateTime(ctx.updated_at);
     fireWorkflowEmail({
@@ -1068,46 +1090,51 @@ async function emailDeveloperOnAssignment(requestId, assigneeId, assignerName, r
   }
 }
 
-// 3. Admin assigns/escalates request -> Escalation Team member emails
-// (only members of the assigned group with a support/developer role, matching
-// the existing notifyGroupMembers RBAC logic).
-async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName, req) {
+// 3. Admin assigns/escalates request -> Escalation Team member emails.
+// Recipients come from getAssignmentGroupRecipients (shared with the
+// existing notifyGroupMembers channel), so email always follows the same
+// group-assignment method and RBAC rules as RHMS itself. The directly
+// assigned user is excluded to prevent duplicate assignment emails — they
+// already receive the direct-assignment email.
+async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName, req, excludeUserId) {
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
-    const members = await pool.query(
-      "SELECT u.name, u.email FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support') AND u.email IS NOT NULL AND u.email <> ''",
-      [groupId]
-    );
-    if (members.rows.length === 0) { console.log('[WorkflowEmail:assign-team] skipped — no team member emails'); return; }
+    const members = (await getAssignmentGroupRecipients(groupId))
+      .filter((m) => !excludeUserId || String(m.id) !== String(excludeUserId));
+    if (members.length === 0) { console.log('[WorkflowEmail:assign-team] skipped — no team member emails'); return; }
     const category = workflowCategoryOf(ctx);
-    const assignedOn = formatEmailDateTime(ctx.updated_at);
+    // Group name comes from the RHMS database via the request context —
+    // never hard-coded. Submitted On is the request creation time.
+    const groupName = ctx.group_name || 'N/A';
+    const submittedOn = formatEmailDateTime(ctx.created_at);
     // One personalized email per team member so the greeting names the
     // correct recipient; sends run sequentially in the background and never
     // block the assignment operation.
-    for (const m of members.rows) {
+    for (const m of members) {
       fireWorkflowEmail({
         to: m.email,
-        subject: `Support Request Assigned to Your Team - #${requestId}`,
+        subject: `New Support Request for Your Group - #${requestId}`,
         tag: 'assign-team', req, requestId,
         body: {
-          title: 'Support Request Assigned to Your Team',
+          title: 'New Support Request for Your Group',
           greetingName: m.name || 'Team Member',
-          lead: 'A support request has been assigned to your team and requires your attention. Please review the request details below and take the appropriate action according to the RHMS escalation workflow.',
+          lead: `A new support request has been received and assigned to your group.\nGroup: ${groupName}\nPlease review the request details below and take the appropriate action according to the RHMS support workflow.`,
           statusBadge: 'ASSIGNED',
           infoRows:
             workflowInfoRow('Request ID', `#${requestId}`) +
             workflowInfoRow('Client', ctx.client_name || 'N/A') +
+            workflowInfoRow('Group', groupName) +
             workflowInfoRow('Category', category) +
             workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
-            workflowInfoRow('Assigned On', assignedOn),
+            workflowInfoRow('Submitted On', submittedOn),
           infoText:
-            `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nCategory: ${category}\n` +
-            `Priority: ${ctx.priority_name || 'N/A'}\nAssigned On: ${assignedOn}`,
+            `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nGroup: ${groupName}\nCategory: ${category}\n` +
+            `Priority: ${ctx.priority_name || 'N/A'}\nSubmitted On: ${submittedOn}`,
           detailsTitle: ctx.subject,
           detailsBody: ctx.description || 'N/A',
           resolution: null,
-          closing: ['Please review and proceed with the necessary action.'],
+          closing: ['Please review this request and proceed with the necessary action.'],
         },
       });
     }
@@ -2022,15 +2049,32 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, NOW())`,
       [codeId, email, hashOtp(code), expiresAt, ip]
     );
-    // Respond immediately so the UI never waits on slow SMTP; the email
-    // is delivered in the background. If delivery fails, the unsent code
-    // is removed (same as before) so a retry sends fresh instead of
-    // hitting the cooldown and falsely reporting success.
-    res.json({ message: 'Verification code sent.', resent: true });
-    sendRegistrationVerificationEmail(email, name, code, req).catch(async (err) => {
-      console.error('[EmailVerify] background SMTP send failed for', email, ':', (err && err.message) || err);
+    // Deliver synchronously so a nonexistent mailbox (Gmail 550 5.1.1
+    // NoSuchUser) is reported to the user immediately instead of a false
+    // "code sent" success plus a bounce in the sender inbox. Gmail answers
+    // RCPT TO within seconds, so the UI only waits briefly; the mailer
+    // still caps the attempt at SMTP_TIMEOUT_MS.
+    try {
+      await sendRegistrationVerificationEmail(email, name, code, req);
+    } catch (err) {
+      const kind = (err && err.message) || '';
+      console.error('[EmailVerify] SMTP send failed for', email, ':', kind);
       try { await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]); } catch (e) { /* ignore */ }
-    });
+      if (kind === 'SMTP_NO_SUCH_USER') {
+        return res.status(400).json({ error: 'This email address does not exist or cannot receive mail. Please check for typos and use a valid email address.' });
+      }
+      if (kind === 'SMTP_NOT_CONFIGURED') {
+        return res.status(503).json({ error: 'Email service is not configured. Please contact the administrator.' });
+      }
+      if (kind === 'SMTP_TIMEOUT' || (err && err.code === 'ETIMEDOUT')) {
+        return res.status(503).json({ error: 'Email service timed out. Please try again.' });
+      }
+      if (kind === 'SMTP_AUTH') {
+        return res.status(503).json({ error: 'Email service is unavailable. Please try again later.' });
+      }
+      return res.status(503).json({ error: 'Failed to send verification code. Please try again.' });
+    }
+    res.json({ message: 'Verification code sent.', resent: true });
     return;
   } catch (err) {
     console.error('Request email verification error:', err);
@@ -2346,6 +2390,11 @@ app.put('/api/profile', authMiddleware, upload.single('avatar'), async (req, res
     res.json(user);
   } catch (err) {
     console.error(err);
+    // Email address is UNIQUE: saving a profile with an email that belongs
+    // to another account must report a clear message, not a generic 500.
+    if (err && err.code === '23505') {
+      return res.status(400).json({ error: 'This email address is already registered to another account.' });
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -3123,8 +3172,10 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
     }
     // Automatic email to the Escalation Team members of the newly assigned
     // group only (fire-and-forget; respects existing group/RBAC membership).
+    // The direct assignee is excluded from the group mail to prevent a
+    // duplicate assignment email.
     if (groupChanged) {
-      emailEscalationTeamOnAssignment(req.params.id, assignedGroup, req.user.name, req);
+      emailEscalationTeamOnAssignment(req.params.id, assignedGroup, req.user.name, req, newAssignedTo);
     }
 
     const notifResult = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('notifyClientStatusChange', 'notifyDeveloperAssignment', 'emailNotifications', 'inAppNotifications')");

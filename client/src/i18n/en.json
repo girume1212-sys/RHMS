@@ -180,6 +180,7 @@
     "otpMustBe6Digits": "Code must be 6 digits",
     "verifyEmailTitle": "Verify your email",
     "verificationCodeSent": "A 6-digit verification code has been sent to your email.",
+    "verificationCodeHint": "Didn't receive a code? Make sure your email address is spelled correctly, then go back and fix it or resend the code.",
     "enterVerificationCode": "Enter the 6-digit verification code",
     "emailNotVerifiable": "This email address does not exist or cannot be verified. Please use a valid email address.",
     "emailVerificationRequired": "Email verification is required. Please verify your email address first.",

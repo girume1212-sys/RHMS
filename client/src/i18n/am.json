@@ -180,6 +180,7 @@
     "otpMustBe6Digits": "ኮዱ 6 አሃዞች መሆን አለበት",
     "verifyEmailTitle": "ኢሜይልዎን ያረጋግጡ",
     "verificationCodeSent": "ባለ 6-አሃዝ የማረጋገጫ ኮድ ወደ ኢሜይልዎ ተልኳል።",
+    "verificationCodeHint": "ኮድ አልደረሰዎትም? የኢሜይል አድራሻዎ በትክክል መጻፉን ያረጋግጡ፣ ከዚያ ተመልሰው ያርሙት ወይም ኮዱን እንደገና ይላኩ።",
     "enterVerificationCode": "ባለ 6-አሃዝ የማረጋገጫ ኮዱን ያስገቡ",
     "emailNotVerifiable": "ይህ የኢሜይል አድራሻ የለም ወይም ሊረጋገጥ አይችልም። እባክዎ ትክክለኛ ኢሜይል ይጠቀሙ።",
     "emailVerificationRequired": "የኢሜይል ማረጋገጫ ያስፈልጋል። እባክዎ መጀመሪያ ኢሜይልዎን ያረጋግጡ።",

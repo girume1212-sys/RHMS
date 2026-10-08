@@ -323,6 +323,9 @@ export default function Signup() {
               ))}
             </div>
             <ValidationError message={errors.code} />
+            <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+              {t('common.verificationCodeHint')}
+            </p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start', marginBottom: '20px' }}>
             <button type="button" className="forgot-link" onClick={() => { setStep('details'); setError(''); }}>
