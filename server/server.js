@@ -694,12 +694,32 @@ async function removeUserRequestGroup(userId, groupId) {
   );
 }
 
+// Verified-email check reusing the existing registration verification
+// system: an address counts as verified when a verification code was
+// consumed for it (used_at IS NOT NULL), which proves the mailbox received
+// RHMS mail at signup. No new table, column, or verification flow.
+async function isEmailVerified(email) {
+  try {
+    if (!email) return false;
+    const r = await pool.query(
+      'SELECT 1 FROM email_verification_codes WHERE LOWER(email) = LOWER($1) AND used_at IS NOT NULL LIMIT 1',
+      [String(email).trim()]
+    );
+    return r.rows.length > 0;
+  } catch (e) {
+    console.error('[WorkflowEmail] verification lookup failed:', e.message);
+    return false;
+  }
+}
+
 // Single shared resolver for "who works a group-assigned request": members of
 // the group whose role is developer/support (the same roles the RHMS
 // dashboards grant request visibility to). Used by BOTH the in-app
 // notifyGroupMembers channel and the assignment email trigger, so email
 // recipients always follow the existing group-assignment method — never a
 // separate recipient system. Excludes read-only/unrelated users by role.
+// NOTE: email verification is NOT applied here — in-app notifications are
+// not email. The email triggers filter by isEmailVerified() themselves.
 async function getAssignmentGroupRecipients(groupId) {
   const membersResult = await pool.query(
     "SELECT u.id, u.name, u.email FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support') AND u.email IS NOT NULL AND u.email <> ''",
@@ -1026,33 +1046,48 @@ async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
       const members = await getAssignmentGroupRecipients(g.id);
       for (const m of members) {
         if (submitterId && String(m.id) === String(submitterId)) continue;
+        if (!(await isEmailVerified(m.email))) {
+          console.log(`[WorkflowEmail:group-new] skipped — ${m.email} is not a verified email`);
+          continue;
+        }
         const key = `${m.id}|${g.id}`;
         if (alreadyEmailed.has(key)) continue;
         alreadyEmailed.add(key);
+        const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
+        const isDeveloper = m.role === 'developer';
+        const subject = isDeveloper
+          ? `New Support Request Assigned to Your Group - #${requestId}`
+          : `New Support Request for Your Group - #${requestId}`;
+        const workflow = isDeveloper ? 'support' : 'escalation';
         fireWorkflowEmail({
           to: m.email,
-          subject: `New Support Request for Your Group - #${requestId}`,
+          subject,
           tag: 'group-new', req, requestId,
           body: {
-            title: 'New Support Request for Your Group',
+            title: subject.replace(` - #${requestId}`, ''),
             greetingName: m.name || 'Team Member',
-            lead: 'A new support request has been received for your group and requires your attention.',
+            lead: `A new support request has been submitted by ${ctx.client_name || 'a client'} and is associated with your group.`,
             groupLine: g.name,
             statusBadge: 'NEW',
             infoRows:
               workflowInfoRow('Request ID', `#${requestId}`) +
               workflowInfoRow('Client', ctx.client_name || 'N/A') +
+              workflowInfoRow('Client Email', clientEmail) +
               workflowInfoRow('Group', g.name) +
               workflowInfoRow('Category', category) +
               workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
               workflowInfoRow('Submitted On', submittedOn),
             infoText:
-              `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nGroup: ${g.name}\nCategory: ${category}\n` +
+              `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\nGroup: ${g.name}\nCategory: ${category}\n` +
               `Priority: ${ctx.priority_name || 'N/A'}\nSubmitted On: ${submittedOn}`,
             detailsTitle: ctx.subject,
             detailsBody: ctx.description || 'N/A',
             resolution: null,
-            closing: ['Please review the request and proceed with the necessary action.'],
+            closing: [
+              isDeveloper
+                ? 'Please review the request and proceed with the necessary action.'
+                : 'Please review the request and proceed with the necessary action according to the escalation workflow.',
+            ],
           },
         });
       }
@@ -1120,6 +1155,10 @@ async function emailDeveloperOnAssignment(requestId, assigneeId, assignerName, r
       console.log(`[WorkflowEmail:assign-dev] skipped — assignee role '${role}' has no worker visibility`);
       return;
     }
+    if (!(await isEmailVerified(to))) {
+      console.log(`[WorkflowEmail:assign-dev] skipped — ${to} is not a verified email`);
+      return;
+    }
     const category = workflowCategoryOf(ctx);
     const assignedOn = formatEmailDateTime(ctx.updated_at);
     fireWorkflowEmail({
@@ -1161,9 +1200,16 @@ async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName,
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
-    const members = (await getAssignmentGroupRecipients(groupId))
-      .filter((m) => !excludeUserId || String(m.id) !== String(excludeUserId));
-    if (members.length === 0) { console.log('[WorkflowEmail:assign-team] skipped — no team member emails'); return; }
+    const members = [];
+    for (const m of await getAssignmentGroupRecipients(groupId)) {
+      if (excludeUserId && String(m.id) === String(excludeUserId)) continue;
+      if (!(await isEmailVerified(m.email))) {
+        console.log(`[WorkflowEmail:assign-team] skipped — ${m.email} is not a verified email`);
+        continue;
+      }
+      members.push(m);
+    }
+    if (members.length === 0) { console.log('[WorkflowEmail:assign-team] skipped — no verified team member emails'); return; }
     const category = workflowCategoryOf(ctx);
     // Group name comes from the RHMS database via the request context —
     // never hard-coded. Submitted On is the request creation time.
