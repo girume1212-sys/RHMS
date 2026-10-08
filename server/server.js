@@ -1039,15 +1039,14 @@ async function getAdminEmailRecipients() {
   } catch (e) { return []; }
 }
 
-// 1b. Client submits a new request -> Developers in the same group.
-// Follows the existing group assignment: the request's groups come from the
-// request_groups rows written at creation from the client's group
-// memberships, and recipients are the developer-role members returned by
+// 1b. Client submits a new request -> Developers AND Escalation Team in the
+// same group, each with their role-specific template. Follows the existing
+// group assignment: the request's groups come from the request_groups rows
+// written at creation from the client's group memberships, and recipients
+// are the developer/support members returned by
 // getAssignmentGroupRecipients (the same membership logic as
-// notifyGroupMembers and the dashboards). Escalation Team members do NOT
-// receive this initial email — they are notified only on escalation.
-// Members of other groups are never emailed. The submitter is excluded so
-// they never email themselves.
+// notifyGroupMembers and the dashboards). Members of other groups are never
+// emailed. The submitter is excluded so they never email themselves.
 async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
   try {
     const ctx = await getRequestEmailContext(requestId);
@@ -1059,22 +1058,23 @@ async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
     if (grp.rows.length === 0) { console.log('[WorkflowEmail:group-new] skipped — request has no group'); return; }
     const emailed = new Set();
     for (const g of grp.rows) {
-      for (const key of await emailGroupDevelopersForRequestGroup(requestId, g.id, g.name, submitterId, req, emailed)) {
+      for (const key of await emailGroupMembersForRequestGroup(requestId, g.id, g.name, submitterId, req, emailed)) {
         emailed.add(key);
       }
     }
-    if (emailed.size === 0) console.log('[WorkflowEmail:group-new] skipped — no group developer emails');
+    if (emailed.size === 0) console.log('[WorkflowEmail:group-new] skipped — no group member emails');
   } catch (err) {
     console.error('[WorkflowEmail:group-new] failed:', err.message);
   }
 }
 
-// Sends the new-request developer email for ONE (request, group) pair to the
-// developer-role members of that group (verified emails only, submitter
-// excluded). Shared by the creation trigger and the member-add sync path so
-// both follow identical recipient rules. Returns the emailed member|group
-// keys. Never throws.
-async function emailGroupDevelopersForRequestGroup(requestId, groupId, groupName, submitterId, req, alreadyEmailed = new Set()) {
+// Sends the new-request group email for ONE (request, group) pair to the
+// developer AND escalation-team members of that group, each with their
+// role-specific template (verified emails only, submitter excluded).
+// Shared by the creation trigger and the member-add sync path so both follow
+// identical recipient rules. Returns the emailed member|group keys. Never
+// throws.
+async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, submitterId, req, alreadyEmailed = new Set()) {
   const emailedKeys = [];
   try {
     const ctx = await getRequestEmailContext(requestId);
@@ -1082,9 +1082,10 @@ async function emailGroupDevelopersForRequestGroup(requestId, groupId, groupName
     const category = workflowCategoryOf(ctx);
     const submittedOn = formatEmailDateTime(ctx.created_at);
     const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
+    const clientName = ctx.client_name || 'a client';
     const members = await getAssignmentGroupRecipients(groupId);
     for (const m of members) {
-      if (m.role !== 'developer') continue;
+      if (m.role !== 'developer' && m.role !== 'support') continue;
       if (submitterId && String(m.id) === String(submitterId)) continue;
       if (!(await isEmailVerified(m.email))) {
         console.log(`[WorkflowEmail:group-new] skipped — ${m.email} is not a verified email`);
@@ -1094,14 +1095,21 @@ async function emailGroupDevelopersForRequestGroup(requestId, groupId, groupName
       if (alreadyEmailed.has(key)) continue;
       alreadyEmailed.add(key);
       emailedKeys.push(key);
+      const isDeveloper = m.role === 'developer';
+      const subject = isDeveloper
+        ? `New Support Request Assigned to Your Group - #${requestId}`
+        : `New Support Request for Your Group - #${requestId}`;
       fireWorkflowEmail({
         to: m.email,
-        subject: `New Support Request Assigned to Your Group - #${requestId}`,
+        subject,
         tag: 'group-new', req, requestId,
         body: {
-          title: 'New Support Request Assigned to Your Group',
-          greetingName: m.name || 'Developer',
-          lead: `A new support request has been submitted by ${ctx.client_name || 'a client'} and is associated with your group.`,
+          title: isDeveloper ? 'New Support Request Assigned to Your Group' : 'New Support Request for Your Group',
+          greetingName: m.name || (isDeveloper ? 'Developer' : 'Team Member'),
+          lead: `A new support request has been submitted by ${clientName} and is associated with your group. ` +
+            (isDeveloper
+              ? 'Please review the request details below and take the appropriate action according to the RHMS support workflow.'
+              : 'Please review the request details below and take the appropriate action according to the RHMS escalation workflow.'),
           groupLine: groupName,
           statusBadge: 'NEW',
           infoRows:
@@ -1118,7 +1126,11 @@ async function emailGroupDevelopersForRequestGroup(requestId, groupId, groupName
           detailsTitle: ctx.subject,
           detailsBody: ctx.description || 'N/A',
           resolution: null,
-          closing: ['Please review the request and proceed with the necessary action.'],
+          closing: [
+            isDeveloper
+              ? 'Please review the request and proceed with the necessary action.'
+              : 'Please review the request and take the necessary action according to the escalation workflow.',
+          ],
         },
       });
     }
@@ -1128,11 +1140,12 @@ async function emailGroupDevelopersForRequestGroup(requestId, groupId, groupName
   return emailedKeys;
 }
 
-// Emails a group's developers about requests that became visible to the
-// group because a member was added (user update or member-add endpoint).
-// Only newly linked, still-open requests are emailed: closed/rejected/
-// resolved ones would be noise, and already-linked requests were emailed
-// when they were first associated. Fire-and-forget; never throws.
+// Emails a group's developers and escalation members about requests that
+// became visible to the group because a member was added (user update or
+// member-add endpoint). Only newly linked, still-open requests are emailed:
+// closed/rejected/resolved ones would be noise, and already-linked requests
+// were emailed when they were first associated. Fire-and-forget; never
+// throws.
 async function emailGroupDevelopersForSyncedRequests(requestIds, groupId, req) {
   try {
     if (!Array.isArray(requestIds) || requestIds.length === 0) return;
@@ -1143,12 +1156,71 @@ async function emailGroupDevelopersForSyncedRequests(requestIds, groupId, req) {
       const st = await pool.query('SELECT client_id, status_id FROM requests WHERE id = $1', [requestId]);
       if (st.rows.length === 0) continue;
       if (['5', '6', '8'].includes(String(st.rows[0].status_id))) continue;
-      for (const key of await emailGroupDevelopersForRequestGroup(requestId, groupId, groupName, st.rows[0].client_id, req, emailed)) {
+      for (const key of await emailGroupMembersForRequestGroup(requestId, groupId, groupName, st.rows[0].client_id, req, emailed)) {
         emailed.add(key);
       }
     }
   } catch (err) {
     console.error('[WorkflowEmail:group-new] failed:', err.message);
+  }
+}
+
+// 5. Client submits feedback -> ALL Admin users.
+// Professional email notifying admins of new feedback on a request.
+// Fire-and-forget; never blocks the feedback submission.
+async function emailAdminOnFeedback(requestId, rating, comment, req) {
+  try {
+    const ctx = await getRequestEmailContext(requestId);
+    if (!ctx) return;
+    const admins = await pool.query(
+      "SELECT id, name, email FROM users WHERE role = 'admin' AND email IS NOT NULL AND email <> ''"
+    );
+    let recipients = admins.rows;
+    if (recipients.length === 0) {
+      const fallback = await getAdminEmailRecipients();
+      if (fallback.length === 0) { console.log('[WorkflowEmail:feedback] skipped — no admin recipient'); return; }
+      recipients = fallback.map((email) => ({ id: null, name: 'Admin', email }));
+    }
+    const category = workflowCategoryOf(ctx);
+    const submittedOn = formatEmailDateTime(new Date());
+    const stars = '★'.repeat(Math.min(5, Math.max(1, parseInt(rating) || 0)));
+    let sent = 0;
+    for (const a of recipients) {
+      if (!(await isEmailVerified(a.email))) {
+        console.log(`[WorkflowEmail:feedback] skipped — ${a.email} is not a verified email`);
+        continue;
+      }
+      sent += 1;
+      fireWorkflowEmail({
+        to: a.email,
+        subject: `New Feedback Received - #${requestId}`,
+        tag: 'feedback', req, requestId,
+        body: {
+          title: 'New Feedback Received',
+          greetingName: a.name || 'Admin',
+          lead: `A client has submitted feedback on request #${requestId}.`,
+          statusBadge: 'FEEDBACK',
+          infoRows:
+            workflowInfoRow('Request ID', `#${requestId}`) +
+            workflowInfoRow('Client', ctx.client_name || 'N/A') +
+            workflowInfoRow('Category', category) +
+            workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+            workflowInfoRow('Rating', `${rating}/5 (${stars})`) +
+            workflowInfoRow('Submitted On', submittedOn),
+          infoText:
+            `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nCategory: ${category}\n` +
+            `Priority: ${ctx.priority_name || 'N/A'}\nRating: ${rating}/5\nSubmitted On: ${submittedOn}`,
+          detailsTitle: ctx.subject,
+          detailsBody: ctx.description || 'N/A',
+          resolution: null,
+          extraSection: { title: 'Client Feedback', body: comment || 'No comment provided.' },
+          closing: ['Please review the feedback and take any necessary action.'],
+        },
+      });
+    }
+    if (sent === 0) console.log('[WorkflowEmail:feedback] skipped — no verified admin emails');
+  } catch (err) {
+    console.error('[WorkflowEmail:feedback] failed:', err.message);
   }
 }
 
@@ -3739,6 +3811,8 @@ app.post('/api/requests/:id/feedback', authMiddleware, async (req, res) => {
     await logRequestActivity('feedback_submitted', { id: req.params.id }, req.user, req, { rating, comment });
     const reqResult = await pool.query('SELECT subject FROM requests WHERE id = $1', [req.params.id]);
     notifyAdmins(`New feedback on Request #${req.params.id} by ${req.user.name}`, { type: 'feedback', requestId: req.params.id, userId: req.user.id, userName: req.user.name, subject: reqResult.rows[0]?.subject });
+    // Automatic email to ALL admin users (fire-and-forget; never blocks feedback).
+    emailAdminOnFeedback(req.params.id, rating, comment, req);
     res.status(201).json({ rating, comment });
   } catch (err) {
     console.error(err);
