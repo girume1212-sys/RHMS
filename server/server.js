@@ -819,6 +819,366 @@ async function getEmailContactFooter() {
   );
 }
 
+// ---- Automatic email notifications for the request workflow ----
+// Reuses the existing mailer.js Nodemailer/SMTP infrastructure exclusively.
+// All sends are fire-and-forget: email failure is logged and NEVER rolls back
+// or blocks the request operation. Emails are triggered only from backend API
+// logic (never the frontend), so re-renders/retries cannot duplicate them.
+const escapeEmailHtml = (v) => String(v == null ? '' : v)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+// Enriched request context for workflow emails: client profile + request
+// details, resolved from existing tables. Returns null when the request
+// cannot be found.
+async function getRequestEmailContext(requestId) {
+  const r = await pool.query(
+    `SELECT r.id, r.subject, r.description, r.client_id, r.client_email,
+            r.created_at, r.updated_at, r.custom_category,
+            c.name AS category_name, p.name AS priority_name, s.name AS status_name,
+            u.name AS client_name, u.email AS client_account_email,
+            u.role AS client_role, u.company_name AS client_company,
+            u.created_at AS client_since,
+            a.name AS assignee_name, a.email AS assignee_email, a.role AS assignee_role,
+            g.name AS group_name
+     FROM requests r
+     LEFT JOIN categories c ON c.id = r.category_id
+     LEFT JOIN priorities p ON p.id = r.priority_id
+     LEFT JOIN statuses s ON s.id = r.status_id
+     LEFT JOIN users u ON u.id = r.client_id
+     LEFT JOIN users a ON a.id = r.assigned_to
+     LEFT JOIN groups g ON g.id = r.assigned_group
+     WHERE r.id = $1`,
+    [requestId]
+  );
+  if (r.rows.length === 0) return null;
+  return r.rows[0];
+}
+
+function formatEmailDateTime(v) {
+  try {
+    if (!v) return 'N/A';
+    return new Date(v).toLocaleString();
+  } catch { return String(v); }
+}
+
+// Renders one "Request Information" bullet row for the professional template.
+function workflowInfoRow(label, value) {
+  return (
+    `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#cbd5e1;">` +
+    `<span style="color:#ffffff;">&#8226;&nbsp;&nbsp;</span>` +
+    `<strong style="color:#ffffff;">${escapeEmailHtml(label)}:</strong> ${escapeEmailHtml(value)}` +
+    `</td></tr>`
+  );
+}
+
+function workflowSectionTitle(title) {
+  return `<p style="margin:0 0 10px;font-size:15px;font-weight:700;color:#ffffff;">${escapeEmailHtml(title)}</p>`;
+}
+
+// Professional RHMS workflow email: greeting, optional status badge, Request
+// Information bullets, Request Details (title + description), optional
+// Resolution section, closing, View Request button, professional footer.
+// Responsive table-based HTML suitable for Gmail.
+async function buildRequestWorkflowHtml({ title, greetingName, lead, statusBadge, infoRows, detailsTitle, detailsBody, resolution, closing, req, requestId }) {
+  const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
+  const contactFooter = await getEmailContactFooter();
+  const appLink = req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '';
+  const badgeColors = { ASSIGNED: '#8B5CF6', RESOLVED: '#10B981' };
+  const badgeColor = (statusBadge && badgeColors[statusBadge]) || '#3B82F6';
+  const para = (t) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#e2e8f0;">${t}</p>`;
+  const escPara = (t) => para(escapeEmailHtml(t));
+  const html =
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+    `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
+    `<tr><td align="center">` +
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#111827" style="max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#111827 55%,#1F2937 100%);background-color:#111827;border-radius:12px;overflow:hidden;">` +
+    `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">` + logoBlock + `</td></tr>` +
+    `<tr><td align="center" style="padding:8px 32px 24px;text-align:center;">` +
+    `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#ffffff;font-weight:700;">${escapeEmailHtml(title)}</h1>` +
+    `</td></tr>` +
+    `<tr><td style="padding:0 32px 8px;">` +
+    escPara(`Hello ${greetingName},`) +
+    escPara(lead) +
+    (statusBadge
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;"><tr><td bgcolor="${badgeColor}" style="border-radius:6px;padding:8px 18px;">` +
+        `<span style="font-size:13px;font-weight:700;letter-spacing:1px;color:#ffffff;">Request Status: ${escapeEmailHtml(statusBadge)}</span>` +
+        `</td></tr></table>`
+      : '') +
+    `</td></tr>` +
+    `<tr><td style="padding:8px 32px;">` +
+    workflowSectionTitle('Request Information') +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${infoRows}</table>` +
+    `</td></tr>` +
+    `<tr><td style="padding:18px 32px 0;">` +
+    workflowSectionTitle('Request Details') +
+    `<p style="margin:0 0 8px;font-size:15px;font-weight:700;line-height:1.6;color:#ffffff;">${escapeEmailHtml(detailsTitle)}</p>` +
+    `<p style="margin:0;font-size:14px;line-height:1.7;color:#e2e8f0;white-space:pre-line;">${escapeEmailHtml(detailsBody)}</p>` +
+    `</td></tr>` +
+    (resolution != null
+      ? `<tr><td style="padding:18px 32px 0;">` +
+        workflowSectionTitle('Resolution') +
+        `<p style="margin:0;font-size:14px;line-height:1.7;color:#e2e8f0;white-space:pre-line;">${escapeEmailHtml(resolution)}</p>` +
+        `</td></tr>`
+      : '') +
+    `<tr><td style="padding:18px 32px 0;">` +
+    closing.map(escPara).join('') +
+    `<p style="margin:16px 0 0;font-size:14px;line-height:1.7;color:#e2e8f0;"><strong style="color:#ffffff;">Best regards,</strong><br><strong style="color:#ffffff;">RHMS Support Team</strong></p>` +
+    `</td></tr>` +
+    (appLink
+      ? `<tr><td align="center" style="padding:24px 32px 8px;">` +
+        `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;"><tr><td align="center" bgcolor="#1D4ED8" style="border-radius:8px;">` +
+        `<a href="${escapeEmailHtml(appLink)}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">View Request</a>` +
+        `</td></tr></table></td></tr>`
+      : '') +
+    `<tr><td style="padding:16px 32px 32px;"><p style="margin:0;font-size:12px;line-height:1.6;color:#9ca3af;">This is an automated message from the RHMS Support Request System.</p></td></tr>` +
+    contactFooter +
+    `</table></td></tr></table></body></html>`;
+  return { html, logoAttachment };
+}
+
+function buildRequestWorkflowText({ title, greetingName, lead, statusBadge, infoText, detailsTitle, detailsBody, resolution, closing }) {
+  return (
+    `${title}\n\nHello ${greetingName},\n\n${lead}\n\n` +
+    (statusBadge ? `Request Status: ${statusBadge}\n\n` : '') +
+    `Request Information\n${infoText}\n\n` +
+    `Request Details\n${detailsTitle}\n\n${detailsBody}\n\n` +
+    (resolution != null ? `Resolution\n${resolution}\n\n` : '') +
+    closing.join('\n\n') +
+    `\n\nBest regards,\nRHMS Support Team`
+  );
+}
+
+// Single fire-and-forget sender for workflow emails. Never throws.
+function fireWorkflowEmail({ to, subject, tag, req, requestId, body }) {
+  (async () => {
+    try {
+      if (!to) { console.log(`[WorkflowEmail:${tag}] skipped — no recipient`); return; }
+      if (!mailer.isSmtpConfigured()) {
+        console.log(`[WorkflowEmail:${tag}] SMTP not configured; email to ${to} not sent (subject: ${subject})`);
+        return;
+      }
+      const { html, logoAttachment } = await buildRequestWorkflowHtml({ ...body, req, requestId });
+      const text = buildRequestWorkflowText(body);
+      const info = await mailer.sendMail({ to, subject, text, html, ...(logoAttachment ? { attachments: [logoAttachment] } : {}) });
+      console.log(`[WorkflowEmail:${tag}] sent to ${to} (messageId: ${info.messageId || 'n/a'})`);
+    } catch (err) {
+      console.error(`[WorkflowEmail:${tag}] delivery failed:`, (err && err.message) || err);
+    }
+  })().catch((err) => console.error(`[WorkflowEmail:${tag}] unexpected error:`, (err && err.message) || err));
+}
+
+// Shared Request Information rows/text for assignment-style emails.
+function workflowCategoryOf(ctx) {
+  return ctx.custom_category || ctx.category_name || 'N/A';
+}
+
+// Configured RHMS Admin email address (systemEmail setting), falling back to
+// the registered admin users when the setting is empty.
+async function getAdminEmailRecipients() {
+  try {
+    const r = await pool.query("SELECT value FROM system_settings WHERE key = 'systemEmail'");
+    const configured = r.rows.length > 0 ? String(r.rows[0].value || '').trim() : '';
+    if (configured) return [configured];
+  } catch (e) { /* fall through to admin users */ }
+  try {
+    const r = await pool.query("SELECT email FROM users WHERE role = 'admin' AND email IS NOT NULL AND email <> ''");
+    return r.rows.map((row) => row.email).filter(Boolean);
+  } catch (e) { return []; }
+}
+
+// 1. Client submits a new request -> Admin email.
+async function emailAdminOnNewRequest(requestId, req) {
+  try {
+    const ctx = await getRequestEmailContext(requestId);
+    if (!ctx) return;
+    const recipients = await getAdminEmailRecipients();
+    if (recipients.length === 0) { console.log('[WorkflowEmail:new-request] skipped — no admin recipient'); return; }
+    const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
+    const category = workflowCategoryOf(ctx);
+    const submittedOn = formatEmailDateTime(ctx.created_at);
+    fireWorkflowEmail({
+      to: recipients.join(', '),
+      subject: `New Support Request Submitted - #${requestId}`,
+      tag: 'new-request', req, requestId,
+      body: {
+        title: 'New Support Request Submitted',
+        greetingName: 'Admin',
+        lead: 'A new support request has been successfully submitted through the RHMS Support Request System and requires your review.',
+        statusBadge: null,
+        infoRows:
+          workflowInfoRow('Request ID', `#${requestId}`) +
+          workflowInfoRow('Client', ctx.client_name || 'N/A') +
+          workflowInfoRow('Client Email', clientEmail) +
+          workflowInfoRow('Category', category) +
+          workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+          workflowInfoRow('Submitted On', submittedOn),
+        infoText:
+          `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\n` +
+          `Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\nSubmitted On: ${submittedOn}`,
+        detailsTitle: ctx.subject,
+        detailsBody: ctx.description || 'N/A',
+        resolution: null,
+        closing: ['Please review the request and assign it to the appropriate Developer or Escalation Team.'],
+      },
+    });
+  } catch (err) {
+    console.error('[WorkflowEmail:new-request] failed:', err.message);
+  }
+}
+
+// 2. Admin assigns request -> assigned Developer's email.
+async function emailDeveloperOnAssignment(requestId, assigneeId, assignerName, req) {
+  try {
+    const ctx = await getRequestEmailContext(requestId);
+    if (!ctx) return;
+    const u = await pool.query('SELECT name, email FROM users WHERE id = $1', [assigneeId]);
+    const to = u.rows.length > 0 ? u.rows[0].email : null;
+    const devName = (u.rows.length > 0 && u.rows[0].name) || ctx.assignee_name || 'Developer';
+    if (!to) { console.log('[WorkflowEmail:assign-dev] skipped — assignee has no email'); return; }
+    const category = workflowCategoryOf(ctx);
+    const assignedOn = formatEmailDateTime(ctx.updated_at);
+    fireWorkflowEmail({
+      to,
+      subject: `Support Request Assigned to You - #${requestId}`,
+      tag: 'assign-dev', req, requestId,
+      body: {
+        title: 'Support Request Assigned to You',
+        greetingName: devName,
+        lead: 'A support request has been assigned to you and requires your attention. Please review the request details below and take the necessary action according to the RHMS support workflow.',
+        statusBadge: 'ASSIGNED',
+        infoRows:
+          workflowInfoRow('Request ID', `#${requestId}`) +
+          workflowInfoRow('Client', ctx.client_name || 'N/A') +
+          workflowInfoRow('Category', category) +
+          workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+          workflowInfoRow('Assigned On', assignedOn),
+        infoText:
+          `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nCategory: ${category}\n` +
+          `Priority: ${ctx.priority_name || 'N/A'}\nAssigned On: ${assignedOn}`,
+        detailsTitle: ctx.subject,
+        detailsBody: ctx.description || 'N/A',
+        resolution: null,
+        closing: ['Please review the request and begin the necessary work.'],
+      },
+    });
+  } catch (err) {
+    console.error('[WorkflowEmail:assign-dev] failed:', err.message);
+  }
+}
+
+// 3. Admin assigns/escalates request -> Escalation Team member emails
+// (only members of the assigned group with a support/developer role, matching
+// the existing notifyGroupMembers RBAC logic).
+async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName, req) {
+  try {
+    const ctx = await getRequestEmailContext(requestId);
+    if (!ctx) return;
+    const members = await pool.query(
+      "SELECT u.name, u.email FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support') AND u.email IS NOT NULL AND u.email <> ''",
+      [groupId]
+    );
+    if (members.rows.length === 0) { console.log('[WorkflowEmail:assign-team] skipped — no team member emails'); return; }
+    const category = workflowCategoryOf(ctx);
+    const assignedOn = formatEmailDateTime(ctx.updated_at);
+    // One personalized email per team member so the greeting names the
+    // correct recipient; sends run sequentially in the background and never
+    // block the assignment operation.
+    for (const m of members.rows) {
+      fireWorkflowEmail({
+        to: m.email,
+        subject: `Support Request Assigned to Your Team - #${requestId}`,
+        tag: 'assign-team', req, requestId,
+        body: {
+          title: 'Support Request Assigned to Your Team',
+          greetingName: m.name || 'Team Member',
+          lead: 'A support request has been assigned to your team and requires your attention. Please review the request details below and take the appropriate action according to the RHMS escalation workflow.',
+          statusBadge: 'ASSIGNED',
+          infoRows:
+            workflowInfoRow('Request ID', `#${requestId}`) +
+            workflowInfoRow('Client', ctx.client_name || 'N/A') +
+            workflowInfoRow('Category', category) +
+            workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+            workflowInfoRow('Assigned On', assignedOn),
+          infoText:
+            `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nCategory: ${category}\n` +
+            `Priority: ${ctx.priority_name || 'N/A'}\nAssigned On: ${assignedOn}`,
+          detailsTitle: ctx.subject,
+          detailsBody: ctx.description || 'N/A',
+          resolution: null,
+          closing: ['Please review and proceed with the necessary action.'],
+        },
+      });
+    }
+  } catch (err) {
+    console.error('[WorkflowEmail:assign-team] failed:', err.message);
+  }
+}
+
+// Latest stored resolution information for a request: the most recent
+// comment, falling back to the resolution activity entry. RHMS has no
+// dedicated resolution column, so existing data sources are reused.
+async function getResolutionDetails(requestId) {
+  try {
+    const c = await pool.query(
+      'SELECT content FROM comments WHERE request_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [requestId]
+    );
+    if (c.rows.length > 0 && c.rows[0].content) return String(c.rows[0].content);
+  } catch (e) { /* fall through */ }
+  try {
+    const a = await pool.query(
+      "SELECT message FROM activity_log WHERE request_id = $1 AND type IN ('status_update','resolved','closed') ORDER BY created_at DESC LIMIT 1",
+      [requestId]
+    );
+    if (a.rows.length > 0 && a.rows[0].message) return String(a.rows[0].message);
+  } catch (e) { /* fall through */ }
+  return 'The request was reviewed and marked as Resolved by the RHMS Support Team.';
+}
+
+// 4. Request resolved -> original Client email.
+async function emailClientOnResolved(requestId, req) {
+  try {
+    const ctx = await getRequestEmailContext(requestId);
+    if (!ctx) return;
+    const to = ctx.client_account_email || ctx.client_email;
+    if (!to) { console.log('[WorkflowEmail:resolved] skipped — client has no email'); return; }
+    const category = workflowCategoryOf(ctx);
+    const resolvedOn = formatEmailDateTime(ctx.updated_at);
+    const resolution = await getResolutionDetails(requestId);
+    fireWorkflowEmail({
+      to,
+      subject: `Your Support Request Has Been Resolved - #${requestId}`,
+      tag: 'resolved', req, requestId,
+      body: {
+        title: 'Your Support Request Has Been Resolved',
+        greetingName: ctx.client_name || 'there',
+        lead: 'We are pleased to inform you that your support request has been successfully resolved.',
+        statusBadge: 'RESOLVED',
+        infoRows:
+          workflowInfoRow('Request ID', `#${requestId}`) +
+          workflowInfoRow('Request Title', ctx.subject) +
+          workflowInfoRow('Category', category) +
+          workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+          workflowInfoRow('Resolved On', resolvedOn),
+        infoText:
+          `Request ID: #${requestId}\nRequest Title: ${ctx.subject}\nCategory: ${category}\n` +
+          `Priority: ${ctx.priority_name || 'N/A'}\nResolved On: ${resolvedOn}`,
+        detailsTitle: ctx.subject,
+        detailsBody: ctx.description || 'N/A',
+        resolution,
+        closing: [
+          'Your submitted request has been successfully resolved by the RHMS Support Team.',
+          'Thank you for using the RHMS Support Request System.',
+        ],
+      },
+    });
+  } catch (err) {
+    console.error('[WorkflowEmail:resolved] failed:', err.message);
+  }
+}
+
 // SSE endpoint for real-time notifications (token via query param for EventSource)
 app.get('/api/notifications/stream', async (req, res) => {
   // Auth via query param since EventSource doesn't support headers
@@ -2630,6 +2990,9 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
 
     // Real-time notification
     notifyAdmins('New request created', { type: 'request_created', requestId: id, subject, userId: req.user.id, userName: req.user.name });
+    // Automatic email to the configured Admin address (fire-and-forget;
+    // never blocks or rolls back request creation on SMTP failure).
+    emailAdminOnNewRequest(id, req);
 
     res.status(201).json({ id, subject, description, clientId, categoryId: effectiveCategoryId, customCategory: customCategoryValue, priorityId: priorityId || '2', statusId: '1', assignedTo: null, attachments: attachments || [], createdAt: now, updatedAt: now });
   } catch (err) {
@@ -2753,9 +3116,15 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
     );
 
     // Sync request_groups when assignedGroup changes
+    const groupChanged = assignedGroup && assignedGroup !== existing.rows[0].assigned_group;
     if (assignedGroup) {
       await pool.query('DELETE FROM request_groups WHERE request_id = $1', [req.params.id]);
       await pool.query('INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, assignedGroup]);
+    }
+    // Automatic email to the Escalation Team members of the newly assigned
+    // group only (fire-and-forget; respects existing group/RBAC membership).
+    if (groupChanged) {
+      emailEscalationTeamOnAssignment(req.params.id, assignedGroup, req.user.name, req);
     }
 
     const notifResult = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('notifyClientStatusChange', 'notifyDeveloperAssignment', 'emailNotifications', 'inAppNotifications')");
@@ -2787,6 +3156,11 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       if (clientId && clientId !== req.user.id && notifSettings.notifyClientStatusChange !== false) {
         notifyUser(clientId, `Your request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
       }
+      // Automatic email to the original Client when the request becomes
+      // Resolved (fire-and-forget; the status update already succeeded).
+      if (statusId === '5' || statusName === 'Resolved') {
+        emailClientOnResolved(req.params.id, req);
+      }
     }
 
     if (assignedTo && assignedTo !== existing.rows[0].assigned_to) {
@@ -2805,6 +3179,8 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       if (clientId && clientId !== req.user.id) {
         notifyUser(clientId, `Your request #${req.params.id} has been assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
       }
+      // Automatic email to the assigned Developer (fire-and-forget).
+      emailDeveloperOnAssignment(req.params.id, assignedTo, req.user.name, req);
     }
 
     const changes = [];

@@ -8,7 +8,7 @@ import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
 import Icon from './Icon';
 import { SIDEBAR_MENUS, useTrackPrevMenu } from '../utils/sidebarNav';
-import { isCriticalUnworked, isCriticalActionable } from '../utils/criticalIndicator';
+import { isCriticalUnworked } from '../utils/criticalIndicator';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -31,15 +31,6 @@ export default function Layout() {
   // Badges and panels derive from real DB is_read state; opening a panel
   // never marks anything read — only clicking an item (or its Read control).
   const [allNotifications, setAllNotifications] = useState([]);
-  // Request lookup for the Critical-dot rule (Priority=Critical AND
-  // Status=New|Assigned). Scoped by the same /api/requests RBAC/group
-  // visibility — no group logic changed here.
-  const [critRequests, setCritRequests] = useState([]);
-  const refreshCritRequests = useCallback(() => {
-    api.get('/api/requests').then(data => {
-      setCritRequests(Array.isArray(data) ? data : []);
-    }).catch(() => {});
-  }, []);
   const [refreshing, setRefreshing] = useState(false);
   const dismissedIds = useRef(new Set());
   const eventSourceRef = useRef(null);
@@ -125,25 +116,8 @@ export default function Layout() {
   // Panel filters: show only read or only unread items per panel.
   const [notifFilter, setNotifFilter] = useState('unread');
   const [msgFilter, setMsgFilter] = useState('unread');
-  const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.is_read);
+const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.is_read);
   const shownMsgs = commentNotes.filter(n => msgFilter === 'read' ? n.is_read : !n.is_read);
-  // Critical-dot helpers: resolve each notification's request to its live
-  // Priority + Status. Dots appear ONLY for Critical + (New|Assigned).
-  const critReqById = useMemo(() => {
-    const m = {};
-    for (const r of critRequests) m[String(r.id)] = r;
-    return m;
-  }, [critRequests]);
-  const notifIsCritical = useCallback((n) => {
-    if (!n || !n.requestId) return false;
-    return isCriticalUnworked(critReqById[String(n.requestId)]);
-  }, [critReqById]);
-  // Bell counts only requests actionable for the logged-in user:
-  // Critical + (New|Assigned) AND assigned to them (or still claimable).
-  // Recalculated from live request data on every refresh — claiming one and
-  // moving it to In Progress drops it from the count immediately.
-  const criticalCount = critRequests.filter((r) => isCriticalActionable(r, user)).length;
-  const hasCriticalBell = criticalCount > 0;
 
   const getNotificationType = useCallback((msg) => {
     if (!msg) return 'default';
@@ -229,11 +203,10 @@ export default function Layout() {
   useEffect(() => {
     if (!user) return;
     refreshNotifications();
-    refreshCritRequests();
-    const h = () => { refreshNotifications(); refreshCritRequests(); };
+    const h = () => { refreshNotifications(); };
     window.addEventListener('refresh-requests', h);
     return () => window.removeEventListener('refresh-requests', h);
-  }, [user, refreshNotifications, refreshCritRequests]);
+  }, [user, refreshNotifications]);
 
   // SSE real-time notifications
   useEffect(() => {
@@ -286,9 +259,6 @@ export default function Layout() {
           if (!isOwnAction) {
             refreshNotifications();
           }
-          // Always refresh request states (even for own actions like
-          // claiming) so the Critical bell dot tracks Priority + Status.
-          refreshCritRequests();
 
           if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
@@ -495,7 +465,6 @@ export default function Layout() {
               <button className="topbar-icon" title={t('topbar.notifications')} onClick={openNotifications}>
                 <Icon name="bell" />
                 {unreadBell > 0 && <span className="badge">{unreadBell > 99 ? '99+' : unreadBell}</span>}
-                {hasCriticalBell && <span className="critical-dot critical-bell-dot" title={`${criticalCount} critical request${criticalCount === 1 ? '' : 's'} need${criticalCount === 1 ? 's' : ''} work`}>{criticalCount > 99 ? '99+' : criticalCount}</span>}
               </button>
               {showNotifications && (
                 <div className="dropdown-panel notification-panel">
@@ -515,9 +484,8 @@ export default function Layout() {
                           <Icon name={getNotificationIcon(n.type || getNotificationType(n.message))} size={16} />
                         </div>
                         <div className="dropdown-panel-content">
-                          <div className="dropdown-panel-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            {notifIsCritical(n) && <span className="critical-dot" title="Critical request needs work" />}
-                            {getNotifTitle(n.type)}
+<div className="dropdown-panel-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {getNotifTitle(n.type)}
                             {n.requestId && <span className="dropdown-panel-request">{t('common.requestPrefixLabel')}-{String(n.requestId).padStart(4, '0')}</span>}
                           </div>
                           <p className="dropdown-panel-message">{translateNotification(n.message, n, t)}</p>
