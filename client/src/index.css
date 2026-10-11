@@ -9388,6 +9388,25 @@ body.dark-mode .sortable-th:hover { color: #e2e8f0; }
 .csat-panel { border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; background: #fff; }
 .csat-panel h4 { margin: 0 0 4px; font-size: 14px; font-weight: 700; color: #111827; }
 .csat-panel-sub { margin: 0 0 12px; font-size: 12px; color: #9ca3af; }
+.csat-panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.csat-panel-head .csat-panel-sub { margin-bottom: 8px; }
+.csat-period-toggle { display: flex; gap: 4px; background: #f3f4f6; border-radius: 8px; padding: 3px; }
+.csat-period-btn { padding: 5px 12px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; background: transparent; color: #6b7280; transition: all 0.2s; }
+.csat-period-btn.active { background: #fff; color: #0D9488; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.csat-period-btn:hover:not(.active) { color: #374151; }
+.csat-tip { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); min-width: 170px; }
+.csat-tip-title { font-weight: 700; margin-bottom: 6px; color: #111827; }
+.csat-tip-row { display: flex; align-items: center; gap: 6px; color: #4b5563; padding: 2px 0; }
+.csat-tip-row strong { margin-left: auto; color: #111827; padding-left: 12px; }
+.csat-tip-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.csat-tip-muted { color: #6b7280; }
+body.dark-mode .csat-period-toggle { background: #1e293b; }
+body.dark-mode .csat-period-btn { color: #94a3b8; }
+body.dark-mode .csat-period-btn.active { background: #0f1f3d; color: #2DD4BF; }
+body.dark-mode .csat-tip { background: #1e293b; border-color: #334155; }
+body.dark-mode .csat-tip-title { color: #f1f5f9; }
+body.dark-mode .csat-tip-row { color: #cbd5e1; }
+body.dark-mode .csat-tip-row strong { color: #f1f5f9; }
 .csat-panel-empty { padding: 32px; text-align: center; color: #9ca3af; font-size: 13px; }
 .csat-panel .recharts-cartesian-axis-tick text { fill: #6b7280; }
 .csat-panel .recharts-cartesian-grid line { stroke: #eef2f7; }
