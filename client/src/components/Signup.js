@@ -4,11 +4,13 @@ import { api } from '../api';
 import { validateName, validateEmail } from '../utils/validation';
 import ValidationError from './ValidationError';
 import { useTranslation } from '../i18n/useTranslation';
+import { useAuth } from '../AuthContext';
 import LanguageSelector from './LanguageSelector';
 import Icon from './Icon';
 
 export default function Signup() {
   const { t } = useTranslation();
+  const { darkMode, toggleDarkMode } = useAuth();
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
@@ -167,7 +169,18 @@ export default function Signup() {
         <div className="login-orb login-orb-2"></div>
       </div>
 
-      <LanguageSelector variant="login" />
+      <div className="login-top-actions">
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={toggleDarkMode}
+          title={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}
+          aria-label={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}
+        >
+          {darkMode ? <><span className="toggle-icon"><Icon name="sun" /></span><span className="theme-toggle-label">{t('topbar.bright')}</span></> : <><span className="toggle-icon"><Icon name="moon" /></span><span className="theme-toggle-label">{t('topbar.dark')}</span></>}
+        </button>
+        <LanguageSelector variant="login" />
+      </div>
 
       <div className="login-card signup-card">
         <h2 className="login-title">{step === 'verify' ? t('common.verifyEmailTitle') : t('common.createAccount')}</h2>
@@ -323,7 +336,7 @@ export default function Signup() {
               ))}
             </div>
             <ValidationError message={errors.code} />
-            <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+            <p className="otp-hint">
               {t('common.verificationCodeHint')}
             </p>
           </div>
@@ -332,7 +345,7 @@ export default function Signup() {
               {t('common.backToDetails')}
             </button>
             {resendSeconds > 0 ? (
-              <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+              <span className="resend-hint">
                 Resend in {resendSeconds}s
               </span>
             ) : (

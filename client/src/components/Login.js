@@ -27,7 +27,7 @@ export default function Login() {
   const [forgotError, setForgotError] = useState('');
   const [notice, setNotice] = useState('');
   const [errors, setErrors] = useState({ forgotEmail: '', otp: '', newPassword: '', confirmPassword: '' });
-  const { login, systemName, systemLogo } = useAuth();
+  const { login, systemName, systemLogo, darkMode, toggleDarkMode } = useAuth();
   const navigate = useNavigate();
   const otpRefs = useRef([]);
   const [resendSeconds, setResendSeconds] = useState(0);
@@ -278,7 +278,18 @@ export default function Login() {
         <div className="login-orb login-orb-2"></div>
       </div>
 
-      <LanguageSelector variant="login" />
+      <div className="login-top-actions">
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={toggleDarkMode}
+          title={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}
+          aria-label={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}
+        >
+          {darkMode ? <><span className="toggle-icon"><Icon name="sun" /></span><span className="theme-toggle-label">{t('topbar.bright')}</span></> : <><span className="toggle-icon"><Icon name="moon" /></span><span className="theme-toggle-label">{t('topbar.dark')}</span></>}
+        </button>
+        <LanguageSelector variant="login" />
+      </div>
 
       <div className="login-card">
         <div className="login-brand-header">
@@ -428,7 +439,7 @@ export default function Login() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
                     <button type="button" className="btn btn-outline" onClick={closeForgot}>{t('common.cancel')}</button>
                     {resendSeconds > 0 ? (
-                      <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+                      <span className="resend-hint">
                         Resend in {resendSeconds}s
                       </span>
                     ) : (

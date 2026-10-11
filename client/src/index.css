@@ -191,6 +191,8 @@ body {
   border-color: rgba(239, 68, 68, 0.6);
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
 }
+.otp-hint { margin: 2px 0 0; font-size: 13px; color: rgba(255, 255, 255, 0.6); }
+.resend-hint { font-size: 13px; color: rgba(255, 255, 255, 0.6); }
 @media (max-width: 480px) {
   .otp-boxes { gap: 8px; }
   .otp-box { width: 42px; height: 50px; font-size: 20px; border-radius: 10px; }
@@ -8098,8 +8100,92 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
   backdrop-filter: blur(6px);
 }
 .lang-selector-login .lang-selector-btn:hover { border-color: #93c5fd; color: #ffffff; background: rgba(255,255,255,0.15); }
-.lang-selector-login { position: fixed; top: 20px; right: 24px; }
+.login-top-actions { position: fixed; top: 20px; right: 24px; display: flex; gap: 8px; align-items: center; z-index: 50; }
+.login-top-actions .lang-selector-login { position: static; }
 .lang-selector-login .lang-selector-menu { right: 0; left: auto; }
+
+/* Login page bright (light) mode — toggled via body.dark-mode.
+   Default .login-page styles above are the dark look; these overrides
+   make the theme button visibly functional without touching other pages. */
+body:not(.dark-mode) .login-page {
+  background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 40%, #eef2ff 70%, #f8fafc 100%);
+}
+body:not(.dark-mode) .login-orb-1 {
+  background: radial-gradient(circle, rgba(0, 180, 216, 0.35) 0%, transparent 70%);
+}
+body:not(.dark-mode) .login-orb-2 {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, transparent 70%);
+}
+body:not(.dark-mode) .login-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 40px rgba(15, 40, 71, 0.12);
+}
+body:not(.dark-mode) .login-brand-name { color: #0f172a; }
+body:not(.dark-mode) .login-brand-sub { color: #64748b; }
+body:not(.dark-mode) .login-title { color: #0f172a; }
+body:not(.dark-mode) .login-subtitle { color: #64748b; }
+body:not(.dark-mode) .login-input-wrapper input {
+  color: #0f172a;
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+body:not(.dark-mode) .login-input-wrapper input::placeholder { color: #94a3b8; }
+body:not(.dark-mode) .login-input-wrapper input:focus {
+  border-color: #00b4d8;
+  box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.15);
+  background: #ffffff;
+}
+body:not(.dark-mode) .login-input-icon { color: #94a3b8; }
+body:not(.dark-mode) .show-password-btn { color: #64748b; }
+body:not(.dark-mode) .show-password-btn:hover { color: #0f172a; }
+body:not(.dark-mode) .remember-me { color: #475569; }
+body:not(.dark-mode) .signup-link { color: #64748b; }
+body:not(.dark-mode) .forgot-link { color: #0284c7; }
+body:not(.dark-mode) .forgot-link:hover { color: #0369a1; }
+body:not(.dark-mode) .signup-link .signup-btn { color: #0284c7; }
+body:not(.dark-mode) .signup-link .signup-btn:hover { color: #0369a1; }
+body:not(.dark-mode) .terms-link { color: #0284c7; }
+body:not(.dark-mode) .login-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+body:not(.dark-mode) .signup-success {
+  background: #f0fdf4;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+body:not(.dark-mode) .otp-box {
+  color: #0f172a;
+  background: #ffffff;
+  border-color: #cbd5e1;
+  caret-color: #0284c7;
+}
+body:not(.dark-mode) .otp-box.otp-filled { border-color: #00b4d8; background: #f0f9ff; }
+body:not(.dark-mode) .login-divider::before,
+body:not(.dark-mode) .login-divider::after { background: #e2e8f0; }
+body:not(.dark-mode) .login-divider span { color: #94a3b8; }
+body:not(.dark-mode) .google-loading { color: #64748b; }
+body:not(.dark-mode) .otp-hint { color: #64748b; }
+body:not(.dark-mode) .resend-hint { color: #64748b; }
+body:not(.dark-mode) .modal-card {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 20px 60px rgba(15, 40, 71, 0.18);
+}
+body:not(.dark-mode) .modal-card h3 { color: #0f172a; }
+body:not(.dark-mode) .modal-card p { color: #64748b; }
+body:not(.dark-mode) .lang-selector-login .lang-selector-btn {
+  border-color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.85);
+  color: #334155;
+}
+body:not(.dark-mode) .lang-selector-login .lang-selector-btn:hover {
+  border-color: #2563eb;
+  color: #1d4ed8;
+  background: #ffffff;
+}
 
 /* Settings / profile variant */
 .lang-selector-inline .lang-selector-menu { left: 0; }
