@@ -110,6 +110,15 @@ const RANGE_OPTIONS = [
   { days: 'all', labelKey: 'dashboard.rangeAll' },
 ];
 
+// Requests Overview range buttons: Daily = last 7 days, Weekly = last 30
+// days, Monthly = last 90 days. Values feed the shared `days` query param
+// the backend already supports, so stats + escalation data refetch together.
+const OVERVIEW_RANGES = [
+  { days: 7, labelKey: 'dashboard.rangeDaily' },
+  { days: 30, labelKey: 'dashboard.rangeWeekly' },
+  { days: 90, labelKey: 'dashboard.rangeMonthly' },
+];
+
 export default function Dashboard() {
   const { t } = useTranslation();
   const [stats, setStats] = useState(null);
@@ -136,6 +145,10 @@ export default function Dashboard() {
   const [teamPerfPerPage, setTeamPerfPerPage] = useState(10);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [rangeDays, setRangeDays] = useState('all');
+  // Requests Overview has its own range (default Daily) so changing it never
+  // affects the Escalation/Developer performance cards, which keep the full
+  // 'all' history exactly as before.
+  const [overviewDays, setOverviewDays] = useState(7);
   const [monthOffset, setMonthOffset] = useState(0);
   const escPerfCardRef = useRef(null);
   const [escPerfCardHeight, setEscPerfCardHeight] = useState(0);
@@ -144,8 +157,8 @@ export default function Dashboard() {
   const shareLabel = t('common.ofTotal');
 
   useEffect(() => {
-    api.get(`/api/dashboard/stats?days=${rangeDays}`).then(setStats).catch(err => setError(t('common.failedToLoadDashboard') + ' ' + err.message));
-  }, [user, rangeDays]);
+    api.get(`/api/dashboard/stats?days=${overviewDays}`).then(setStats).catch(err => setError(t('common.failedToLoadDashboard') + ' ' + err.message));
+  }, [user, overviewDays]);
 
   useEffect(() => {
     api.get('/api/requests').then(data => {
@@ -662,7 +675,20 @@ export default function Dashboard() {
               <h3>{t('dashboard.requestsOverview')}</h3>
               <p className="chart-subtitle">{t('dashboard.requestsOverviewSubtitle')}</p>
             </div>
-
+            <div className="perf-toggle" role="tablist" aria-label={t('dashboard.requestsOverview')}>
+              {OVERVIEW_RANGES.map(r => (
+                <button
+                  key={r.labelKey}
+                  type="button"
+                  role="tab"
+                  aria-selected={overviewDays === r.days}
+                  className={`perf-btn${overviewDays === r.days ? ' active' : ''}`}
+                  onClick={() => setOverviewDays(r.days)}
+                >
+                  {t(r.labelKey)}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="chart-container overview-chart">
             {weekData.length === 0 ? (
