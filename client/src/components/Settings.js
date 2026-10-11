@@ -105,7 +105,7 @@ export default function Settings() {
   }, []);
 
   const [statusModal, setStatusModal] = useState(null);
-  const [showStatusManagement, setShowStatusManagement] = useState(true);
+  const [showStatusManagement, setShowStatusManagement] = useState(false);
   const [editingStatus, setEditingStatus] = useState(null);
   const [statusForm, setStatusForm] = useState({ name: '', color: '#6B7280' });
   const [statusSaving, setStatusSaving] = useState(false);
