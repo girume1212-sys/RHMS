@@ -73,21 +73,61 @@ const STAR_SERIES = [
   { star: 5, name: '5 Stars', color: '#0D9488' }
 ];
 
-/**
- * Group valid feedback into time buckets and count records per star.
- * Counts of 0 mean "no records in that bucket" (factual, not fabricated).
- * Records without a parseable created_at are excluded from the series.
- */
+// Satisfaction bands — same thresholds as the Feedback table badges
+// (verySatisfied ≥ 4.5, satisfied ≥ 3.5, neutral ≥ 2.5, dissatisfied ≥ 1.5).
+const SAT_LEVELS = [
+  { key: 'verySatisfied', name: 'Very Satisfied', color: '#059669' },
+  { key: 'satisfied', name: 'Satisfied', color: '#10B981' },
+  { key: 'neutral', name: 'Neutral', color: '#F59E0B' },
+  { key: 'dissatisfied', name: 'Dissatisfied', color: '#F97316' },
+  { key: 'veryDissatisfied', name: 'Very Dissatisfied', color: '#DC2626' }
+];
+
+export function satLevelKey(rating) {
+  const num = Number(rating) || 0;
+  if (num >= 4.5) return 'verySatisfied';
+  if (num >= 3.5) return 'satisfied';
+  if (num >= 2.5) return 'neutral';
+  if (num >= 1.5) return 'dissatisfied';
+  return 'veryDissatisfied';
+}
+
 /**
  * Shared time buckets for trend charts. Daily = last 14 days,
- * weekly = last 12 Monday-start weeks, monthly = last 12 calendar months.
+ * weekly = last 12 Monday-start weeks (labeled W1–W12), monthly = last 12
+ * calendar months. Full date-range labels are kept for tooltips.
  */
-function buildBuckets(period) {
+/**
+ * Earliest parseable feedback date in a valid-record list (or null).
+ * Used to stretch chart windows so every dated record is plotted and the
+ * chart totals always equal the table totals.
+ */
+function earliestDate(list) {
+  let min = null;
+  list.forEach(f => {
+    const raw = f.created_at ?? f.createdAt ?? f.date;
+    if (!raw) return;
+    const fd = new Date(raw);
+    if (isNaN(fd)) return;
+    if (min === null || fd < min) min = fd;
+  });
+  return min;
+}
+
+function buildBuckets(period, minDate) {
   const buckets = [];
   const now = new Date();
   const push = (key, short, full, match) => buckets.push({ key, short, full, match });
   if (period === 'daily') {
-    for (let i = 13; i >= 0; i--) {
+    // Default last 14 days, stretched back to the earliest record so the
+    // chart total always equals the table total.
+    let days = 14;
+    if (minDate) {
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const first = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate());
+      days = Math.max(14, Math.round((today - first) / 86400000) + 1);
+    }
+    for (let i = days - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       push(key, d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -105,19 +145,37 @@ function buildBuckets(period) {
       return c;
     };
     const thisMon = startOfWeek(now);
-    for (let i = 11; i >= 0; i--) {
+    // Default last 12 weeks, stretched back to the earliest record's week.
+    let weeks = 12;
+    if (minDate) {
+      const firstMon = startOfWeek(minDate);
+      weeks = Math.max(12, Math.round((thisMon - firstMon) / (7 * 86400000)) + 1);
+    }
+    const built = [];
+    for (let i = weeks - 1; i >= 0; i--) {
       const ws = new Date(thisMon); ws.setDate(ws.getDate() - i * 7);
       const we = new Date(ws); we.setDate(we.getDate() + 6);
       const key = `${ws.getFullYear()}-${String(ws.getMonth() + 1).padStart(2, '0')}-${String(ws.getDate()).padStart(2, '0')}`;
-      push(key, ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        `${ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${we.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-        (fd) => { const t = new Date(fd.getFullYear(), fd.getMonth(), fd.getDate()).getTime(); return t >= ws.getTime() && t <= new Date(we.getFullYear(), we.getMonth(), we.getDate()).getTime(); });
+      built.push({ ws, we, key,
+        match: (fd) => { const t = new Date(fd.getFullYear(), fd.getMonth(), fd.getDate()).getTime(); return t >= ws.getTime() && t <= new Date(we.getFullYear(), we.getMonth(), we.getDate()).getTime(); } });
     }
+    built.forEach((b, idx) => {
+      const n = idx + 1; // W1 (oldest) … Wn (current week)
+      push(b.key, `W${n}`,
+        `W${n}: ${b.ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${b.we.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+        b.match);
+    });
   }
   if (period === 'monthly' || buckets.length === 0) {
     if (period !== 'monthly') buckets.length = 0;
     const base = new Date(now.getFullYear(), now.getMonth(), 1);
-    for (let i = 11; i >= 0; i--) {
+    // Default last 12 months, stretched back to the earliest record's month.
+    let months = 12;
+    if (minDate) {
+      months = Math.max(12,
+        (base.getFullYear() - minDate.getFullYear()) * 12 + (base.getMonth() - minDate.getMonth()) + 1);
+    }
+    for (let i = months - 1; i >= 0; i--) {
       const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       push(key, d.toLocaleDateString('en-US', { month: 'short' }),
@@ -135,7 +193,7 @@ function buildBuckets(period) {
  */
 export function computeRatingSeries(valid, period) {
   const list = Array.isArray(valid) ? valid : [];
-  const buckets = buildBuckets(period);
+  const buckets = buildBuckets(period, earliestDate(list));
   return buckets.map(b => {
     const row = { key: b.key, period: b.short, full: b.full, total: 0 };
     STAR_SERIES.forEach(sr => { row[`star${sr.star}`] = 0; });
@@ -161,7 +219,7 @@ export function computeRatingSeries(valid, period) {
  */
 export function computeSatisfactionSeries(valid, period) {
   const list = Array.isArray(valid) ? valid : [];
-  return buildBuckets(period).map(b => {
+  return buildBuckets(period, earliestDate(list)).map(b => {
     let total = 0, sat = 0;
     list.forEach(f => {
       const raw = f.created_at ?? f.createdAt ?? f.date;
@@ -185,28 +243,30 @@ export function computeSatisfactionSeries(valid, period) {
   });
 }
 
-// Tooltip for the satisfaction trend: month, % (or "No feedback"), record count.
-function TrendTooltip({ active, payload }) {
-  if (!active || !payload || !payload.length) return null;
-  const row = payload[0]?.payload;
-  if (!row) return null;
-  return (
-    <div className="csat-tip">
-      <div className="csat-tip-title">{row.full || row.label || row.month}</div>
-      <div className="csat-tip-row">
-        <span className="csat-tip-dot" style={{ background: '#2DD4BF' }} />
-        <span>Satisfaction</span>
-        <strong>{row.score === null || row.score === undefined ? 'No feedback' : `${row.score}%`}</strong>
-      </div>
-      <div className="csat-tip-row csat-tip-muted">
-        <span>Feedback records</span>
-        <strong>{row.responses ?? 0}</strong>
-      </div>
-    </div>
-  );
+/**
+ * Records per satisfaction band per time bucket (factual counts, 0 = no
+ * records in that bucket). Band assignment reuses the Feedback table
+ * thresholds via satLevelKey — no new logic.
+ */
+export function computeSatLevelSeries(valid, period) {
+  const list = Array.isArray(valid) ? valid : [];
+  return buildBuckets(period, earliestDate(list)).map(b => {
+    const row = { key: b.key, period: b.short, full: b.full, total: 0 };
+    SAT_LEVELS.forEach(lv => { row[lv.key] = 0; });
+    list.forEach(f => {
+      const raw = f.created_at ?? f.createdAt ?? f.date;
+      if (!raw) return;
+      const fd = new Date(raw);
+      if (isNaN(fd)) return;
+      if (!b.match(fd)) return;
+      row[satLevelKey(f.rating)] += 1;
+      row.total += 1;
+    });
+    return row;
+  });
 }
 
-// Tooltip for the distribution chart: period, per-star counts.
+// Tooltip for the distribution / satisfaction-level charts: period, per-series counts.
 function DistTooltip({ active, payload, label }) {
   if (!active || !payload || !payload.length) return null;
   const full = payload[0]?.payload?.full || label;
@@ -227,11 +287,55 @@ function DistTooltip({ active, payload, label }) {
 
 export default function ClientSatisfaction({ feedback }) {
   const s = useMemo(() => computeSatisfaction(feedback), [feedback]);
-  const [distPeriod, setDistPeriod] = useState('monthly');
-  const distSeries = useMemo(() => computeRatingSeries(s.valid, distPeriod), [s.valid, distPeriod]);
+  const [trendPeriod, setTrendPeriod] = useState('weekly');
+  const trendLevels = useMemo(() => computeSatLevelSeries(s.valid, trendPeriod), [s.valid, trendPeriod]);
+  // Star totals for the visible period (same toggle, real records only).
+  const distTotals = useMemo(() => {
+    const series = computeRatingSeries(s.valid, trendPeriod);
+    return [5, 4, 3, 2, 1].map(star => ({
+      star,
+      color: (STAR_SERIES.find(sr => sr.star === star) || {}).color || '#F59E0B',
+      count: series.reduce((sum, r) => sum + (Number(r[`star${star}`]) || 0), 0)
+    }));
+  }, [s.valid, trendPeriod]);
+  const distMax = Math.max(...distTotals.map(d => d.count), 1);
+  // Y-axis: whole numbers scaled to the actual record counts —
+  // e.g. 0–7 when the peak weekly count is 7. The ceiling and ticks grow
+  // automatically as feedback volume increases.
+  const trendPeak = useMemo(() => {
+    let peak = 0;
+    trendLevels.forEach(r => {
+      SAT_LEVELS.forEach(lv => {
+        const v = Number(r[lv.key]) || 0;
+        if (v > peak) peak = v;
+      });
+    });
+    return peak;
+  }, [trendLevels]);
+  const { yMax, yTicks } = useMemo(() => {
+    if (trendPeak <= 10) {
+      const max = Math.max(trendPeak, 1);
+      const ticks = [];
+      for (let v = 0; v <= max; v += 1) ticks.push(v);
+      return { yMax: max, yTicks: ticks };
+    }
+    // Nice step (1/2/5 × 10^n) aiming for ~8-10 ticks.
+    const raw = trendPeak / 10;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw / mag;
+    const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+    const step = nice * mag;
+    const max = Math.ceil(trendPeak / step) * step;
+    const ticks = [];
+    for (let v = 0; v <= max; v += step) ticks.push(Math.round(v));
+    return { yMax: max, yTicks: ticks };
+  }, [trendPeak]);
   const hasData = s.total > 0;
-  const hasTrend = s.months.some(m => m.score !== null);
-  const hasDistTrend = distSeries.some(r => (r.total || 0) > 0);
+  const hasTrend = trendLevels.some(m => (m.total || 0) > 0);
+  const nBuckets = trendLevels.length;
+  const trendSub = trendPeriod === 'daily' ? `Feedback records per satisfaction level · Last ${nBuckets} days`
+    : trendPeriod === 'weekly' ? `Feedback records per satisfaction level · Last ${nBuckets} weeks`
+    : `Feedback records per satisfaction level · Last ${nBuckets} months`;
 
   const cards = [
     { label: 'Satisfaction Score', value: hasData ? `${s.score}%` : '—', sub: hasData ? `${s.satisfied} of ${s.total} rated 4+` : 'No data', color: '#0D9488' },
@@ -270,76 +374,72 @@ export default function ClientSatisfaction({ feedback }) {
 
           <div className="csat-charts">
             <div className="csat-panel">
-              <h4>Satisfaction Trend (Monthly)</h4>
-              <p className="csat-panel-sub">% satisfied per month · last 12 months</p>
-              {!hasTrend ? (
-                <div className="csat-panel-empty">Not enough dated records to draw a trend.</div>
-              ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={s.months} margin={{ top: 8, right: 12, left: -8, bottom: 20 }}>
-                    <defs>
-                      <linearGradient id="csatAbstract" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#2DD4BF" stopOpacity={0.45} />
-                        <stop offset="60%" stopColor="#2DD4BF" stopOpacity={0.15} />
-                        <stop offset="100%" stopColor="#2DD4BF" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" fontSize={11} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
-                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} fontSize={11} tickLine={false} />
-                    <Tooltip content={<TrendTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Area type="monotone" dataKey="score" name="Satisfaction %"
-                      stroke="#2DD4BF" strokeWidth={3} fill="url(#csatAbstract)"
-                      dot={{ r: 3.5, fill: '#2DD4BF', stroke: '#fff', strokeWidth: 2 }}
-                      activeDot={{ r: 5, fill: '#2DD4BF', stroke: '#fff', strokeWidth: 2 }}
-                      connectNulls />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className="csat-panel">
               <div className="csat-panel-head">
                 <div>
-                  <h4>Ratings Distribution</h4>
-                  <p className="csat-panel-sub">Feedback records per star (1–5) over time</p>
+                  <h4>Satisfaction Trend</h4>
+                  <p className="csat-panel-sub">{trendSub}</p>
                 </div>
-                <div className="csat-period-toggle" role="tablist" aria-label="Distribution period">
+                <div className="csat-period-toggle" role="tablist" aria-label="Trend period">
                   {[['daily', 'Daily'], ['weekly', 'Weekly'], ['monthly', 'Monthly']].map(([key, lbl]) => (
-                    <button key={key} type="button" role="tab" aria-selected={distPeriod === key}
-                      className={`csat-period-btn${distPeriod === key ? ' active' : ''}`}
-                      onClick={() => setDistPeriod(key)}>{lbl}</button>
+                    <button key={key} type="button" role="tab" aria-selected={trendPeriod === key}
+                      className={`csat-period-btn${trendPeriod === key ? ' active' : ''}`}
+                      onClick={() => setTrendPeriod(key)}>{lbl}</button>
                   ))}
                 </div>
               </div>
-              {!hasDistTrend ? (
+              {!hasTrend ? (
                 <div className="csat-panel-empty">Not enough dated records to draw a trend.</div>
               ) : (
-              <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={distSeries} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
-                  <defs>
-                    {STAR_SERIES.map(sr => (
-                      <linearGradient key={sr.star} id={`csatStar${sr.star}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={sr.color} stopOpacity={0.35} />
-                        <stop offset="100%" stopColor={sr.color} stopOpacity={0.02} />
-                      </linearGradient>
+                <div className="csat-chart-wrap">
+                  <span className="csat-y-title">Feedback Records</span>
+                <ResponsiveContainer width="100%" height={420}>
+                  <AreaChart data={trendLevels} margin={{ top: 8, right: 12, left: 8, bottom: 0 }}>
+                    <defs>
+                      {SAT_LEVELS.map(lv => (
+                        <linearGradient key={lv.key} id={`csatLvl-${lv.key}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={lv.color} stopOpacity={0.35} />
+                          <stop offset="100%" stopColor={lv.color} stopOpacity={0.02} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="period" fontSize={11} tickLine={false}
+                      interval={trendPeriod === 'weekly' ? 0 : 'preserveStartEnd'}
+                      angle={trendPeriod === 'weekly' ? 0 : -20} textAnchor={trendPeriod === 'weekly' ? 'middle' : 'end'}
+                      height={trendPeriod === 'weekly' ? 30 : 50} />
+                    <YAxis domain={[0, yMax]} ticks={yTicks} allowDecimals={false} fontSize={11} tickLine={false} width={40} />
+                    <Tooltip content={<DistTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    {SAT_LEVELS.map(lv => (
+                      <Area key={lv.key} type="monotone" dataKey={lv.key} name={lv.name}
+                        stroke={lv.color} strokeWidth={2.5} fill={`url(#csatLvl-${lv.key})`}
+                        dot={false} activeDot={{ r: 4 }} connectNulls={false} />
                     ))}
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="period" fontSize={11} tickLine={false} interval="preserveStartEnd" />
-                  <YAxis allowDecimals={false} fontSize={11} tickLine={false} />
-                  <Tooltip content={<DistTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  {STAR_SERIES.map(sr => (
-                    <Area key={sr.star} type="monotone" dataKey={`star${sr.star}`} name={sr.name}
-                      stroke={sr.color} strokeWidth={2.5} fill={`url(#csatStar${sr.star})`}
-                      dot={false} activeDot={{ r: 4 }} connectNulls={false} />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
+                  </AreaChart>
+                </ResponsiveContainer>
+                </div>
               )}
             </div>
+
+            <div className="csat-panel csat-side">
+              <h4>Rating Distribution</h4>
+              <p className="csat-panel-sub">{trendSub}</p>
+              <div className="csat-dist">
+                {distTotals.map(d => (
+                  <div key={d.star} className="csat-dist-row">
+                    <span className="csat-dist-star">{d.star}</span>
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill={d.color} aria-hidden="true">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    <div className="csat-dist-track">
+                      <div className="csat-dist-fill" style={{ width: `${(d.count / distMax) * 100}%`, background: d.color }} />
+                    </div>
+                    <span className="csat-dist-count">{d.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </div>
         </>
       )}

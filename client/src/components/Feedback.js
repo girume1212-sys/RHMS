@@ -74,14 +74,6 @@ export default function Feedback() {
     setPage(1);
   };
 
-  const avgRating = feedback.length
-    ? (feedback.reduce((s, f) => s + f.rating, 0) / feedback.length).toFixed(1)
-    : '0.0';
-
-  const distribution = [0, 0, 0, 0, 0];
-  feedback.forEach(f => { if (f.rating >= 1 && f.rating <= 5) distribution[f.rating - 1]++; });
-  const maxDist = Math.max(...distribution, 1);
-
   const satisfactionKeyFor = (rating) => {
     const num = Number(rating) || 0;
     if (num >= 4.5) return 'verySatisfied';
@@ -196,53 +188,10 @@ export default function Feedback() {
         </div>
       ) : (
         <>
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '16px', marginBottom: '24px'
-          }}>
-            <div className="chart-card" style={{ textAlign: 'center', padding: '24px' }}>
-              <div className="feedback-label">{t('feedback.averageRating')}</div>
-              <div style={{ fontSize: '36px', fontWeight: 700, color: '#F59E0B', lineHeight: 1 }}>
-                {avgRating}
-              </div>
-              <div style={{ marginTop: '6px' }}>{renderStars(Math.round(parseFloat(avgRating)))}</div>
-            </div>
-            <div className="chart-card" style={{ textAlign: 'center', padding: '24px' }}>
-              <div className="feedback-label">{t('feedback.totalFeedback')}</div>
-              <div style={{ fontSize: '36px', fontWeight: 700, color: '#3B82F6', lineHeight: 1 }}>
-                {feedback.length}
-              </div>
-              <div className="feedback-label" style={{ marginTop: '6px' }}>
-                {t('feedback.withComments', { count: feedback.filter(f => f.comment).length })}
-              </div>
-            </div>
-            <div className="chart-card" style={{ padding: '24px' }}>
-              <div className="feedback-label" style={{ marginBottom: '12px' }}>{t('feedback.ratingDistribution')}</div>
-              {[5, 4, 3, 2, 1].map(star => {
-                const count = distribution[star - 1];
-                const pct = (count / maxDist) * 100;
-                return (
-                  <div key={star} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span className="feedback-label" style={{ width: '20px', textAlign: 'right' }}>{star}</span>
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="#F59E0B" style={{ flexShrink: 0 }}>
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                    <div style={{
-                      flex: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden'
-                    }}>
-                      <div style={{
-                        width: `${pct}%`, height: '100%', background: '#F59E0B',
-                        borderRadius: '4px', transition: 'width 0.3s'
-                      }} />
-                    </div>
-                    <span className="feedback-label" style={{ width: '24px', textAlign: 'right' }}>{count}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* Client Satisfaction — live analytics above the Feedback table */}
+          <ClientSatisfaction feedback={feedback} />
 
-          <div className="chart-card">
+          <div className="chart-card" style={{ marginTop: '24px' }}>
             <div className="filters-bar sf-toolbar">
               <div className="sf-toolbar-left">
                 <div className="table-search-box">
@@ -389,8 +338,6 @@ export default function Feedback() {
               </div>
             </div>
           </div>
-          {/* Client Satisfaction — live analytics below the Feedback table */}
-          <ClientSatisfaction feedback={feedback} />
         </>
       )}
       {!loading && feedback.length === 0 && !error && (

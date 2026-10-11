@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import Toast from './Toast';
+import ValidationError from './ValidationError';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
@@ -24,6 +25,8 @@ export default function CreateRequest() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const customCategoryRef = useRef(null);
+  const [customCategoryError, setCustomCategoryError] = useState('');
   const [form, setForm] = useState({ subject: '', description: '', categoryId: '', priorityId: '2', customCategory: '' });
   const [categories, setCategories] = useState([]);
   const [prioritiesList, setPriorities] = useState([]);
