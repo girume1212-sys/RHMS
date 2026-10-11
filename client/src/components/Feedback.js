@@ -6,6 +6,7 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
+import ClientSatisfaction from './ClientSatisfaction';
 import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
 import { API_BASE } from '../api';
 
@@ -388,7 +389,12 @@ export default function Feedback() {
               </div>
             </div>
           </div>
+          {/* Client Satisfaction — live analytics below the Feedback table */}
+          <ClientSatisfaction feedback={feedback} />
         </>
+      )}
+      {!loading && feedback.length === 0 && !error && (
+        <ClientSatisfaction feedback={feedback} />
       )}
 
       {deleteTarget && (
