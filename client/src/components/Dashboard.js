@@ -187,16 +187,31 @@ export default function Dashboard() {
     return () => ro.disconnect();
   }, [perfView, escPerfData, rangeDays]);
 
-  const weekData = useMemo(() => (stats?.monthlyData || []).map(m => {
-    const [y, mo] = m.month.split('-').map(Number);
-    const d = new Date(y, mo - 1, 1);
-    return {
-      date: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-      created: Number(m.created) || 0,
-      resolved: Number(m.resolved) || 0,
-      closed: Number(m.closed) || 0
-    };
-  }), [stats?.monthlyData]);
+  // Requests Overview plots the per-day created/resolved/closed series.
+  // The backend provides it as `dailyData` (scope- and range-aware, every
+  // day filled so gaps render as 0). The legacy `monthlyData` aggregate is
+  // only a fallback — it is monthly-grained and ignores the request scope,
+  // which is why the chart looked wrong/non-functional.
+  const weekData = useMemo(() => {
+    if (Array.isArray(stats?.dailyData) && stats.dailyData.length > 0) {
+      return stats.dailyData.map(d => ({
+        date: d.date,
+        created: Number(d.created) || 0,
+        resolved: Number(d.resolved) || 0,
+        closed: Number(d.closed) || 0
+      }));
+    }
+    return (stats?.monthlyData || []).map(m => {
+      const [y, mo] = m.month.split('-').map(Number);
+      const d = new Date(y, mo - 1, 1);
+      return {
+        date: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        created: Number(m.created) || 0,
+        resolved: Number(m.resolved) || 0,
+        closed: Number(m.closed) || 0
+      };
+    });
+  }, [stats?.dailyData, stats?.monthlyData]);
 
   const weekTotals = useMemo(() => weekData.reduce((acc, d) => ({
     created: acc.created + d.created,
@@ -673,7 +688,8 @@ export default function Dashboard() {
                     axisLine={{ stroke: '#e5e7eb' }}
                     angle={-20}
                     textAnchor="end"
-                    interval={0}
+                    interval="preserveStartEnd"
+                    minTickGap={24}
                     height={80}
                     tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
                   />

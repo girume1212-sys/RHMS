@@ -1330,6 +1330,18 @@ body.dark-mode .perf-neon-chart {
 body.dark-mode .perf-neon-chart .recharts-cartesian-axis-tick text { fill: #E2E8F0; }
 body.dark-mode .perf-neon-chart .esc-axis-label.perf-neon-axis { fill: #94A3B8; }
 body.dark-mode .perf-neon-chart .recharts-legend-item-text { color: #E2E8F0 !important; }
+/* Satisfaction/Rating panels — same performance glassmorphism background. */
+.csat-panel.csat-gradient {
+  background: linear-gradient(135deg, rgba(224, 231, 255, 0.85) 0%, rgba(226, 232, 240, 0.92) 45%, rgba(204, 251, 241, 0.7) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow: 0 12px 32px rgba(2, 6, 23, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(8px);
+}
+body.dark-mode .csat-panel.csat-gradient {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.94) 55%, rgba(15, 23, 42, 0.96) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 12px 32px rgba(2, 6, 23, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
 /* Basis note below the Developer Performance chart — abstract display style */
 .perf-basis-note {
   margin-top: 16px;

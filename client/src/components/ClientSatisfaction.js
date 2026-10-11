@@ -403,7 +403,7 @@ export default function ClientSatisfaction({ feedback }) {
           </div>
 
           <div className="csat-charts">
-            <div className="csat-panel">
+            <div className="csat-panel csat-gradient">
               <div className="csat-panel-head">
                 <div>
                   <h4>Satisfaction Trend</h4>
@@ -451,7 +451,7 @@ export default function ClientSatisfaction({ feedback }) {
               )}
             </div>
 
-            <div className="csat-panel csat-side">
+            <div className="csat-panel csat-side csat-gradient">
               <h4>Rating Distribution</h4>
               <p className="csat-panel-sub">{distSub}</p>
               <div className="csat-dist">
