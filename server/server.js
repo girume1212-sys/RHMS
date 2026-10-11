@@ -3348,6 +3348,11 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     // so the FK stays valid while preserving existing categories/workflow.
     let effectiveCategoryId = categoryId;
     if (categoryId === 'other-categories') effectiveCategoryId = '8';
+    // "Other" requires a non-empty custom category (whitespace-only rejected)
+    // so direct API calls cannot bypass the form validation.
+    if (effectiveCategoryId === '8' && (!customCategory || !String(customCategory).trim())) {
+      return res.status(400).json({ error: 'Please specify the category.' });
+    }
     const customCategoryValue = (effectiveCategoryId === '8' && customCategory && String(customCategory).trim())
       ? String(customCategory).trim()
       : null;

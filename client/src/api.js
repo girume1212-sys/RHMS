@@ -24,6 +24,7 @@ const SERVER_ERROR_MAP = {
   'Access denied': 'common.accessDenied',
   'Insufficient permissions': 'common.insufficientPermissions',
   'Please fill all required fields': 'common.fillRequiredFields',
+  'Please specify the category.': 'common.specifyCategory',
   'Access denied - you can only modify requests assigned to you': 'common.accessDeniedOwnRequests',
   'Access denied - new requests cannot be modified by the escalation team': 'common.accessDeniedNewRequests',
   'Access denied - request assigned to another user': 'common.accessDeniedRequestAssigned',

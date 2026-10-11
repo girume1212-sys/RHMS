@@ -98,9 +98,57 @@ export function satLevelKey(rating) {
  * calendar months. Full date-range labels are kept for tooltips.
  */
 /**
+ * Timezone handling — one consistent zone (the app's configured `timeZone`
+ * setting, default Africa/Addis_Ababa) for "today", bucket boundaries and
+ * labels. All bucket matches are half-open UTC intervals [start, end), so
+ * midnight records are never missed or double-counted, and future-dated
+ * records never leak into the current bucket.
+ */
+export const DEFAULT_TZ = 'Africa/Addis_Ababa';
+
+function tzOffsetMinutes(tz, utcMs) {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+  const p = {};
+  dtf.formatToParts(new Date(utcMs)).forEach(x => { p[x.type] = x.value; });
+  const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  return Math.round((asUTC - utcMs) / 60000);
+}
+
+// UTC instant of wall-clock midnight for a zoned calendar date.
+function zonedMidnightUTC(tz, y, m, d) {
+  let guess = Date.UTC(y, m - 1, d, 0, 0, 0);
+  for (let k = 0; k < 3; k++) guess = Date.UTC(y, m - 1, d, 0, 0, 0) - tzOffsetMinutes(tz, guess) * 60000;
+  return guess;
+}
+
+function zonedTodayParts(tz, atMs) {
+  const p = {};
+  new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric' })
+    .formatToParts(new Date(atMs)).forEach(x => { p[x.type] = x.value; });
+  return { y: +p.year, m: +p.month, d: +p.day };
+}
+
+function shiftYMD(y, m, d, n) {
+  const dt = new Date(Date.UTC(y, m - 1, d + n));
+  return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
+}
+
+function fmtDay(utcMs, tz) {
+  return new Date(utcMs).toLocaleDateString('en-US', { timeZone: tz, month: 'short', day: 'numeric' });
+}
+function fmtDayYear(utcMs, tz) {
+  return new Date(utcMs).toLocaleDateString('en-US', { timeZone: tz, month: 'short', day: 'numeric', year: 'numeric' });
+}
+function fmtMonthYear(y, m) {
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+/**
  * Earliest parseable feedback date in a valid-record list (or null).
- * Used to stretch chart windows so every dated record is plotted and the
- * chart totals always equal the table totals.
+ * Used to stretch the weekly window so every dated record is plotted.
  */
 function earliestDate(list) {
   let min = null;
@@ -114,74 +162,79 @@ function earliestDate(list) {
   return min;
 }
 
-function buildBuckets(period, minDate) {
+/**
+ * Shared time buckets. `match` takes a UTC-ms instant and tests the
+ * half-open interval [start, end):
+ * - daily: today only, [today 00:00, tomorrow 00:00) in the app timezone.
+ * - last14: today + previous 13 days (exactly 14 dates, both ends covered).
+ * - weekly: Monday-start weeks, default last 12, stretched to earliest record.
+ * - monthly: previous calendar month + current month (current runs from the
+ *   1st through the start of tomorrow — never future dates).
+ */
+function buildBuckets(period, minDate, tz) {
+  const zone = tz || DEFAULT_TZ;
   const buckets = [];
-  const now = new Date();
-  const push = (key, short, full, match) => buckets.push({ key, short, full, match });
+  const nowMs = Date.now();
+  const t = zonedTodayParts(zone, nowMs);
+  const todayStart = zonedMidnightUTC(zone, t.y, t.m, t.d);
+  const td = shiftYMD(t.y, t.m, t.d, 1);
+  const tomorrowStart = zonedMidnightUTC(zone, td.y, td.m, td.d);
+  const push = (key, short, full, start, end) => buckets.push({
+    key, short, full, start, end, match: (ms) => ms >= start && ms < end
+  });
   if (period === 'daily') {
-    // Default last 14 days, stretched back to the earliest record so the
-    // chart total always equals the table total.
-    let days = 14;
-    if (minDate) {
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const first = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate());
-      days = Math.max(14, Math.round((today - first) / 86400000) + 1);
-    }
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      push(key, d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        (fd) => fd.getFullYear() === d.getFullYear() && fd.getMonth() === d.getMonth() && fd.getDate() === d.getDate());
+    push(`day-${t.y}-${t.m}-${t.d}`, 'Today', `Today · ${fmtDayYear(todayStart, zone)}`, todayStart, tomorrowStart);
+  }
+  if (period === 'last14') {
+    for (let i = 13; i >= 0; i--) {
+      const dd = shiftYMD(t.y, t.m, t.d, -i);
+      const start = zonedMidnightUTC(zone, dd.y, dd.m, dd.d);
+      const nx = shiftYMD(dd.y, dd.m, dd.d, 1);
+      const end = zonedMidnightUTC(zone, nx.y, nx.m, nx.d);
+      push(`day-${dd.y}-${dd.m}-${dd.d}`, fmtDay(start, zone), fmtDayYear(start, zone), start, end);
     }
   }
   if (period === 'weekly') {
-    // weekly: last 12 ISO-ish weeks starting Monday
-    const startOfWeek = (d) => {
-      const c = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      const day = (c.getDay() + 6) % 7; // Mon=0
-      c.setDate(c.getDate() - day);
-      c.setHours(0, 0, 0, 0);
-      return c;
-    };
-    const thisMon = startOfWeek(now);
-    // Default last 12 weeks, stretched back to the earliest record's week.
+    // Monday-start weeks in wall-clock terms (Mon=0 … Sun=6).
+    const wallDow = (new Date(todayStart).toLocaleDateString('en-US', { timeZone: zone, weekday: 'short' }));
+    const dowIdx = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }[wallDow] ?? 0;
+    const mon = shiftYMD(t.y, t.m, t.d, -dowIdx);
+    let thisMonStart = zonedMidnightUTC(zone, mon.y, mon.m, mon.d);
     let weeks = 12;
     if (minDate) {
-      const firstMon = startOfWeek(minDate);
-      weeks = Math.max(12, Math.round((thisMon - firstMon) / (7 * 86400000)) + 1);
+      const fp = zonedTodayParts(zone, minDate.getTime());
+      const fdn = new Date(zonedMidnightUTC(zone, fp.y, fp.m, fp.d))
+        .toLocaleDateString('en-US', { timeZone: zone, weekday: 'short' });
+      const fIdx = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }[fdn] ?? 0;
+      const fmon = shiftYMD(fp.y, fp.m, fp.d, -fIdx);
+      const firstMonStart = zonedMidnightUTC(zone, fmon.y, fmon.m, fmon.d);
+      weeks = Math.max(12, Math.round((thisMonStart - firstMonStart) / (7 * 86400000)) + 1);
     }
     const built = [];
     for (let i = weeks - 1; i >= 0; i--) {
-      const ws = new Date(thisMon); ws.setDate(ws.getDate() - i * 7);
-      const we = new Date(ws); we.setDate(we.getDate() + 6);
-      const key = `${ws.getFullYear()}-${String(ws.getMonth() + 1).padStart(2, '0')}-${String(ws.getDate()).padStart(2, '0')}`;
-      built.push({ ws, we, key,
-        match: (fd) => { const t = new Date(fd.getFullYear(), fd.getMonth(), fd.getDate()).getTime(); return t >= ws.getTime() && t <= new Date(we.getFullYear(), we.getMonth(), we.getDate()).getTime(); } });
+      const wsUtc = thisMonStart - i * 7 * 86400000;
+      // Week end = next Monday 00:00 wall time (DST-safe); weekly grid is
+      // Monday-anchored so fixed 7-day steps stay aligned.
+      const wp = zonedTodayParts(zone, wsUtc + 12 * 3600000);
+      const nx = shiftYMD(wp.y, wp.m, wp.d, 7);
+      const weUtc = zonedMidnightUTC(zone, nx.y, nx.m, nx.d);
+      built.push({ wsUtc, weUtc });
     }
     built.forEach((b, idx) => {
       const n = idx + 1; // W1 (oldest) … Wn (current week)
-      push(b.key, `W${n}`,
-        `W${n}: ${b.ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${b.we.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-        b.match);
+      const key = `w-${n}-${b.wsUtc}`;
+      push(key, `W${n}`, `W${n}: ${fmtDay(b.wsUtc, zone)} – ${fmtDayYear(b.weUtc - 1, zone)}`, b.wsUtc, b.weUtc);
     });
   }
   if (period === 'monthly' || buckets.length === 0) {
     if (period !== 'monthly') buckets.length = 0;
-    const base = new Date(now.getFullYear(), now.getMonth(), 1);
-    // Default last 12 months, stretched back to the earliest record's month.
-    let months = 12;
-    if (minDate) {
-      months = Math.max(12,
-        (base.getFullYear() - minDate.getFullYear()) * 12 + (base.getMonth() - minDate.getMonth()) + 1);
-    }
-    for (let i = months - 1; i >= 0; i--) {
-      const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      push(key, d.toLocaleDateString('en-US', { month: 'short' }),
-        `${d.toLocaleDateString('en-US', { month: 'long' })} ${d.getFullYear()}`,
-        (fd) => fd.getFullYear() === d.getFullYear() && fd.getMonth() === d.getMonth());
-    }
+    const prev = t.m === 1 ? { y: t.y - 1, m: 12 } : { y: t.y, m: t.m - 1 };
+    const prevStart = zonedMidnightUTC(zone, prev.y, prev.m, 1);
+    const curStart = zonedMidnightUTC(zone, t.y, t.m, 1);
+    push(`mo-${prev.y}-${prev.m}`, new Date(Date.UTC(prev.y, prev.m - 1, 1)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }),
+      fmtMonthYear(prev.y, prev.m), prevStart, curStart);
+    push(`mo-${t.y}-${t.m}`, new Date(Date.UTC(t.y, t.m - 1, 1)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }),
+      fmtMonthYear(t.y, t.m), curStart, tomorrowStart);
   }
   return buckets;
 }
@@ -191,9 +244,9 @@ function buildBuckets(period, minDate) {
  * Counts of 0 mean "no records in that bucket" (factual, not fabricated).
  * Records without a parseable created_at are excluded from the series.
  */
-export function computeRatingSeries(valid, period) {
+export function computeRatingSeries(valid, period, stretch = true, tz) {
   const list = Array.isArray(valid) ? valid : [];
-  const buckets = buildBuckets(period, earliestDate(list));
+  const buckets = buildBuckets(period, stretch ? earliestDate(list) : null, tz);
   return buckets.map(b => {
     const row = { key: b.key, period: b.short, full: b.full, total: 0 };
     STAR_SERIES.forEach(sr => { row[`star${sr.star}`] = 0; });
@@ -202,7 +255,7 @@ export function computeRatingSeries(valid, period) {
       if (!raw) return;
       const fd = new Date(raw);
       if (isNaN(fd)) return;
-      if (!b.match(fd)) return;
+      if (!b.match(fd.getTime())) return;
       const star = Math.round(Number(f.rating));
       if (star < 1 || star > 5) return;
       row[`star${star}`] += 1;
@@ -217,16 +270,16 @@ export function computeRatingSeries(valid, period) {
  * trend (rating >= 4 / valid in bucket). Empty buckets keep score null
  * (gap, never a fake zero). Records without a parseable date are excluded.
  */
-export function computeSatisfactionSeries(valid, period) {
+export function computeSatisfactionSeries(valid, period, tz) {
   const list = Array.isArray(valid) ? valid : [];
-  return buildBuckets(period, earliestDate(list)).map(b => {
+  return buildBuckets(period, earliestDate(list), tz).map(b => {
     let total = 0, sat = 0;
     list.forEach(f => {
       const raw = f.created_at ?? f.createdAt ?? f.date;
       if (!raw) return;
       const fd = new Date(raw);
       if (isNaN(fd)) return;
-      if (!b.match(fd)) return;
+      if (!b.match(fd.getTime())) return;
       total += 1;
       if (Number(f.rating) >= 4) sat += 1;
     });
@@ -248,9 +301,9 @@ export function computeSatisfactionSeries(valid, period) {
  * records in that bucket). Band assignment reuses the Feedback table
  * thresholds via satLevelKey — no new logic.
  */
-export function computeSatLevelSeries(valid, period) {
+export function computeSatLevelSeries(valid, period, tz) {
   const list = Array.isArray(valid) ? valid : [];
-  return buildBuckets(period, earliestDate(list)).map(b => {
+  return buildBuckets(period, earliestDate(list), tz).map(b => {
     const row = { key: b.key, period: b.short, full: b.full, total: 0 };
     SAT_LEVELS.forEach(lv => { row[lv.key] = 0; });
     list.forEach(f => {
@@ -258,6 +311,7 @@ export function computeSatLevelSeries(valid, period) {
       if (!raw) return;
       const fd = new Date(raw);
       if (isNaN(fd)) return;
+      if (!b.match(fd.getTime())) return;
       if (!b.match(fd)) return;
       row[satLevelKey(f.rating)] += 1;
       row.total += 1;
@@ -289,9 +343,10 @@ export default function ClientSatisfaction({ feedback }) {
   const s = useMemo(() => computeSatisfaction(feedback), [feedback]);
   const [trendPeriod, setTrendPeriod] = useState('weekly');
   const trendLevels = useMemo(() => computeSatLevelSeries(s.valid, trendPeriod), [s.valid, trendPeriod]);
-  // Star totals for the visible period (same toggle, real records only).
+  // Star totals for the selected period slice (fixed windows — last 14
+  // days / 12 weeks / 12 months — so the card changes with the toggle).
   const distTotals = useMemo(() => {
-    const series = computeRatingSeries(s.valid, trendPeriod);
+    const series = computeRatingSeries(s.valid, trendPeriod, false);
     return [5, 4, 3, 2, 1].map(star => ({
       star,
       color: (STAR_SERIES.find(sr => sr.star === star) || {}).color || '#F59E0B',
@@ -336,6 +391,9 @@ export default function ClientSatisfaction({ feedback }) {
   const trendSub = trendPeriod === 'daily' ? `Feedback records per satisfaction level · Last ${nBuckets} days`
     : trendPeriod === 'weekly' ? `Feedback records per satisfaction level · Last ${nBuckets} weeks`
     : `Feedback records per satisfaction level · Last ${nBuckets} months`;
+  const distSub = trendPeriod === 'daily' ? 'Star totals · Last 14 days'
+    : trendPeriod === 'weekly' ? 'Star totals · Last 12 weeks'
+    : 'Star totals · Last 12 months';
 
   const cards = [
     { label: 'Satisfaction Score', value: hasData ? `${s.score}%` : '—', sub: hasData ? `${s.satisfied} of ${s.total} rated 4+` : 'No data', color: '#0D9488' },
@@ -423,7 +481,7 @@ export default function ClientSatisfaction({ feedback }) {
 
             <div className="csat-panel csat-side">
               <h4>Rating Distribution</h4>
-              <p className="csat-panel-sub">{trendSub}</p>
+              <p className="csat-panel-sub">{distSub}</p>
               <div className="csat-dist">
                 {distTotals.map(d => (
                   <div key={d.star} className="csat-dist-row">

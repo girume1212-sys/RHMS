@@ -126,6 +126,19 @@ export default function CreateRequest() {
       showBlockedError();
       return;
     }
+    // "Other" category requires a custom category (empty or whitespace-only
+    // is rejected). Submission is blocked, the field is highlighted and
+    // focused, and a clear message is shown.
+    if (isOtherCategory && !form.customCategory.trim()) {
+      const msg = t('common.specifyCategory');
+      setBlockedError(false);
+      setError(msg);
+      setCustomCategoryError(msg);
+      addToast(msg, 'error');
+      if (customCategoryRef.current) customCategoryRef.current.focus();
+      return;
+    }
+    setCustomCategoryError('');
     setLoading(true);
     setBlockedError(false);
     setError('');
@@ -195,7 +208,7 @@ export default function CreateRequest() {
                 <div
                   key={c.id}
                   className={`category-card-select ${form.categoryId === c.id ? 'selected' : ''}`}
-                  onClick={() => setForm((prev) => ({ ...prev, categoryId: c.id, customCategory: c.id === '8' ? (prev.customCategory || '') : '' }))}
+                  onClick={() => { setForm((prev) => ({ ...prev, categoryId: c.id, customCategory: c.id === '8' ? (prev.customCategory || '') : '' })); setCustomCategoryError(''); }}
                   style={{ '--cat-color': c.color }}
                 >
                   <div className="category-card-icon"><Icon name={c.icon} size={32} /></div>
@@ -211,12 +224,18 @@ export default function CreateRequest() {
                   {t('common.specifyCategory') || 'Please specify the category'}
                 </label>
                 <input
+                  ref={customCategoryRef}
                   type="text"
                   value={form.customCategory}
-                  onChange={(e) => setForm({ ...form, customCategory: e.target.value })}
+                  onChange={(e) => { setForm({ ...form, customCategory: e.target.value }); if (customCategoryError) setCustomCategoryError(''); }}
                   placeholder={t('common.specifyCategoryPlaceholder') || 'Enter the name or description of your custom category'}
-                  style={{ background: '#ffffff', border: '1px solid #c7d2fe', borderRadius: '8px', color: '#1a1a2e', caretColor: '#4f46e5' }}
+                  aria-invalid={Boolean(customCategoryError)}
+                  aria-label={t('common.specifyCategory') || 'Please specify the category'}
+                  style={customCategoryError
+                    ? { background: '#ffffff', border: '2px solid #DC2626', borderRadius: '8px', color: '#1a1a2e', caretColor: '#4f46e5' }
+                    : { background: '#ffffff', border: '1px solid #c7d2fe', borderRadius: '8px', color: '#1a1a2e', caretColor: '#4f46e5' }}
                 />
+                {customCategoryError && <ValidationError message={customCategoryError} />}
               </div>
             )}
             {form.categoryId && (
