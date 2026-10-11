@@ -294,14 +294,35 @@ export default function ClientSatisfaction({ feedback }) {
   const s = useMemo(() => computeSatisfaction(feedback), [feedback]);
   const [trendPeriod, setTrendPeriod] = useState('weekly');
   const trendLevels = useMemo(() => computeSatLevelSeries(s.valid, trendPeriod), [s.valid, trendPeriod]);
-  // Star totals for the selected period slice (fixed windows — last 14
-  // days / 12 weeks / 12 months — so the card changes with the toggle).
+  // Rating Distribution: strict per-filter slices from the same valid
+  // records (comments ignored, each record counted exactly once):
+  // Daily = today, Weekly = today + previous 6 days, Monthly = current
+  // calendar month (1st → start of tomorrow, exclusive end so midnight
+  // records are included once and future-dated rows never leak in).
   const distTotals = useMemo(() => {
-    const series = computeRatingSeries(s.valid, trendPeriod, false);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let start;
+    if (trendPeriod === 'daily') start = today;
+    else if (trendPeriod === 'weekly') start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6);
+    else start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    s.valid.forEach(f => {
+      const raw = f.created_at ?? f.createdAt ?? f.date;
+      if (!raw) return;
+      const fd = new Date(raw);
+      if (isNaN(fd)) return;
+      const t = fd.getTime();
+      if (t < start.getTime() || t >= end.getTime()) return;
+      const star = Math.round(Number(f.rating));
+      if (star < 1 || star > 5) return;
+      counts[star] += 1;
+    });
     return [5, 4, 3, 2, 1].map(star => ({
       star,
       color: (STAR_SERIES.find(sr => sr.star === star) || {}).color || '#F59E0B',
-      count: series.reduce((sum, r) => sum + (Number(r[`star${star}`]) || 0), 0)
+      count: counts[star]
     }));
   }, [s.valid, trendPeriod]);
   const distMax = Math.max(...distTotals.map(d => d.count), 1);
@@ -342,9 +363,9 @@ export default function ClientSatisfaction({ feedback }) {
   const trendSub = trendPeriod === 'daily' ? `Feedback records per satisfaction level · Last ${nBuckets} days`
     : trendPeriod === 'weekly' ? `Feedback records per satisfaction level · Last ${nBuckets} weeks`
     : `Feedback records per satisfaction level · Last ${nBuckets} months`;
-  const distSub = trendPeriod === 'daily' ? 'Star totals · Last 14 days'
-    : trendPeriod === 'weekly' ? 'Star totals · Last 12 weeks'
-    : 'Star totals · Last 12 months';
+  const distSub = trendPeriod === 'daily' ? 'Star totals · Today'
+    : trendPeriod === 'weekly' ? 'Star totals · Last 7 days'
+    : 'Star totals · This month';
 
   const cards = [
     { label: 'Satisfaction Score', value: hasData ? `${s.score}%` : '—', sub: hasData ? `${s.satisfied} of ${s.total} rated 4+` : 'No data', color: '#0D9488' },
@@ -435,7 +456,8 @@ export default function ClientSatisfaction({ feedback }) {
               <p className="csat-panel-sub">{distSub}</p>
               <div className="csat-dist">
                 {distTotals.map(d => (
-                  <div key={d.star} className="csat-dist-row">
+                  <div key={d.star} className="csat-dist-row"
+                    title={`${d.count} × ${d.star}-Star feedback · ${distSub.replace('Star totals · ', '')}`}>
                     <span className="csat-dist-star">{d.star}</span>
                     <svg width="14" height="14" viewBox="0 0 20 20" fill={d.color} aria-hidden="true">
                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
