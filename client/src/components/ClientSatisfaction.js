@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  AreaChart, Area, XAxis, YAxis,
+  AreaChart, Area, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 
@@ -69,15 +69,16 @@ const STAR_SERIES = [
   { star: 1, name: '1 Star', color: '#EF4444' },
   { star: 2, name: '2 Stars', color: '#F97316' },
   { star: 3, name: '3 Stars', color: '#F59E0B' },
-  { star: 4, name: '4 Stars', color: '#10B981' },
-  { star: 5, name: '5 Stars', color: '#0D9488' }
+  { star: 4, name: '4 Stars', color: '#22C55E' },
+  { star: 5, name: '5 Stars', color: '#065F46' }
 ];
 
 // Satisfaction bands — same thresholds as the Feedback table badges
 // (verySatisfied ≥ 4.5, satisfied ≥ 3.5, neutral ≥ 2.5, dissatisfied ≥ 1.5).
+// Dark green = Very Satisfied, bright green = Satisfied.
 const SAT_LEVELS = [
-  { key: 'verySatisfied', name: 'Very Satisfied', color: '#059669' },
-  { key: 'satisfied', name: 'Satisfied', color: '#10B981' },
+  { key: 'verySatisfied', name: 'Very Satisfied', color: '#065F46' },
+  { key: 'satisfied', name: 'Satisfied', color: '#22C55E' },
   { key: 'neutral', name: 'Neutral', color: '#F59E0B' },
   { key: 'dissatisfied', name: 'Dissatisfied', color: '#F97316' },
   { key: 'veryDissatisfied', name: 'Very Dissatisfied', color: '#DC2626' }
@@ -427,8 +428,8 @@ export default function ClientSatisfaction({ feedback }) {
                     <defs>
                       {SAT_LEVELS.map(lv => (
                         <linearGradient key={lv.key} id={`csatLvl-${lv.key}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={lv.color} stopOpacity={0.35} />
-                          <stop offset="100%" stopColor={lv.color} stopOpacity={0.02} />
+                          <stop offset="0%" stopColor={lv.color} stopOpacity={0.45} />
+                          <stop offset="100%" stopColor={lv.color} stopOpacity={0.12} />
                         </linearGradient>
                       ))}
                     </defs>
@@ -439,12 +440,15 @@ export default function ClientSatisfaction({ feedback }) {
                       height={trendPeriod === 'weekly' ? 30 : 50} />
                     <YAxis domain={[0, yMax]} ticks={yTicks} allowDecimals={false} fontSize={11} tickLine={false} width={40} />
                     <Tooltip content={<DistTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    {SAT_LEVELS.map(lv => (
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+                    {[...SAT_LEVELS].reverse().map(lv => (
                       <Area key={lv.key} type="monotone" dataKey={lv.key} name={lv.name}
-                        stroke={lv.color} strokeWidth={2.5} fill={`url(#csatLvl-${lv.key})`}
-                        dot={false} activeDot={{ r: 4 }} connectNulls={false} />
+                        stroke={lv.color} strokeWidth={lv.key === 'verySatisfied' ? 3.5 : 2.5} fill={`url(#csatLvl-${lv.key})`}
+                        fillOpacity={1} dot={false} activeDot={{ r: 5 }} connectNulls={false} />
                     ))}
+                    {/* Crisp top line for Very Satisfied so dark-green is never hidden under fills */}
+                    <Line type="monotone" dataKey="verySatisfied" name="Very Satisfied" legendType="none"
+                      stroke="#065F46" strokeWidth={3.5} dot={{ r: 3, fill: '#065F46', strokeWidth: 0 }} activeDot={{ r: 5 }} connectNulls={false} />
                   </AreaChart>
                 </ResponsiveContainer>
                 </div>
