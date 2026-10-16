@@ -4326,17 +4326,17 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
         u.id AS id,
         u.name AS name,
         u.role AS role,
-        COUNT(*)::int AS assigned,
-        COUNT(*) FILTER (WHERE s.name IN ('Resolved', 'Closed'))::int AS resolved,
-        COUNT(*) FILTER (WHERE s.name IN ('New', 'Assigned', 'In Progress', 'Waiting for Client'))::int AS in_progress,
+        COUNT(r.id)::int AS assigned,
+        COUNT(r.id) FILTER (WHERE s.name IN ('Resolved', 'Closed'))::int AS resolved,
+        COUNT(r.id) FILTER (WHERE s.name IN ('New', 'Assigned', 'In Progress', 'Waiting for Client'))::int AS in_progress,
         AVG(EXTRACT(EPOCH FROM (r.updated_at - r.created_at)) / 3600.0)
           FILTER (WHERE s.name IN ('Resolved', 'Closed') AND r.updated_at >= r.created_at)
           AS avg_resolution_hours
-      FROM requests r
-      JOIN users u ON r.assigned_to = u.id
+      FROM users u
+      LEFT JOIN requests r ON r.assigned_to = u.id
+        AND ($1::int IS NULL OR r.created_at::date >= (CURRENT_DATE - ($1::int || ' days')::interval))
       LEFT JOIN statuses s ON r.status_id = s.id
       WHERE u.role = 'developer'
-        AND ($1::int IS NULL OR r.created_at::date >= (CURRENT_DATE - ($1::int || ' days')::interval))
       GROUP BY u.id, u.name, u.role
       ORDER BY assigned DESC, u.name
     `, [days]);
@@ -4424,21 +4424,24 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
           )
       )
       SELECT
-        r.assigned_to AS user_id,
+        u.id AS user_id,
         u.name AS name,
         u.role AS role,
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE s.name IN ('Resolved', 'Closed'))::int AS resolved,
-        COUNT(*) FILTER (WHERE s.name IS NULL OR s.name NOT IN ('Resolved', 'Closed'))::int AS pending,
+        COUNT(r.id)::int AS total,
+        COUNT(r.id) FILTER (WHERE s.name IN ('Resolved', 'Closed'))::int AS resolved,
+        COUNT(r.id) FILTER (WHERE s.name IS NULL OR s.name NOT IN ('Resolved', 'Closed'))::int AS pending,
         AVG(EXTRACT(EPOCH FROM (r.updated_at - e.escalated_at)) / 3600.0)
           FILTER (WHERE s.name IN ('Resolved', 'Closed') AND r.updated_at >= e.escalated_at)
           AS avg_resolution_hours
-      FROM escalations e
-      JOIN requests r ON r.id = e.request_id
-      JOIN users u ON u.id = r.assigned_to AND u.role = 'support'
+      FROM users u
+      LEFT JOIN (
+        escalations e
+        JOIN requests r ON r.id = e.request_id
+      ) ON r.assigned_to = u.id
+        AND ($1::int IS NULL OR e.escalated_at >= NOW() - ($1::int || ' days')::interval)
       LEFT JOIN statuses s ON r.status_id = s.id
-      WHERE ($1::int IS NULL OR e.escalated_at >= NOW() - ($1::int || ' days')::interval)
-      GROUP BY r.assigned_to, u.name, u.role
+      WHERE u.role = 'support'
+      GROUP BY u.id, u.name, u.role
       ORDER BY total DESC, name NULLS LAST
     `, [days]);
 

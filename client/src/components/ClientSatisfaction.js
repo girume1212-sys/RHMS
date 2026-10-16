@@ -69,19 +69,18 @@ const STAR_SERIES = [
   { star: 1, name: '1 Star', color: '#EF4444' },
   { star: 2, name: '2 Stars', color: '#F97316' },
   { star: 3, name: '3 Stars', color: '#F59E0B' },
-  { star: 4, name: '4 Stars', color: '#22C55E' },
-  { star: 5, name: '5 Stars', color: '#047857' }
+  { star: 4, name: '4 Stars', color: '#10B981' },
+  { star: 5, name: '5 Stars', color: '#0D9488' }
 ];
 
 // Satisfaction bands — same thresholds as the Feedback table badges
 // (verySatisfied ≥ 4.5, satisfied ≥ 3.5, neutral ≥ 2.5, dissatisfied ≥ 1.5).
-// Dark green = Very Satisfied, bright green = Satisfied.
 const SAT_LEVELS = [
   { key: 'verySatisfied', name: 'Very Satisfied', color: '#047857' },
   { key: 'satisfied', name: 'Satisfied', color: '#22C55E' },
-  { key: 'neutral', name: 'Neutral', color: '#F59E0B' },
-  { key: 'dissatisfied', name: 'Dissatisfied', color: '#F97316' },
-  { key: 'veryDissatisfied', name: 'Very Dissatisfied', color: '#DC2626' }
+  { key: 'neutral', name: 'Neutral', color: '#EAB308' },
+  { key: 'dissatisfied', name: 'Dissatisfied', color: '#FB923C' },
+  { key: 'veryDissatisfied', name: 'Very Dissatisfied', color: '#FF0000' }
 ];
 
 export function satLevelKey(rating) {
@@ -347,7 +346,6 @@ export default function ClientSatisfaction({ feedback }) {
       for (let v = 0; v <= max; v += 1) ticks.push(v);
       return { yMax: max, yTicks: ticks };
     }
-    // Nice step (1/2/5 × 10^n) aiming for ~8-10 ticks.
     const raw = trendPeak / 10;
     const mag = Math.pow(10, Math.floor(Math.log10(raw)));
     const norm = raw / mag;
@@ -424,12 +422,12 @@ export default function ClientSatisfaction({ feedback }) {
                 <div className="csat-chart-wrap">
                   <span className="csat-y-title">Feedback Records</span>
                 <ResponsiveContainer width="100%" height={420}>
-                  <AreaChart data={trendLevels} margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
+                  <AreaChart data={trendLevels} margin={{ top: 8, right: 12, left: 8, bottom: 0 }}>
                     <defs>
                       {SAT_LEVELS.map(lv => (
                         <linearGradient key={lv.key} id={`csatLvl-${lv.key}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={lv.color} stopOpacity={0.45} />
-                          <stop offset="100%" stopColor={lv.color} stopOpacity={0.12} />
+                          <stop offset="0%" stopColor={lv.color} stopOpacity={0.9} />
+                          <stop offset="100%" stopColor={lv.color} stopOpacity={0.35} />
                         </linearGradient>
                       ))}
                     </defs>
@@ -438,13 +436,13 @@ export default function ClientSatisfaction({ feedback }) {
                       interval={trendPeriod === 'weekly' ? 0 : 'preserveStartEnd'}
                       angle={trendPeriod === 'weekly' ? 0 : -20} textAnchor={trendPeriod === 'weekly' ? 'middle' : 'end'}
                       height={trendPeriod === 'weekly' ? 30 : 50} />
-                    <YAxis domain={[0, yMax]} ticks={yTicks} allowDecimals={false} fontSize={12} tickLine={false} axisLine={false} width={56} tickMargin={8} />
+                    <YAxis domain={[0, yMax]} ticks={yTicks} allowDecimals={false} fontSize={11} tickLine={false} width={40} />
                     <Tooltip content={<DistTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
-                    {SAT_LEVELS.map(lv => (
-                      <Area key={lv.key} type="monotone" dataKey={lv.key} name={lv.name} stackId="1"
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    {[...SAT_LEVELS].reverse().map(lv => (
+                      <Area key={lv.key} type="monotone" dataKey={lv.key} name={lv.name}
                         stroke={lv.color} strokeWidth={2.5} fill={`url(#csatLvl-${lv.key})`}
-                        fillOpacity={1} dot={false} activeDot={{ r: 4 }} connectNulls={false} />
+                        dot={false} activeDot={{ r: 4 }} connectNulls={false} />
                     ))}
                   </AreaChart>
                 </ResponsiveContainer>

@@ -22,7 +22,9 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   useTrackPrevMenu(SIDEBAR_MENUS);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window === 'undefined' || window.innerWidth > 1024
+  );
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
@@ -189,6 +191,15 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
     if (item.path === '/') return pathname === '/';
     return pathname === item.path || pathname.startsWith(item.path + '/');
   };
+
+  // On phones/tablets the sidebar is an overlay drawer: close it whenever
+  // the route changes so it never covers the new page.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
+      setSidebarOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const activeMenuItem = useMemo(
     () => menuItems.flatMap((section) => section.items).filter(hasPermission).find(isNavItemActive),
@@ -416,6 +427,13 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
           )}
         </div>
       </aside>
+      {sidebarOpen && (
+        <div
+          className="sidebar-scrim"
+          aria-hidden="true"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       {bubbleNotifications.map((n, i) => (
         <div
           key={n.id}

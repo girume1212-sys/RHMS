@@ -23,7 +23,9 @@ export default function ClientLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   useTrackPrevMenu(CLIENT_MENUS);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window === 'undefined' || window.innerWidth > 1024
+  );
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -331,6 +333,15 @@ export default function ClientLayout() {
   const activeMenuItem = menuItems.find((item) => location.pathname === item.path)
     || menuItems.find((item) => item.path !== '/client' && location.pathname.startsWith(item.path + '/'));
 
+  // On phones/tablets the sidebar is an overlay drawer: close it whenever
+  // the route changes so it never covers the new page.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
+      setSidebarOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
   return (
     <div className={`layout role-${user?.role || 'guest'}`}>
       <aside className={`sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
@@ -381,6 +392,13 @@ export default function ClientLayout() {
           )}
         </div>
       </aside>
+      {sidebarOpen && (
+        <div
+          className="sidebar-scrim"
+          aria-hidden="true"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       {/* Bubble Notifications */}
       {bubbleNotifications.map((n) => (

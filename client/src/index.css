@@ -9539,4 +9539,121 @@ body.dark-mode .csat-panel-empty { color: #7d8ca3; }
 body.dark-mode .csat-panel .recharts-cartesian-axis-tick text { fill: #94a3b8; }
 body.dark-mode .csat-panel .recharts-cartesian-grid line { stroke: rgba(148,163,184,0.15); }
 
+/* ==========================================================================
+   GLOBAL RESPONSIVE LAYER — phones, tablets, laptops, desktops
+   Breakpoints: ≤480px phones · 481–767px large phones · 768–1024px tablets ·
+   1025–1440px laptops · >1440px large desktops (fluid, unchanged).
+   Layout/visual only — no functionality, data, or permission changes.
+   ========================================================================== */
+
+/* Sidebar scrim (overlay drawer backdrop). Only shown ≤1024px via JS render. */
+.sidebar-scrim { display: none; }
+
+/* Prevent unintended horizontal page overflow everywhere. */
+html, body { overflow-x: clip; }
+img, svg, video, canvas { max-width: 100%; }
+
+/* Visible keyboard focus for links, buttons, inputs and nav items. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.nav-item:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}
+
+/* ---------- Large desktops (>1440px): cap content width for readability --- */
+@media (min-width: 1441px) {
+  .content { max-width: 1720px; margin-left: auto; margin-right: auto; }
+}
+
+/* ---------- Laptops (1025–1440px): tighten dashboard grids slightly ------- */
+@media (max-width: 1440px) {
+  .charts-row { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+/* ---------- Tablets and below (≤1024px): sidebar becomes drawer ----------- */
+@media (max-width: 1024px) {
+  .sidebar { width: min(300px, 84vw); transform: translateX(-105%); transition: transform 0.28s ease; }
+  .sidebar.open { transform: none; box-shadow: 0 0 48px rgba(2, 6, 23, 0.35); }
+  .sidebar.collapsed { width: min(300px, 84vw); }
+  .sidebar.collapsed .nav-label { display: inline; }
+  .sidebar.collapsed .sidebar-header { justify-content: flex-start; }
+  .sidebar.collapsed .nav-section { display: block; }
+  .sidebar.collapsed .user-info-small { display: flex; }
+  .main-area,
+  .sidebar.collapsed ~ .main-area { margin-left: 0; }
+  .topbar,
+  .sidebar.collapsed ~ .main-area .topbar { left: 0; }
+  .sidebar-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 90;
+  }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .charts-row { grid-template-columns: 1fr 1fr; }
+  .charts-row-2 { grid-template-columns: 1fr; }
+  .perf-charts-grid { grid-template-columns: 1fr; }
+  .esc-kpi-grid { --esc-kpi-cols: 3; }
+  .chart-container { flex-wrap: wrap; }
+}
+
+/* ---------- Large phones and below (≤767px): stack everything ------------- */
+@media (max-width: 767px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat-card { padding: 14px; gap: 12px; }
+  .stat-content h3 { font-size: 22px; }
+  .charts-row,
+  .charts-row-2 { grid-template-columns: 1fr; }
+  .chart-card { padding: 16px; min-width: 0; }
+  .chart-container.pie-chart-layout { flex-wrap: wrap; }
+  .chart-container.pie-chart-layout .pie-chart-area,
+  .chart-container.pie-chart-layout .chart-legend { flex: 1 1 100%; max-width: 100%; }
+  .esc-kpi-grid { --esc-kpi-cols: 2; }
+  .csat-cards { grid-template-columns: 1fr 1fr; }
+  .perf-header { flex-direction: column; align-items: stretch; gap: 10px; }
+  .perf-header select { width: 100%; }
+  .page-header { flex-direction: column; align-items: stretch; }
+  .header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .header-actions .btn { flex: 1 1 auto; }
+  .filters-bar { flex-direction: column; align-items: stretch; }
+  .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .modal-overlay { padding: 12px; align-items: flex-end; }
+  .modal-card { width: 100%; max-width: 100%; max-height: calc(100dvh - 24px); overflow-y: auto; }
+  .login-card { width: min(420px, calc(100vw - 32px)); }
+  .dropdown-panel,
+  .notification-panel { position: fixed; left: 12px; right: 12px; width: auto !important; }
+  /* Comfortable touch targets on coarse pointers. */
+  .nav-item { min-height: 44px; }
+  .btn, .perf-toggle-btn, .csat-period-btn, .filter-select,
+  .notif-filter-btn, .page-btn { min-height: 44px; }
+  .menu-toggle, .topbar-icon, .theme-toggle { min-width: 44px; min-height: 44px; }
+}
+
+/* ---------- Phones (≤480px): single column, compact ---------------------- */
+@media (max-width: 480px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .stat-card-simple h3 { font-size: 26px; }
+  .esc-kpi-grid { --esc-kpi-cols: 1; }
+  .csat-cards { grid-template-columns: 1fr; }
+  .perf-toggle-container { display: flex; width: 100%; }
+  .perf-toggle-btn { flex: 1 1 0; }
+  .esc-kpi { flex-basis: 100%; }
+  .table-search-box { width: 100%; }
+  .sf-toolbar { flex-direction: column; align-items: stretch; }
+  .sf-toolbar-left, .sf-toolbar-right { width: 100%; }
+  .sf-toolbar .filter-select { width: 100%; }
+}
+
+/* ---------- Landscape phones: reclaim vertical space --------------------- */
+@media (max-height: 480px) and (orientation: landscape) {
+  .topbar { height: 52px; }
+  .content { padding-top: 64px; }
+  .modal-card { max-height: calc(100dvh - 16px); }
+}
+
 
