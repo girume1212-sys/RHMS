@@ -141,7 +141,7 @@ export default function Feedback() {
 
   const satisfactionFor = (rating) => {
     const num = Number(rating) || 0;
-    if (num >= 4.5) return { key: 'verySatisfied', color: '#065F46' };
+    if (num >= 4.5) return { key: 'verySatisfied', color: '#047857' };
     if (num >= 3.5) return { key: 'satisfied', color: '#22C55E' };
     if (num >= 2.5) return { key: 'neutral', color: '#F59E0B' };
     if (num >= 1.5) return { key: 'dissatisfied', color: '#F97316' };
