@@ -471,7 +471,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
-const JWT_SECRET = 'rhms-secret-key-2024';
+const JWT_SECRET = process.env.JWT_SECRET || 'rhms-secret-key-2024';
 const googleClient = new OAuth2Client();
 
 // SSE clients for real-time notifications
@@ -482,6 +482,17 @@ app.use(express.json());
 app.use((req, res, next) => { console.log(new Date().toISOString(), req.method, req.url, 'Content-Type:', req.headers['content-type'] || 'none'); next(); });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, '../client/build')));
+
+// Public health check. Deliberately exposes no configuration or secrets.
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', database: 'connected' });
+  } catch (err) {
+    res.status(503).json({ status: 'error', database: 'unavailable' });
+  }
+});
+
 app.use('/api', maintenanceMiddleware);
 
 
@@ -516,13 +527,28 @@ const roleMiddleware = (...roles) => (req, res, next) => {
   next();
 };
 
+// Endpoints reachable while maintenance mode is on, so users can still
+// authenticate and admins can log in to turn maintenance mode off.
+const MAINTENANCE_ALLOWED_PATHS = new Set([
+  '/auth/login', '/auth/signup', '/auth/logout', '/auth/me', '/auth/google',
+  '/auth/forgot-password', '/auth/reset-password/validate', '/auth/reset-password',
+  '/auth/forgot-password-otp', '/auth/verify-otp', '/auth/reset-password-otp',
+  '/auth/request-email-verification', '/auth/verify-email-code',
+  '/settings/public', '/health'
+]);
+
 async function maintenanceMiddleware(req, res, next) {
   try {
     const result = await pool.query("SELECT value FROM system_settings WHERE key = 'maintenanceMode'");
-    if (result.rows.length > 0 && result.rows[0].value === 'true' && req.user?.role !== 'admin') {
-      return res.status(503).json({ error: 'System is under maintenance. Please try again later.' });
+    if (result.rows.length === 0 || result.rows[0].value !== 'true') return next();
+    if (MAINTENANCE_ALLOWED_PATHS.has(req.path)) return next();
+    const token = req.headers.authorization?.split(' ')[1];
+    if (token) {
+      try {
+        if (jwt.verify(token, JWT_SECRET).role === 'admin') return next();
+      } catch { /* fall through as unauthenticated */ }
     }
-    next();
+    return res.status(503).json({ error: 'System is under maintenance. Please try again later.' });
   } catch { next(); }
 };
 
@@ -1778,7 +1804,7 @@ app.post('/api/auth/login', async (req, res) => {
     const { username, email, password } = req.body;
     const credential = username || email;
     const result = await pool.query(
-      'SELECT * FROM users WHERE name = $1 OR email = $1',
+      "SELECT * FROM users WHERE LOWER(name) = LOWER($1) OR LOWER(email) = LOWER($1) OR LOWER(SPLIT_PART(email, '@', 1)) = LOWER($1)",
       [credential]
     );
     const user = result.rows[0];
@@ -5874,9 +5900,13 @@ app.delete('/api/login-audit/:id', authMiddleware, roleMiddleware('admin'), asyn
 
 // Error handler for multer/file upload errors
 app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON in request body' });
   if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'File too large. Max 10MB.' });
   if (err.code === 'LIMIT_UNEXPECTED_FILE') return res.status(400).json({ error: 'Unexpected file field: ' + err.field });
-  if (err) return res.status(500).json({ error: err.message || 'Server error' });
+  if (err) {
+    console.error('Unhandled error:', err.message);
+    return res.status(500).json({ error: 'Server error' });
+  }
   next();
 });
 

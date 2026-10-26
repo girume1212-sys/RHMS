@@ -54,7 +54,6 @@ const statuses = [
   { id: '4', name: 'Waiting for Client', color: '#F97316' },
   { id: '5', name: 'Resolved', color: '#10B981' },
   { id: '6', name: 'Closed', color: '#6B7280' },
-  { id: '7', name: 'Rejected', color: '#DC2626' },
 ];
 
 const requests = [
@@ -89,7 +88,7 @@ const activityLog = [
   { id: '2', type: 'comment', requestId: 'REQ-2024-00120', userId: '6', message: 'New comment on request', createdAt: '2024-05-18T15:45:00.000Z' },
   { id: '3', type: 'resolved', requestId: 'REQ-2024-00115', userId: '3', message: 'resolved', createdAt: '2024-05-18T15:00:00.000Z' },
   { id: '4', type: 'created', requestId: 'REQ-2024-00128', userId: '5', message: 'New request created', createdAt: '2024-05-18T14:30:00.000Z' },
-  { id: '5', type: 'closed', requestId: 'REQ-2024-00110', userId: '2', message: 'closed', createdAt: '2024-05-18T13:00:00.000Z' },
+  { id: '5', type: 'closed', requestId: 'REQ-2024-00118', userId: '2', message: 'closed', createdAt: '2024-05-18T13:00:00.000Z' },
   { id: '6', type: 'assigned', requestId: 'REQ-2024-00127', userId: '2', message: 'Assigned to Michael Developer', createdAt: '2024-05-18T10:00:00.000Z' },
   { id: '7', type: 'status_update', requestId: 'REQ-2024-00126', userId: '4', message: 'updated to In Progress', createdAt: '2024-05-18T09:00:00.000Z' },
   { id: '8', type: 'created', requestId: 'REQ-2024-00127', userId: '6', message: 'New request created', createdAt: '2024-05-18T08:15:00.000Z' },
@@ -177,6 +176,7 @@ async function seed() {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error seeding database:', err);
+    process.exitCode = 1;
   } finally {
     client.release();
     await pool.end();

@@ -285,7 +285,7 @@ export default function Login() {
           {systemLogo ? (
             <img src={`${API_BASE}${systemLogo}`} alt="System logo" className="login-brand-logo" />
           ) : (
-            <img src="http://localhost:5000/uploads/1791231885644-logo.png" alt="RHMS logo" className="login-brand-logo" />
+            <img src={`${API_BASE}/uploads/1791231885644-logo.png`} alt="RHMS logo" className="login-brand-logo" />
           )}
           <div className="login-brand-text">
             <span className="login-brand-name">{systemName || 'RHMS Support System'}</span>

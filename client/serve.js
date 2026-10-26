@@ -19,14 +19,29 @@ const MIME_TYPES = {
   '.woff2': 'font/woff2',
 };
 
+const ROOT = path.resolve(BUILD_DIR);
+
 const server = http.createServer((req, res) => {
-  let filePath = path.join(BUILD_DIR, req.url === '/' ? 'index.html' : req.url);
+  let requestPath;
+  try {
+    requestPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch {
+    requestPath = '/';
+  }
+
+  const relativePath = requestPath.replace(/^\/+/, '');
+  let filePath = path.resolve(ROOT, relativePath || 'index.html');
+
+  const insideRoot = filePath === ROOT || filePath.startsWith(ROOT + path.sep);
+  if (!insideRoot) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
   const ext = path.extname(filePath);
-
-  if (!ext) filePath = path.join(BUILD_DIR, 'index.html');
-
-  if (!fs.existsSync(filePath)) {
-    filePath = path.join(BUILD_DIR, 'index.html');
+  if (!ext || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    filePath = path.join(ROOT, 'index.html');
   }
 
   const contentType = MIME_TYPES[path.extname(filePath)] || 'application/octet-stream';
@@ -34,7 +49,7 @@ const server = http.createServer((req, res) => {
   fs.readFile(filePath, (err, content) => {
     if (err) {
       res.writeHead(500);
-      res.end('Please fill the form and try again');
+      res.end('Server error');
     } else {
       res.writeHead(200, { 'Content-Type': contentType });
       res.end(content);
