@@ -1975,6 +1975,54 @@ app.post('/api/auth/google', async (req, res) => {
     auditLogin('login_success', user.id, email, req);
     await logAuthActivity(isNewUser ? 'google_signup' : 'google_login', user, req);
     persistSession(user.id, token, req);
+
+    // Google auth email notifications (fire-and-forget; never block/rollback auth).
+    (async () => {
+      try {
+        if (!mailer.isSmtpConfigured()) {
+          console.log(`[GoogleAuthEmail] SMTP not configured; email to ${email} not sent`);
+          return;
+        }
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const escapeHtml = (v) => String(v == null ? '' : v)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        if (isNewUser) {
+          const subject = 'Welcome to RHMS – Account Successfully Created';
+          const text =
+            `Dear ${user.name},\n\n` +
+            `Welcome to the RHMS system!\n\n` +
+            `Your account has been successfully created using your Google account.\n\n` +
+            `Account details:\n` +
+            `- Name: ${user.name}\n` +
+            `- Email: ${email}\n` +
+            `- Registration date: ${dateStr}\n` +
+            `- Sign-in method: Google\n\n` +
+            `You can now sign in to RHMS using "Continue with Google".\n\n` +
+            `Thank you for joining RHMS.\n\n` +
+            `Regards,\nRHMS Support Team`;
+          await mailer.sendMail({ to: email, subject, text, html: `<div style="font-family:Arial,Helvetica,sans-serif;white-space:pre-wrap;">${escapeHtml(text)}</div>` });
+        } else {
+          const subject = 'Successful Login to RHMS';
+          const text =
+            `Dear ${user.name},\n\n` +
+            `You have successfully signed in to the RHMS system using your Google account.\n\n` +
+            `Login details:\n` +
+            `- Date: ${dateStr}\n` +
+            `- Time: ${timeStr}\n` +
+            `- Sign-in method: Google\n\n` +
+            `If you did not perform this login, please contact the RHMS support team immediately.\n\n` +
+            `Regards,\nRHMS Support Team`;
+          await mailer.sendMail({ to: email, subject, text, html: `<div style="font-family:Arial,Helvetica,sans-serif;white-space:pre-wrap;">${escapeHtml(text)}</div>` });
+        }
+        console.log(`[GoogleAuthEmail] sent to ${email}`);
+      } catch (err) {
+        console.error('[GoogleAuthEmail] delivery failed:', (err && err.message) || err);
+      }
+    })().catch((err) => console.error('[GoogleAuthEmail] unexpected error:', (err && err.message) || err));
+
     res.json({ token, user: mapUser(user) });
   } catch (err) {
     console.error('Google auth error:', err);
