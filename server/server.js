@@ -154,9 +154,11 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
         company_type VARCHAR(50),
         email VARCHAR(255),
         phone VARCHAR(50),
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        logo VARCHAR(255)
       )
     `);
+    await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo VARCHAR(255)`);
     console.log('companies table ready');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS activity_log (
@@ -1989,33 +1991,81 @@ app.post('/api/auth/google', async (req, res) => {
         const escapeHtml = (v) => String(v == null ? '' : v)
           .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const safeName = escapeHtml(user.name);
+        const safeEmail = escapeHtml(email);
+        const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
+        const contactFooter = await getEmailContactFooter();
         if (isNewUser) {
           const subject = 'Welcome to RHMS – Account Successfully Created';
           const text =
             `Dear ${user.name},\n\n` +
-            `Welcome to the RHMS system!\n\n` +
-            `Your account has been successfully created using your Google account.\n\n` +
-            `Account details:\n` +
-            `- Name: ${user.name}\n` +
-            `- Email: ${email}\n` +
-            `- Registration date: ${dateStr}\n` +
-            `- Sign-in method: Google\n\n` +
-            `You can now sign in to RHMS using "Continue with Google".\n\n` +
-            `Thank you for joining RHMS.\n\n` +
+            `Welcome to the Request Handling Management System!\n\n` +
+            `Your RHMS account has been successfully created using your Google account.\n\n` +
+            `Account details:\n\n` +
+            `Name: ${user.name}\n` +
+            `Email: ${email}\n` +
+            `Registration Date: ${dateStr}\n` +
+            `Sign-in Method: Google\n\n` +
+            `You can now access RHMS using "Continue with Google".\n\n` +
+            `Thank you for joining the Request Handling Management System.\n\n` +
             `Regards,\nRHMS Support Team`;
-          await mailer.sendMail({ to: email, subject, text, html: `<div style="font-family:Arial,Helvetica,sans-serif;white-space:pre-wrap;">${escapeHtml(text)}</div>` });
+          const html =
+            `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+            `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
+            `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
+            `<tr><td align="center">` +
+            `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#0A1F44" style="${EMAIL_CARD_STYLE}">` +
+            `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">${logoBlock}</td></tr>` +
+            `<tr><td align="center" style="padding:8px 32px 28px;text-align:center;">` +
+            `<h1 style="margin:0;font-size:24px;line-height:1.35;color:#ffffff;font-weight:700;">Welcome to RHMS – Account Successfully Created</h1>` +
+            `</td></tr>` +
+            `<tr><td style="padding:32px;">` +
+            `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Dear ${safeName},</p>` +
+            `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Welcome to the Request Handling Management System!</p>` +
+            `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Your RHMS account has been successfully created using your Google account.</p>` +
+            `<p style="margin:0 0 8px;font-size:16px;font-weight:700;color:#ffffff;">Account details:</p>` +
+            `<p style="margin:0 0 16px;font-size:14px;line-height:1.8;color:#D7E3FF;">` +
+            `Name: ${safeName}<br>Email: ${safeEmail}<br>Registration Date: ${escapeHtml(dateStr)}<br>Sign-in Method: Google</p>` +
+            `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#D7E3FF;">You can now access RHMS using "Continue with Google".</p>` +
+            `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#D7E3FF;">Thank you for joining the Request Handling Management System.</p>` +
+            `<p style="margin:0;font-size:14px;line-height:1.7;color:#D7E3FF;">Regards,<br><strong>RHMS Support Team</strong></p>` +
+            `</td></tr>` +
+            contactFooter +
+            `</table></td></tr></table></body></html>`;
+          await mailer.sendMail({ to: email, subject, text, html, ...(logoAttachment ? { attachments: [logoAttachment] } : {}) });
         } else {
           const subject = 'Successful Login to RHMS';
           const text =
             `Dear ${user.name},\n\n` +
-            `You have successfully signed in to the RHMS system using your Google account.\n\n` +
-            `Login details:\n` +
-            `- Date: ${dateStr}\n` +
-            `- Time: ${timeStr}\n` +
-            `- Sign-in method: Google\n\n` +
+            `You have successfully signed in to the Request Handling Management System using your Google account.\n\n` +
+            `Login details:\n\n` +
+            `Date: ${dateStr}\n` +
+            `Time: ${timeStr}\n` +
+            `Sign-in Method: Google\n\n` +
             `If you did not perform this login, please contact the RHMS support team immediately.\n\n` +
             `Regards,\nRHMS Support Team`;
-          await mailer.sendMail({ to: email, subject, text, html: `<div style="font-family:Arial,Helvetica,sans-serif;white-space:pre-wrap;">${escapeHtml(text)}</div>` });
+          const html =
+            `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+            `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
+            `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">` +
+            `<tr><td align="center">` +
+            `<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#0A1F44" style="${EMAIL_CARD_STYLE}">` +
+            `<tr><td align="center" style="padding:36px 32px 8px;text-align:center;">${logoBlock}</td></tr>` +
+            `<tr><td align="center" style="padding:8px 32px 28px;text-align:center;">` +
+            `<h1 style="margin:0;font-size:24px;line-height:1.35;color:#ffffff;font-weight:700;">Successful Login to RHMS</h1>` +
+            `</td></tr>` +
+            `<tr><td style="padding:32px;">` +
+            `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Dear ${safeName},</p>` +
+            `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">You have successfully signed in to the Request Handling Management System using your Google account.</p>` +
+            `<p style="margin:0 0 8px;font-size:16px;font-weight:700;color:#ffffff;">Login details:</p>` +
+            `<p style="margin:0 0 16px;font-size:14px;line-height:1.8;color:#D7E3FF;">` +
+            `Date: ${escapeHtml(dateStr)}<br>Time: ${escapeHtml(timeStr)}<br>Sign-in Method: Google</p>` +
+            `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#D7E3FF;">If you did not perform this login, please contact the RHMS support team immediately.</p>` +
+            `<p style="margin:0;font-size:14px;line-height:1.7;color:#D7E3FF;">Regards,<br><strong>RHMS Support Team</strong></p>` +
+            `</td></tr>` +
+            contactFooter +
+            `</table></td></tr></table></body></html>`;
+          await mailer.sendMail({ to: email, subject, text, html, ...(logoAttachment ? { attachments: [logoAttachment] } : {}) });
         }
         console.log(`[GoogleAuthEmail] sent to ${email}`);
       } catch (err) {
@@ -4996,12 +5046,12 @@ app.get('/api/companies', authMiddleware, async (req, res) => {
 
 app.post('/api/companies', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const { companyId, name, industry, companyType, email, phone } = req.body;
+    const { companyId, name, industry, companyType, email, phone, logo } = req.body;
     if (!name) return res.status(400).json({ error: 'Company name is required' });
     const id = uuidv4();
     const result = await pool.query(
-      'INSERT INTO companies (id, company_id, name, industry, company_type, email, phone) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [id, companyId || null, name, industry || null, companyType || null, email || null, phone || null]
+      'INSERT INTO companies (id, company_id, name, industry, company_type, email, phone, logo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [id, companyId || null, name, industry || null, companyType || null, email || null, phone || null, logo || null]
     );
     await logCompanyActivity('company_created', { id, name }, req.user, req);
     res.status(201).json(result.rows[0]);
@@ -5015,10 +5065,10 @@ app.post('/api/companies', authMiddleware, roleMiddleware('admin'), async (req, 
 
 app.put('/api/companies/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const { companyId, name, industry, companyType, email, phone } = req.body;
+    const { companyId, name, industry, companyType, email, phone, logo } = req.body;
     const result = await pool.query(
-      'UPDATE companies SET company_id = COALESCE($1, company_id), name = COALESCE($2, name), industry = COALESCE($3, industry), company_type = COALESCE($4, company_type), email = COALESCE($5, email), phone = COALESCE($6, phone) WHERE id = $7 RETURNING *',
-      [companyId, name, industry, companyType, email, phone, req.params.id]
+      'UPDATE companies SET company_id = COALESCE($1, company_id), name = COALESCE($2, name), industry = COALESCE($3, industry), company_type = COALESCE($4, company_type), email = COALESCE($5, email), phone = COALESCE($6, phone), logo = COALESCE($7, logo) WHERE id = $8 RETURNING *',
+      [companyId, name, industry, companyType, email, phone, logo, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Company not found' });
     await logCompanyActivity('company_updated', { id: req.params.id, name }, req.user, req);

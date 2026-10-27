@@ -38,8 +38,11 @@ export default function Company() {
     industry: '',
     companyType: '',
     email: '',
-    phone: ''
+    phone: '',
+    logo: ''
   });
+  const [logoPreview, setLogoPreview] = useState('');
+  const [logoUploading, setLogoUploading] = useState(false);
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -67,7 +70,8 @@ export default function Company() {
 
   const openCreate = () => {
     setEditingCompany(null);
-    setForm({ companyId: '', name: '', industry: '', companyType: '', email: '', phone: '' });
+    setForm({ companyId: '', name: '', industry: '', companyType: '', email: '', phone: '', logo: '' });
+    setLogoPreview('');
     setShowModal(true);
   };
 
@@ -79,8 +83,10 @@ export default function Company() {
       industry: company.industry || '',
       companyType: company.company_type || '',
       email: company.email || '',
-      phone: company.phone || ''
+      phone: company.phone || '',
+      logo: company.logo || ''
     });
+    setLogoPreview(company.logo || '');
     setShowModal(true);
   };
 
@@ -94,8 +100,9 @@ export default function Company() {
           industry: form.industry,
           companyType: form.companyType,
           email: form.email,
-          phone: form.phone
-        });
+          phone: form.phone,
+           logo: form.logo || null
+         });
       } else {
         await api.post('/api/companies', {
           companyId: form.companyId,
@@ -103,8 +110,9 @@ export default function Company() {
           industry: form.industry,
           companyType: form.companyType,
           email: form.email,
-          phone: form.phone
-        });
+          phone: form.phone,
+           logo: form.logo || null
+         });
       }
       setShowModal(false);
       loadData();
@@ -333,6 +341,49 @@ export default function Company() {
                   />
                 </div>
               </div>
+               <div className="form-group">
+                 <label>Company Logo</label>
+                 <input
+                   type="file"
+                   accept="image/png,image/jpeg,image/webp"
+                   onChange={async (e) => {
+                     const file = e.target.files && e.target.files[0];
+                     if (!file) return;
+                     if (file.size > 5 * 1024 * 1024) {
+                       addToast('Logo must be under 5MB', 'error');
+                       return;
+                     }
+                     setLogoUploading(true);
+                     try {
+                       const fd = new FormData();
+                       fd.append('file', file);
+                       const res = await api.upload('/api/upload', fd);
+                       setForm((prev) => ({ ...prev, logo: res.path }));
+                       setLogoPreview(res.path);
+                        if (editingCompany) {
+                          await api.put(`/api/companies/${editingCompany.id}`, { logo: res.path });
+                          loadData();
+                          addToast('Logo updated successfully', 'success');
+                        }
+                     } catch (err) {
+                       addToast(err.message || 'Logo upload failed', 'error');
+                     } finally {
+                       setLogoUploading(false);
+                     }
+                   }}
+                 />
+                 {logoUploading && <div style={{ fontSize: '12px', color: '#6b7280' }}>Uploading...</div>}
+                 {logoPreview && (
+                   <div style={{ marginTop: '8px' }}>
+                     <img src={`${API_BASE}${logoPreview}`} alt="Company logo preview" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                   </div>
+                 )}
+                 {!logoPreview && (
+                   <div style={{ marginTop: '8px', width: '80px', height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#94a3b8', fontSize: '12px' }}>
+                     No logo
+                   </div>
+                 )}
+               </div>
             </div>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>{t('common.cancel')}</button>
@@ -351,11 +402,9 @@ export default function Company() {
           <div className="category-cards-grid">
             {companies.map((c) => (
               <div key={c.id} className="category-manage-card" style={{ '--cat-color': getIndustryColor(c.industry), cursor: 'pointer' }} onClick={() => { setSelectedCompany(c); setUserPage(1); }}>
-                <div className="category-manage-card-top">
-                  <div className="category-manage-icon"><Icon name={getIndustryIcon(c.industry)} size={32} /></div>
-                  <span className="category-manage-count">{t('company.usersCount', { count: getUserCount(c.name) })}</span>
-                </div>
-                <div className="category-manage-name">{c.name}</div>
+                <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>{c.logo ? <img src={`${API_BASE}${c.logo}`} alt={c.name} style={{ width: '140px', height: '100px', objectFit: 'contain', borderRadius: '12px', background: '#f8fafc', padding: '6px' }} /> : <div style={{ width: '140px', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px', background: '#e5e7eb', color: '#9ca3af', fontSize: '12px' }}>No logo</div>}</div>
+                 <div className="category-manage-name" style={{ textAlign: 'center' }}>{c.name}</div>
+                 <div className="category-manage-count" style={{ textAlign: 'center', marginTop: '4px' }}>{t('company.usersCount', { count: getUserCount(c.name) })}</div>
                 {c.company_id && <div className="category-manage-desc" style={{ fontSize: '11px', color: '#9ca3af' }}>{t('company.idLabel', { id: c.company_id })}</div>}
                 {c.industry && <div className="category-manage-desc">{t('company.industryLabel', { industry: c.industry })}</div>}
                 {c.company_type && <div className="category-manage-desc">{t('company.typeLabel', { type: c.company_type })}</div>}

@@ -1035,8 +1035,15 @@ export default function RequestDetail() {
                     <div className="chat-column">
                       <div className="chat-meta">
                         <span className="chat-name">{c.user?.name || t('common.unknown')}</span>
+                         <span className={`chat-online-status ${((c.user?.id && user?.id && c.user.id === user.id) || !!c.user?.isOnline) ? 'online' : 'offline'}`}>
+                           <span className="chat-online-dot" />
+                           {((c.user?.id && user?.id && c.user.id === user.id) || !!c.user?.isOnline) ? 'Online' : 'Offline'}
+                         </span>
                         <span className={`chat-role-badge ${isClientRole ? 'client' : 'staff'}`}>{chatRoleLabel(c.user?.role)}</span>
                         <span className="chat-time">{new Date(c.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                         <span className={`chat-seen-status ${(!isOwnComment && !unreadComments.some(u => (u.id || u.createdAt) === (c.id || c.createdAt))) ? 'seen' : 'sent'}`}>
+                           {(!isOwnComment && !unreadComments.some(u => (u.id || u.createdAt) === (c.id || c.createdAt))) ? '✓✓' : '✓'}
+                         </span>
                       </div>
                       <div className={`chat-bubble ${isClientRole ? 'client' : 'staff'}`}>
                         {renderMessageContent(c.content)}
