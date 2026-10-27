@@ -1891,7 +1891,8 @@ app.post('/api/auth/logout', authMiddleware, async (req, res) => {
 
 app.post('/api/auth/google', async (req, res) => {
   try {
-    const { credential } = req.body;
+    const { credential, intent } = req.body;
+    const googleIntent = intent === 'signup' ? 'signup' : 'login';
     if (!credential) {
       return res.status(400).json({ error: 'Google credential is required' });
     }
@@ -1941,17 +1942,27 @@ app.post('/api/auth/google', async (req, res) => {
           if (!user.avatar && picture) user.avatar = picture;
         }
       } else {
+        // On the Login page we must NOT silently create an account. Only the
+        // Sign-Up flow (intent === 'signup') is allowed to provision a new
+        // client account via Google.
+        if (googleIntent !== 'signup') {
+          return res.status(404).json({ error: 'No RHMS account found. Please sign up.' });
+        }
         // New accounts created through Google are always 'client' users.
         // Privileged roles (admin/developer/escalation) can never be self-assigned.
         const id = uuidv4();
         result = await pool.query(
           `INSERT INTO users (id, name, email, password, role, avatar, google_id, approved, moderated)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-          [id, name, email, await bcrypt.hash(googleId, 10), 'client', picture, googleId, true, true]
+          [id, name, email, await bcrypt.hash(googleId, 10), 'client', picture, googleId, true, false]
         );
         user = result.rows[0];
         isNewUser = true;
       }
+    }
+
+    if (googleIntent === 'signup' && !isNewUser) {
+      return res.status(409).json({ error: 'An account with this email already exists. Please log in.' });
     }
 
     if (user.approved === false) {

@@ -65,6 +65,7 @@ export default function Login() {
       if (!window.google || !window.google.accounts || !window.google.accounts.id) return;
       window.google.accounts.id.initialize({
         client_id: clientId,
+        auto_select: false,
         callback: async (response) => {
           setGoogleLoading(true);
           setError('');
@@ -74,21 +75,24 @@ export default function Login() {
             else navigate('/');
           } catch (err) {
             const msg = err.message || '';
-            if (msg.includes('blocked')) setError('Your account is blocked. Please contact the administrator.');
+            if (msg.includes('No RHMS account') || msg.includes('not found')) {
+              setError('No RHMS account found for this Google account. Please sign up first.');
+            } else if (msg.includes('blocked')) setError('Your account is blocked. Please contact the administrator.');
             else setError(msg || t('common.googleSignInFailed'));
           } finally {
             setGoogleLoading(false);
           }
         },
         cancel_on_tap_outside: true,
+        ux_mode: 'popup',
       });
       const container = document.getElementById('rhms-google-btn');
-      if (container) {
+      if (container && !container.hasChildNodes()) {
         window.google.accounts.id.renderButton(container, {
           theme: 'outline',
           size: 'large',
           text: 'continue_with',
-          shape: 'rectangular',
+          shape: 'pill',
           width: 360,
         });
       }
@@ -103,40 +107,9 @@ export default function Login() {
     script.async = true;
     script.defer = true;
     script.onload = init;
+    script.onerror = () => setError('Unable to load Google sign-in. Please try again later.');
     document.head.appendChild(script);
   }, [googleLogin, navigate, t]);
-
-  const handleGoogleSignIn = () => {
-    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      setError('Google login is not configured. Set REACT_APP_GOOGLE_CLIENT_ID.');
-      return;
-    }
-    if (!window.google || !window.google.accounts || !window.google.accounts.id) {
-      setError(t('common.cannotConnectServer'));
-      return;
-    }
-    setGoogleLoading(true);
-    setError('');
-    try {
-      window.google.accounts.id.prompt((notification) => {
-        if (notification && (notification.isNotDisplayed() || notification.isSkippedMoment())) {
-          // Fall back to the rendered Google button if One Tap is unavailable.
-          const container = document.getElementById('rhms-google-btn');
-          if (container) {
-            const btn = container.querySelector('div[role="button"]');
-            if (btn) btn.click();
-            else setGoogleLoading(false);
-          } else {
-            setGoogleLoading(false);
-          }
-        }
-      });
-    } catch (e) {
-      setGoogleLoading(false);
-      setError(t('common.googleSignInFailed'));
-    }
-  };
 
   const validateField = (name, value) => {
     let err = '';
@@ -456,26 +429,9 @@ export default function Login() {
         </form>
 
         <div className="login-divider"><span>{t('common.or') || 'OR'}</span></div>
-        <div className="google-btn-wrapper">
-          <button
-            type="button"
-            className="google-btn"
-            onClick={handleGoogleSignIn}
-            disabled={googleLoading}
-            aria-label={t('common.googleContinue')}
-          >
-            <span className="google-btn-icon">
-              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-                <path fill="#FBBC05" d="M10.53 28.57a14.5 14.5 0 0 1 0-9.14l-7.98-6.19a24.0 24.0 0 0 0 0 21.52l7.98-6.19z"/>
-                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-              </svg>
-            </span>
-            <span className="google-btn-text">{googleLoading ? t('common.googleSignIn') : t('common.googleContinue')}</span>
-          </button>
+        <div className="google-btn-wrapper" style={{ display: 'flex', justifyContent: 'center' }} aria-busy={googleLoading}>
+          <div id="rhms-google-btn" />
         </div>
-        <div id="rhms-google-btn" style={{ display: 'none' }}></div>
 
         <p className="signup-link">
           {t('common.noAccount')} <button type="button" className="signup-btn" onClick={() => navigate('/signup')}>{t('common.signUp')}</button>
