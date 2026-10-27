@@ -8138,6 +8138,140 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
   display: block;
 }
 
+/* Bright mode (default / not dark): light login & signup theme */
+body:not(.dark-mode) .login-page {
+  background: linear-gradient(135deg, #e0f2fe 0%, #dbeafe 30%, #eff6ff 60%, #f8fafc 100%);
+}
+body:not(.dark-mode) .login-orb-1 {
+  background: radial-gradient(circle, rgba(0, 180, 216, 0.18) 0%, transparent 70%);
+}
+body:not(.dark-mode) .login-orb-2 {
+  background: radial-gradient(circle, rgba(0, 119, 182, 0.14) 0%, transparent 70%);
+}
+body:not(.dark-mode) .login-card {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.92) 0%, rgba(240, 249, 255, 0.96) 35%, rgba(224, 242, 254, 0.9) 100%);
+  border: 1px solid rgba(0, 180, 216, 0.25);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+body:not(.dark-mode) .login-brand-name,
+body:not(.dark-mode) .login-title {
+  color: #0f172a;
+}
+body:not(.dark-mode) .login-brand-sub,
+body:not(.dark-mode) .login-subtitle {
+  color: #475569;
+}
+body:not(.dark-mode) .login-input-icon {
+  color: #64748b;
+}
+body:not(.dark-mode) .login-input-wrapper input {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 180, 216, 0.3);
+}
+body:not(.dark-mode) .login-input-wrapper input::placeholder {
+  color: #94a3b8;
+}
+body:not(.dark-mode) .show-password-btn {
+  color: #64748b;
+}
+body:not(.dark-mode) .show-password-btn:hover {
+  color: #0077b6;
+}
+body:not(.dark-mode) .remember-me {
+  color: #475569;
+}
+body:not(.dark-mode) .forgot-link {
+  color: #0077b6;
+}
+body:not(.dark-mode) .forgot-link:hover {
+  color: #00b4d8;
+}
+body:not(.dark-mode) .signup-link {
+  color: #475569;
+}
+body:not(.dark-mode) .signup-link .signup-btn {
+  color: #0077b6;
+}
+body:not(.dark-mode) .login-divider::before,
+body:not(.dark-mode) .login-divider::after {
+  background: rgba(0, 0, 0, 0.12);
+}
+body:not(.dark-mode) .login-divider span {
+  color: #94a3b8;
+}
+body:not(.dark-mode) .google-loading {
+  color: #475569;
+}
+body:not(.dark-mode) .login-error {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+body:not(.dark-mode) .signup-success {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.1);
+}
+body:not(.dark-mode) .modal-card {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(0, 180, 216, 0.2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+body:not(.dark-mode) .modal-card h3 {
+  color: #0f172a;
+}
+body:not(.dark-mode) .modal-card p {
+  color: #475569;
+}
+body:not(.dark-mode) .modal-card input {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 180, 216, 0.3);
+}
+body:not(.dark-mode) .otp-box {
+  color: #0f172a;
+  background: linear-gradient(135deg, rgba(0, 180, 216, 0.08), rgba(114, 9, 183, 0.08));
+  border-color: rgba(0, 180, 216, 0.3);
+}
+body:not(.dark-mode) .login-theme-toggle {
+  border-color: rgba(0, 180, 216, 0.3);
+  background: rgba(255, 255, 255, 0.85);
+  color: #0f172a;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+body:not(.dark-mode) .login-theme-toggle:hover {
+  border-color: #00b4d8;
+  color: #0077b6;
+  background: rgba(0, 180, 216, 0.1);
+}
+body:not(.dark-mode) .lang-selector-login .lang-selector-btn {
+  border-color: rgba(0, 180, 216, 0.3);
+  background: rgba(255, 255, 255, 0.85);
+  color: #0f172a;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+body:not(.dark-mode) .lang-selector-login .lang-selector-btn:hover {
+  border-color: #00b4d8;
+  color: #0077b6;
+  background: rgba(0, 180, 216, 0.1);
+}
+body:not(.dark-mode) .lang-selector-login .lang-selector-menu {
+  background: #ffffff;
+  border-color: rgba(0, 180, 216, 0.2);
+}
+body:not(.dark-mode) .lang-selector-login .lang-selector-item {
+  color: #0f172a;
+}
+body:not(.dark-mode) .lang-selector-login .lang-selector-item:hover {
+  background: #f1f5f9;
+}
+body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
+  background: #e0f2fe;
+  color: #0077b6;
+}
+
 /* Settings / profile variant */
 .lang-selector-inline .lang-selector-menu { left: 0; }
 
