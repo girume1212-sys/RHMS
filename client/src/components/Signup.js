@@ -28,7 +28,88 @@ export default function Signup() {
   const [resendSeconds, setResendSeconds] = useState(0);
   const codeRefs = useRef([]);
   const navigate = useNavigate();
-  const { darkMode, toggleDarkMode } = useAuth();
+  const { darkMode, toggleDarkMode, googleLogin } = useAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    if (!clientId) return;
+
+    const init = () => {
+      if (!window.google || !window.google.accounts || !window.google.accounts.id) return;
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response) => {
+          setGoogleLoading(true);
+          setError('');
+          try {
+            const user = await googleLogin(response.credential);
+            if (user.role === 'client') navigate('/client');
+            else navigate('/');
+          } catch (err) {
+            const msg = err.message || '';
+            if (msg.includes('blocked')) setError('Your account is blocked. Please contact the administrator.');
+            else setError(msg || t('common.googleSignInFailed'));
+          } finally {
+            setGoogleLoading(false);
+          }
+        },
+        cancel_on_tap_outside: true,
+      });
+      const container = document.getElementById('rhms-google-btn-signup');
+      if (container) {
+        window.google.accounts.id.renderButton(container, {
+          theme: 'outline',
+          size: 'large',
+          text: 'signup_with',
+          shape: 'rectangular',
+          width: 360,
+        });
+      }
+    };
+
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      init();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = init;
+    document.head.appendChild(script);
+  }, [googleLogin, navigate, t]);
+
+  const handleGoogleSignIn = () => {
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      setError('Google login is not configured. Set REACT_APP_GOOGLE_CLIENT_ID.');
+      return;
+    }
+    if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+      setError(t('common.cannotConnectServer'));
+      return;
+    }
+    setGoogleLoading(true);
+    setError('');
+    try {
+      window.google.accounts.id.prompt((notification) => {
+        if (notification && (notification.isNotDisplayed() || notification.isSkippedMoment())) {
+          const container = document.getElementById('rhms-google-btn-signup');
+          if (container) {
+            const btn = container.querySelector('div[role="button"]');
+            if (btn) btn.click();
+            else setGoogleLoading(false);
+          } else {
+            setGoogleLoading(false);
+          }
+        }
+      });
+    } catch (e) {
+      setGoogleLoading(false);
+      setError(t('common.googleSignInFailed'));
+    }
+  };
 
   useEffect(() => {
     if (resendSeconds <= 0) return;
@@ -313,6 +394,32 @@ export default function Signup() {
             {loading ? t('common.creatingAccount') : t('common.createAccount')}
           </button>
         </form>
+        )}
+
+        {step === 'details' && (
+        <>
+          <div className="login-divider"><span>{t('common.or')}</span></div>
+          <div className="google-btn-wrapper">
+            <button
+              type="button"
+              className="google-btn"
+              onClick={handleGoogleSignIn}
+              disabled={googleLoading}
+              aria-label={t('common.googleContinue')}
+            >
+              <span className="google-btn-icon">
+                <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                  <path fill="#FBBC05" d="M10.53 28.57a14.5 14.5 0 0 1 0-9.14l-7.98-6.19a24.0 24.0 0 0 0 0 21.52l7.98-6.19z"/>
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                </svg>
+              </span>
+              <span className="google-btn-text">{googleLoading ? t('common.googleSignIn') : t('common.googleContinue')}</span>
+            </button>
+          </div>
+          <div id="rhms-google-btn-signup" style={{ display: 'none' }}></div>
+        </>
         )}
 
         {step === 'verify' && (
