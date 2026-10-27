@@ -105,6 +105,30 @@ export function AuthProvider({ children }) {
     }
   }, [token, fetchUser]);
 
+  const googleLogin = async (credential) => {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential })
+      });
+    } catch (err) {
+      throw new Error('Cannot connect to server. Is the backend running on port 5000?');
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Google authentication failed');
+    localStorage.setItem('rhms_token', data.token);
+    if (data.user?.sessionTimeout) {
+      localStorage.setItem('rhms_sessionTimeout', String(data.user.sessionTimeout));
+    }
+    if (data.user?.language) changeLanguage(data.user.language);
+    setUser(data.user);
+    setToken(data.token);
+    setLoading(false);
+    return data.user;
+  };
+
   const login = async (username, email, password) => {
     let res;
     try {
@@ -142,7 +166,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading, darkMode, toggleDarkMode, themeMode, applyTheme, updateUser, systemName, systemLogo }}>
+    <AuthContext.Provider value={{ user, token, login, googleLogin, logout, loading, darkMode, toggleDarkMode, themeMode, applyTheme, updateUser, systemName, systemLogo }}>
       {children}
     </AuthContext.Provider>
   );

@@ -142,6 +142,9 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     console.log('approved column ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS moderated BOOLEAN DEFAULT true`);
     console.log('moderated column ready');
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255)`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL`);
+    console.log('google_id column ready');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS companies (
         id VARCHAR(50) PRIMARY KEY,
@@ -1892,35 +1895,73 @@ app.post('/api/auth/google', async (req, res) => {
     if (!credential) {
       return res.status(400).json({ error: 'Google credential is required' });
     }
+
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+    if (!googleClientId || googleClientId === 'YOUR_GOOGLE_CLIENT_ID') {
+      return res.status(503).json({ error: 'Google authentication is not configured on the server' });
+    }
+
     const ticket = await googleClient.verifyIdToken({
       idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID',
+      audience: googleClientId,
     });
     const payload = ticket.getPayload();
-    const { email, name, sub: googleId, picture } = payload;
+    if (!payload || !payload.email || !payload.sub) {
+      return res.status(400).json({ error: 'Invalid Google credential' });
+    }
+    if (!payload.email_verified) {
+      return res.status(403).json({ error: 'Google email address is not verified' });
+    }
 
-    let result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const email = String(payload.email).trim().toLowerCase();
+    const googleId = payload.sub;
+    const name = payload.name || email.split('@')[0];
+    const picture = payload.picture || null;
+
+    // Look up an existing account by the verified Google subject first, then by
+    // the verified email. Never trust a client-supplied email without the token.
+    let result = await pool.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
     let user;
+    let isNewUser = false;
 
     if (result.rows.length > 0) {
       user = result.rows[0];
-      if (user.approved === false) {
-        auditLogin('login_blocked', user.id, email, req);
-        await logAuthActivity('login_blocked', user, req);
-        return res.status(403).json({ error: 'Your account is blocked. Please contact the administrator.' });
-      }
     } else {
-      const id = uuidv4();
-      result = await pool.query(
-        'INSERT INTO users (id, name, email, password, role, avatar) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-        [id, name, email, await bcrypt.hash(googleId, 10), 'client', picture || null]
-      );
-      user = result.rows[0];
+      result = await pool.query('SELECT * FROM users WHERE LOWER(email) = $1', [email]);
+      if (result.rows.length > 0) {
+        user = result.rows[0];
+        // Secure, explicit linking: only link when no other Google subject is
+        // already attached, preventing account hijacking / unsafe auto-linking.
+        if (user.google_id && user.google_id !== googleId) {
+          return res.status(403).json({ error: 'This email is already linked to a different Google account' });
+        }
+        if (!user.google_id) {
+          await pool.query('UPDATE users SET google_id = $1, avatar = COALESCE(avatar, $2) WHERE id = $3', [googleId, picture, user.id]);
+          user.google_id = googleId;
+          if (!user.avatar && picture) user.avatar = picture;
+        }
+      } else {
+        // New accounts created through Google are always 'client' users.
+        // Privileged roles (admin/developer/escalation) can never be self-assigned.
+        const id = uuidv4();
+        result = await pool.query(
+          `INSERT INTO users (id, name, email, password, role, avatar, google_id, approved, moderated)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+          [id, name, email, await bcrypt.hash(googleId, 10), 'client', picture, googleId, true, true]
+        );
+        user = result.rows[0];
+        isNewUser = true;
+      }
+    }
+
+    if (user.approved === false) {
+      auditLogin('login_blocked', user.id, email, req);
+      await logAuthActivity('login_blocked', user, req);
+      return res.status(403).json({ error: 'Your account is blocked. Please contact the administrator.' });
     }
 
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
     auditLogin('login_success', user.id, email, req);
-    const isNewUser = !result.rows[0]?.created_at || (Date.now() - new Date(result.rows[0].created_at).getTime() < 60000);
     await logAuthActivity(isNewUser ? 'google_signup' : 'google_login', user, req);
     persistSession(user.id, token, req);
     res.json({ token, user: mapUser(user) });
