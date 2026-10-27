@@ -6,6 +6,7 @@ import ValidationError from './ValidationError';
 import { useTranslation } from '../i18n/useTranslation';
 import LanguageSelector from './LanguageSelector';
 import Icon from './Icon';
+import { useAuth } from '../AuthContext';
 
 export default function Signup() {
   const { t } = useTranslation();
@@ -27,6 +28,7 @@ export default function Signup() {
   const [resendSeconds, setResendSeconds] = useState(0);
   const codeRefs = useRef([]);
   const navigate = useNavigate();
+  const { darkMode, toggleDarkMode } = useAuth();
 
   useEffect(() => {
     if (resendSeconds <= 0) return;
@@ -167,7 +169,19 @@ export default function Signup() {
         <div className="login-orb login-orb-2"></div>
       </div>
 
-      <LanguageSelector variant="login" />
+      <div className="login-top-controls">
+        <button
+          type="button"
+          className="login-theme-toggle"
+          onClick={toggleDarkMode}
+          title={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}
+          aria-label={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}
+        >
+          <span className="login-theme-toggle-icon"><Icon name={darkMode ? 'sun' : 'moon'} size={16} /></span>
+          <span>{darkMode ? t('common.brightMode') : t('common.darkMode')}</span>
+        </button>
+        <LanguageSelector variant="login" />
+      </div>
 
       <div className="login-card signup-card">
         <h2 className="login-title">{step === 'verify' ? t('common.verifyEmailTitle') : t('common.createAccount')}</h2>

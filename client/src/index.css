@@ -8089,6 +8089,55 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
 .lang-selector-login { position: fixed; top: 20px; right: 24px; }
 .lang-selector-login .lang-selector-menu { right: 0; left: auto; }
 
+/* Login top controls (theme toggle + language) */
+.login-top-controls {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1000;
+}
+.login-top-controls .lang-selector-login {
+  position: static;
+  top: auto;
+  right: auto;
+}
+.login-theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.08);
+  color: #e2e8f0;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 999px;
+  padding: 6px 14px;
+  height: 34px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.login-theme-toggle:hover {
+  border-color: #93c5fd;
+  color: #ffffff;
+  background: rgba(255,255,255,0.15);
+}
+.login-theme-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+.login-theme-toggle-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 /* Settings / profile variant */
 .lang-selector-inline .lang-selector-menu { left: 0; }
 

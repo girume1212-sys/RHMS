@@ -27,7 +27,7 @@ export default function Login() {
   const [forgotError, setForgotError] = useState('');
   const [notice, setNotice] = useState('');
   const [errors, setErrors] = useState({ forgotEmail: '', otp: '', newPassword: '', confirmPassword: '' });
-  const { login, systemName, systemLogo } = useAuth();
+  const { login, systemName, systemLogo, darkMode, toggleDarkMode } = useAuth();
   const navigate = useNavigate();
   const otpRefs = useRef([]);
   const [resendSeconds, setResendSeconds] = useState(0);
@@ -278,7 +278,19 @@ export default function Login() {
         <div className="login-orb login-orb-2"></div>
       </div>
 
-      <LanguageSelector variant="login" />
+      <div className="login-top-controls">
+        <button
+          type="button"
+          className="login-theme-toggle"
+          onClick={toggleDarkMode}
+          title={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}
+          aria-label={darkMode ? t('topbar.switchToLight') : t('topbar.switchToDark')}
+        >
+          <span className="login-theme-toggle-icon"><Icon name={darkMode ? 'sun' : 'moon'} size={16} /></span>
+          <span>{darkMode ? t('common.brightMode') : t('common.darkMode')}</span>
+        </button>
+        <LanguageSelector variant="login" />
+      </div>
 
       <div className="login-card">
         <div className="login-brand-header">
