@@ -387,19 +387,15 @@ body {
 }
 .google-btn:hover,
 .google-btn-wrapper:hover .google-btn {
-  background: linear-gradient(135deg, #ffd60a 0%, #ff9f1c 100%);
-  border-color: #d00000;
-  color: #1d1d1d;
-  box-shadow: 0 10px 30px rgba(255, 159, 28, 0.75);
-  transform: translateY(-4px) scale(1.03);
+  background: #e8f0fe;
+  border-color: #d2e3fc;
+  color: #1f1f1f;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3);
+  transform: translateY(-1px);
 }
 .google-btn:hover .google-btn-text,
 .google-btn-wrapper:hover .google-btn .google-btn-text {
-  color: #1d1d1d;
-}
-.google-btn:hover .google-btn-text,
-.google-btn-wrapper:hover .google-btn .google-btn-text {
-  color: #0077b6;
+  color: #1f1f1f;
 }
 .google-btn:active,
 .google-btn-wrapper:active .google-btn {
