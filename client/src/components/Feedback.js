@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
@@ -30,6 +31,7 @@ export default function Feedback() {
   const [perPage, setPerPage] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
   const [satisfactionFilter, setSatisfactionFilter] = useState('');
+  const [period, setPeriod] = useState('daily');
   const [sort, setSort] = useState({ key: 'created_at', dir: 'desc' });
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -195,50 +197,152 @@ export default function Feedback() {
         </div>
       ) : (
         <>
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '16px', marginBottom: '24px'
-          }}>
-            <div className="chart-card" style={{ textAlign: 'center', padding: '24px' }}>
-              <div className="feedback-label">{t('feedback.averageRating')}</div>
-              <div style={{ fontSize: '36px', fontWeight: 700, color: '#F59E0B', lineHeight: 1 }}>
-                {avgRating}
-              </div>
-              <div style={{ marginTop: '6px' }}>{renderStars(Math.round(parseFloat(avgRating)))}</div>
-            </div>
-            <div className="chart-card" style={{ textAlign: 'center', padding: '24px' }}>
-              <div className="feedback-label">{t('feedback.totalFeedback')}</div>
-              <div style={{ fontSize: '36px', fontWeight: 700, color: '#3B82F6', lineHeight: 1 }}>
-                {feedback.length}
-              </div>
-              <div className="feedback-label" style={{ marginTop: '6px' }}>
-                {t('feedback.withComments', { count: feedback.filter(f => f.comment).length })}
-              </div>
-            </div>
-            <div className="chart-card" style={{ padding: '24px' }}>
-              <div className="feedback-label" style={{ marginBottom: '12px' }}>{t('feedback.ratingDistribution')}</div>
-              {[5, 4, 3, 2, 1].map(star => {
-                const count = distribution[star - 1];
-                const pct = (count / maxDist) * 100;
-                return (
-                  <div key={star} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span className="feedback-label" style={{ width: '20px', textAlign: 'right' }}>{star}</span>
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="#F59E0B" style={{ flexShrink: 0 }}>
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                    <div style={{
-                      flex: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden'
-                    }}>
-                      <div style={{
-                        width: `${pct}%`, height: '100%', background: '#F59E0B',
-                        borderRadius: '4px', transition: 'width 0.3s'
-                      }} />
-                    </div>
-                    <span className="feedback-label" style={{ width: '24px', textAlign: 'right' }}>{count}</span>
+          <div style={{ marginBottom: '24px' }}>
+            {(() => {
+              const now = new Date();
+              // Aggregate all feedback into time buckets based on the selected
+              // period (like Requests Overview), instead of filtering to a
+              // single day/week/month.
+              const periodFeedback = feedback.filter(f => {
+                const d = new Date(f.created_at);
+                if (period === 'daily') return d.toDateString() === now.toDateString();
+                if (period === 'weekly') {
+                  const start = new Date(now); start.setDate(now.getDate() - now.getDay()); start.setHours(0,0,0,0);
+                  return d >= start;
+                }
+                return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+              });
+              const cats = [
+                { key: 'verySatisfied', label: 'Very Satisfied', color: '#059669' },
+                { key: 'satisfied', label: 'Satisfied', color: '#10B981' },
+                { key: 'neutral', label: 'Neutral', color: '#F59E0B' },
+                { key: 'dissatisfied', label: 'Dissatisfied', color: '#F97316' },
+                { key: 'veryDissatisfied', label: 'Very Dissatisfied', color: '#DC2626' },
+              ];
+              const counts = cats.map(c => ({ ...c, count: periodFeedback.filter(f => satisfactionFor(f.rating).key === c.key).length }));
+              const total = periodFeedback.length || 1;
+              // Build time-series buckets for the chart (like Requests Overview).
+              let buckets = [];
+              if (period === 'daily') {
+                const map = {};
+                feedback.forEach(f => {
+                  const d = new Date(f.created_at);
+                  const key = d.toISOString().slice(0, 10);
+                  if (!map[key]) {
+                    const [y, m, day] = key.split('-').map(Number);
+                    map[key] = { label: new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), key, ...Object.fromEntries(cats.map(c => [c.key, 0])) };
+                  }
+                  map[key][satisfactionFor(f.rating).key] += 1;
+                });
+                buckets = Object.keys(map).sort().map(k => map[k]);
+              } else if (period === 'weekly') {
+                const map = {};
+                feedback.forEach(f => {
+                  const d = new Date(f.created_at);
+                  const day = d.getDay();
+                  const diff = (day === 0 ? -6 : 1 - day);
+                  const monday = new Date(d); monday.setDate(d.getDate() + diff); monday.setHours(0,0,0,0);
+                  const key = monday.toISOString().slice(0, 10);
+                  if (!map[key]) {
+                    map[key] = { label: monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), key, ...Object.fromEntries(cats.map(c => [c.key, 0])) };
+                  }
+                  map[key][satisfactionFor(f.rating).key] += 1;
+                });
+                buckets = Object.keys(map).sort().map(k => map[k]);
+              } else {
+                const map = {};
+                feedback.forEach(f => {
+                  const d = new Date(f.created_at);
+                  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                  if (!map[key]) {
+                    map[key] = { label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), key, ...Object.fromEntries(cats.map(c => [c.key, 0])) };
+                  }
+                  map[key][satisfactionFor(f.rating).key] += 1;
+                });
+                buckets = Object.keys(map).sort().map(k => map[k]);
+              }
+              const chartData = buckets;
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
+                  <div className="chart-card" style={{ padding: '16px' }}>
+                    <h4 style={{ margin: '0 0 12px' }}>Rating Distribution</h4>
+                    {counts.map(c => {
+                      const maxCount = Math.max(...counts.map(x => x.count), 1);
+                      const width = (c.count / maxCount) * 100;
+                      return (
+                        <div key={c.key} style={{ marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                            <span style={{ width: '12px', height: '12px', background: c.color, borderRadius: '50%' }}></span>
+                            <span style={{ flex: 1, fontSize: '13px' }}>{c.label}</span>
+                            <span style={{ fontSize: '13px', fontWeight: 600 }}>{c.count}</span>
+                            <span style={{ fontSize: '12px', color: '#6b7280' }}>{((c.count / total) * 100).toFixed(0)}%</span>
+                          </div>
+                          <div style={{ height: '6px', background: '#f3f4f6', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ width: `${width}%`, height: '100%', background: c.color, borderRadius: '3px', transition: 'width 0.3s' }} />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                  <div className="chart-card" style={{ padding: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <h4 style={{ margin: 0 }}>Client Satisfaction Trends</h4>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {['daily', 'weekly', 'monthly'].map(p => (
+                          <button key={p} className={period === p ? 'btn btn-primary' : 'btn btn-outline'} style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => setPeriod(p)}>
+                            {p.charAt(0).toUpperCase() + p.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {chartData.every(d => d.count === 0) ? (
+                      <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>No feedback for this period</div>
+                    ) : (
+                    <>
+                    <ResponsiveContainer width="100%" height={260} key={period}>
+                      <AreaChart data={chartData}>
+                        <defs>
+                          {cats.map(c => (
+                            <linearGradient key={c.key} id={`grad-${c.key}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={c.color} stopOpacity={0.35} />
+                              <stop offset="100%" stopColor={c.color} stopOpacity={0.02} />
+                            </linearGradient>
+                          ))}
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="label"
+                          stroke="#9ca3af"
+                          fontSize={12}
+                          tickLine={false}
+                          axisLine={{ stroke: '#e5e7eb' }}
+                          angle={-20}
+                          textAnchor="end"
+                          interval={chartData.length > 15 ? Math.floor(chartData.length / 8) : 0}
+                          height={80}
+                          tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
+                        />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip />
+                        {cats.map(c => (
+                          <Area key={c.key} type="monotone" dataKey={c.key} name={c.label} stroke={c.color} fill={`url(#grad-${c.key})`} />
+                        ))}
+                      </AreaChart>
+                    </ResponsiveContainer>
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '8px' }}>
+                      {cats.map(c => (
+                        <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: c.color }}></span>
+                          {c.label}
+                        </div>
+                      ))}
+                    </div>
+                    </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="chart-card">
