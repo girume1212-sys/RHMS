@@ -9707,3 +9707,13 @@ body.dark-mode .sortable-th:hover { color: #e2e8f0; }
   .chat-meta { gap: 6px; }
   .chat-search input { width: 100%; }
 }
+
+/* ========== GLOBAL THEME SAFETY NET ========== */
+body { color: #1a1a2e; }
+body.dark-mode { color: #e2e8f0; }
+body.dark-mode input,
+body.dark-mode textarea,
+body.dark-mode select { color: #e2e8f0; }
+body.dark-mode table th,
+body.dark-mode table td { color: #e2e8f0; }
+
