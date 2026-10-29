@@ -30,7 +30,6 @@ export default function Signup() {
   const navigate = useNavigate();
   const { darkMode, toggleDarkMode, googleLogin } = useAuth();
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleExists, setGoogleExists] = useState(false);
 
   useEffect(() => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
@@ -54,7 +53,6 @@ export default function Signup() {
           } catch (err) {
             const msg = err.message || '';
             if (msg.includes('already exists')) {
-              setGoogleExists(true);
               setError('An RHMS account already exists for this Google account. Please sign in to your existing account.');
             } else if (msg.includes('blocked')) setError('Your account is blocked. Please contact the administrator.');
             else setError(msg || t('common.googleSignInFailed'));
@@ -108,17 +106,22 @@ export default function Signup() {
     }
     setGoogleLoading(true);
     setError('');
+    const container = document.getElementById('rhms-google-btn-signup');
+    const renderedBtn = container ? container.querySelector('div[role="button"]') : null;
+    if (renderedBtn) {
+      try {
+        renderedBtn.click();
+        return;
+      } catch (e) {
+        // fall through
+      }
+    }
     try {
       window.google.accounts.id.prompt((notification) => {
         if (notification && (notification.isNotDisplayed() || notification.isSkippedMoment())) {
-          const container = document.getElementById('rhms-google-btn-signup');
-          if (container) {
-            const btn = container.querySelector('div[role="button"]');
-            if (btn) btn.click();
-            else setGoogleLoading(false);
-          } else {
-            setGoogleLoading(false);
-          }
+          const btn = container ? container.querySelector('div[role="button"]') : null;
+          if (btn) btn.click();
+          else setGoogleLoading(false);
         }
       });
     } catch (e) {
@@ -279,11 +282,6 @@ export default function Signup() {
         <p className="login-subtitle">{step === 'verify' ? t('common.verificationCodeSent') : t('common.fillDetails')}</p>
 
         {error && <div className="login-error">{error}</div>}
-        {googleExists && (
-          <div style={{ marginTop: '12px' }}>
-            <button type="button" className="login-btn" onClick={() => navigate('/login')}>Go to Login</button>
-          </div>
-        )}
         {success && <div className="signup-success">{t('common.accountCreated')}</div>}
 
         {step === 'details' && (
@@ -414,7 +412,7 @@ export default function Signup() {
         {step === 'details' && (
         <>
           <div className="login-divider"><span>{t('common.or')}</span></div>
-          <div className="google-btn-wrapper" aria-busy={googleLoading}>
+          <div className="google-btn-wrapper" aria-busy={googleLoading} style={{ position: 'relative' }}>
             <button
               type="button"
               className="google-btn"
@@ -432,8 +430,8 @@ export default function Signup() {
               </span>
               <span className="google-btn-text">{googleLoading ? t('common.googleSignIn') : t('common.googleSignUp')}</span>
             </button>
+            <div id="rhms-google-btn-signup" style={{ position: 'absolute', inset: 0, opacity: 0, overflow: 'hidden', zIndex: 2, pointerEvents: 'auto' }} />
           </div>
-          <div id="rhms-google-btn-signup" style={{ display: 'none' }} />
         </>
         )}
 

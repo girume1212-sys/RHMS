@@ -4,6 +4,7 @@ import { api } from '../api';
 import Toast from './Toast';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
+import { useAuth } from '../AuthContext';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
 import { getMenuAbove, useBackNavigation } from '../utils/sidebarNav';
@@ -19,6 +20,7 @@ export default function Users() {
   const navigate = useNavigate();
   const goBack = useBackNavigation(getMenuAbove('/users'));
   const { t } = useTranslation();
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -353,7 +355,7 @@ export default function Users() {
                     <td>{new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td>
                         <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
-                        {u.selfRegistered && u.role === 'client' && (
+                        {u.id !== currentUser?.id && (
                           u.approved ? (
                             <button className="action-btn-text delete" onClick={() => handleApprove(u.id, u.name, false)}>{t('common.blockUser')}</button>
                           ) : (

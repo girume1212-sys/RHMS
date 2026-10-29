@@ -136,6 +136,7 @@ export default function Dashboard() {
   const [teamPerfPerPage, setTeamPerfPerPage] = useState(10);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [rangeDays, setRangeDays] = useState('all');
+  const [overviewGranularity, setOverviewGranularity] = useState('daily');
   const [monthOffset, setMonthOffset] = useState(0);
   const escPerfCardRef = useRef(null);
   const [escPerfCardHeight, setEscPerfCardHeight] = useState(0);
@@ -187,16 +188,42 @@ export default function Dashboard() {
     return () => ro.disconnect();
   }, [perfView, escPerfData, rangeDays]);
 
-  const weekData = useMemo(() => (stats?.monthlyData || []).map(m => {
-    const [y, mo] = m.month.split('-').map(Number);
-    const d = new Date(y, mo - 1, 1);
-    return {
-      date: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-      created: Number(m.created) || 0,
-      resolved: Number(m.resolved) || 0,
-      closed: Number(m.closed) || 0
-    };
-  }), [stats?.monthlyData]);
+  const weekData = useMemo(() => {
+    const rows = stats?.dailyData || [];
+    if (overviewGranularity === 'daily') {
+      return rows.map(d => ({
+        date: d.date,
+        day: d.day,
+        created: Number(d.created) || 0,
+        resolved: Number(d.resolved) || 0,
+        closed: Number(d.closed) || 0
+      }));
+    }
+    const bucket = {};
+    rows.forEach(d => {
+      let key;
+      let label;
+      if (overviewGranularity === 'weekly') {
+        const dt = new Date(`${d.day}T00:00:00`);
+        const day = dt.getDay();
+        const diff = (day === 0 ? -6 : 1 - day);
+        const monday = new Date(dt);
+        monday.setDate(dt.getDate() + diff);
+        key = monday.toISOString().slice(0, 10);
+        label = monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      } else {
+        const [y, m] = d.day.split('-');
+        key = `${y}-${m}`;
+        const dt = new Date(Number(y), Number(m) - 1, 1);
+        label = dt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+      if (!bucket[key]) bucket[key] = { date: label, day: key, created: 0, resolved: 0, closed: 0 };
+      bucket[key].created += Number(d.created) || 0;
+      bucket[key].resolved += Number(d.resolved) || 0;
+      bucket[key].closed += Number(d.closed) || 0;
+    });
+    return Object.keys(bucket).sort().map(k => bucket[k]);
+  }, [stats?.dailyData, overviewGranularity]);
 
   const weekTotals = useMemo(() => weekData.reduce((acc, d) => ({
     created: acc.created + d.created,
@@ -559,7 +586,14 @@ export default function Dashboard() {
       </div>
 
       {(() => {
-        const statusCards = (stats.byStatus || []).filter(s => s.is_active !== false);
+        const seenStatusNames = new Set();
+        const statusCards = (stats.byStatus || []).filter(s => {
+          if (s.is_active === false) return false;
+          const key = String(s.name || '').toLowerCase();
+          if (seenStatusNames.has(key)) return false;
+          seenStatusNames.add(key);
+          return true;
+        });
         const totalCards = statusCards.length + 1;
         const perRow = Math.ceil(totalCards / 2);
         const row1 = [<StatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} share={shareOfTotalPercent(stats.total, stats.total)} shareLabel={shareLabel} color="#FACC15" onClick={() => navigate('/requests')} />, ...statusCards.slice(0, perRow - 1).map(s => (
@@ -642,12 +676,32 @@ export default function Dashboard() {
         </div>
 
         <div className="chart-card" style={{ flex: 1 }}>
-          <div className="chart-card-header">
+          <div className="chart-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <h3>{t('dashboard.requestsOverview')}</h3>
               <p className="chart-subtitle">{t('dashboard.requestsOverviewSubtitle')}</p>
             </div>
-
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {['daily', 'weekly', 'monthly'].map(g => (
+                <button
+                  key={g}
+                  type="button"
+                  className={overviewGranularity === g ? 'btn btn-primary' : 'btn btn-outline'}
+                  style={{
+                    padding: '0px 10px',
+                    fontSize: '9px',
+                    height: '10px',
+                    lineHeight: '8px',
+                    background: overviewGranularity === g ? 'linear-gradient(135deg, #C3CFF6 0%, #B9C9F5 45%, #D5DEF9 100%)' : undefined,
+                    border: overviewGranularity === g ? 'none' : undefined,
+                    color: overviewGranularity === g ? '#fff' : undefined
+                  }}
+                  onClick={() => setOverviewGranularity(g)}
+                >
+                  {g.charAt(0).toUpperCase() + g.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="chart-container overview-chart">
             {weekData.length === 0 ? (
@@ -673,7 +727,7 @@ export default function Dashboard() {
                     axisLine={{ stroke: '#e5e7eb' }}
                     angle={-20}
                     textAnchor="end"
-                    interval={0}
+                    interval={weekData.length > 15 ? Math.floor(weekData.length / 8) : 0}
                     height={80}
                     tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
                   />

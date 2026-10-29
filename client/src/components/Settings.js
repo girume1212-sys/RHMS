@@ -105,7 +105,7 @@ export default function Settings() {
   }, []);
 
   const [statusModal, setStatusModal] = useState(null);
-  const [showStatusManagement, setShowStatusManagement] = useState(true);
+  const [showStatusManagement, setShowStatusManagement] = useState(false);
   const [editingStatus, setEditingStatus] = useState(null);
   const [statusForm, setStatusForm] = useState({ name: '', color: '#6B7280' });
   const [statusSaving, setStatusSaving] = useState(false);
@@ -542,14 +542,14 @@ export default function Settings() {
               <path d="M5 7.5L10 12.5L15 7.5" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ display: 'grid', gridTemplateRows: showStatusManagement ? '1fr' : '0fr', transition: 'grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}>
-            <div style={{ overflow: 'hidden' }}>
-          <div style={{ marginTop: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
             <button className="btn btn-primary" onClick={() => openStatusModal()} style={{ minWidth: '0' }}>
               + Add Status
             </button>
           </div>
+          <div style={{ display: 'grid', gridTemplateRows: showStatusManagement ? '1fr' : '0fr', transition: 'grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+            <div style={{ overflow: 'hidden' }}>
+          <div style={{ marginTop: '16px' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
               <thead>

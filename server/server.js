@@ -195,6 +195,13 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
       INSERT INTO statuses (id, name, color, is_system, sort_order) VALUES ('8', 'Rejected', '#DC2626', TRUE, 8)
       ON CONFLICT (id) DO NOTHING
     `);
+    // Remove any duplicate Rejected status rows (keep the canonical id '8') that
+    // have no requests attached, so the dashboard never shows duplicate cards.
+    await pool.query(`
+      DELETE FROM statuses
+      WHERE LOWER(name) = 'rejected' AND id <> '8'
+        AND NOT EXISTS (SELECT 1 FROM requests WHERE status_id = statuses.id)
+    `);
     await pool.query(`
       INSERT INTO statuses (id, name, color, is_system, sort_order) VALUES ('9', 'Escalated', '#EF4444', TRUE, 9)
       ON CONFLICT (id) DO NOTHING

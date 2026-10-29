@@ -123,17 +123,24 @@ export default function Login() {
     }
     setGoogleLoading(true);
     setError('');
+    // Prefer Google's real rendered button, which opens the account-chooser
+    // popup, instead of the One Tap prompt (which is frequently blocked).
+    const container = document.getElementById('rhms-google-btn');
+    const renderedBtn = container ? container.querySelector('div[role="button"]') : null;
+    if (renderedBtn) {
+      try {
+        renderedBtn.click();
+        return;
+      } catch (e) {
+        // fall through to prompt
+      }
+    }
     try {
       window.google.accounts.id.prompt((notification) => {
         if (notification && (notification.isNotDisplayed() || notification.isSkippedMoment())) {
-          const container = document.getElementById('rhms-google-btn');
-          if (container) {
-            const btn = container.querySelector('div[role="button"]');
-            if (btn) btn.click();
-            else setGoogleLoading(false);
-          } else {
-            setGoogleLoading(false);
-          }
+          const btn = container ? container.querySelector('div[role="button"]') : null;
+          if (btn) btn.click();
+          else setGoogleLoading(false);
         }
       });
     } catch (e) {
@@ -460,7 +467,7 @@ export default function Login() {
         </form>
 
         <div className="login-divider"><span>{t('common.or') || 'OR'}</span></div>
-        <div className="google-btn-wrapper" aria-busy={googleLoading}>
+        <div className="google-btn-wrapper" aria-busy={googleLoading} style={{ position: 'relative' }}>
           <button
             type="button"
             className="google-btn"
@@ -478,8 +485,8 @@ export default function Login() {
             </span>
             <span className="google-btn-text">{googleLoading ? t('common.googleSignIn') : t('common.googleContinue')}</span>
           </button>
+          <div id="rhms-google-btn" style={{ position: 'absolute', inset: 0, opacity: 0, overflow: 'hidden', zIndex: 2, pointerEvents: 'auto' }} />
         </div>
-        <div id="rhms-google-btn" style={{ display: 'none' }} />
 
         <p className="signup-link">
           {t('common.noAccount')} <button type="button" className="signup-btn" onClick={() => navigate('/signup')}>{t('common.signUp')}</button>
