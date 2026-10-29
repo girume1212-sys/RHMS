@@ -549,7 +549,7 @@ export default function Login() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
                     <button type="button" className="btn btn-outline" onClick={closeForgot}>{t('common.cancel')}</button>
                     {resendSeconds > 0 ? (
-                      <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+                      <span style={{ fontSize: '13px', color: darkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)' }}>
                         Resend in {resendSeconds}s
                       </span>
                     ) : (

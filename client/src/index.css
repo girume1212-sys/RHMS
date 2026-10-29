@@ -9711,9 +9711,14 @@ body.dark-mode .sortable-th:hover { color: #e2e8f0; }
 /* ========== GLOBAL THEME SAFETY NET ========== */
 body { color: #1a1a2e; }
 body.dark-mode { color: #e2e8f0; }
+body.dark-mode h1, body.dark-mode h2, body.dark-mode h3,
+body.dark-mode h4, body.dark-mode h5, body.dark-mode h6,
+body.dark-mode p, body.dark-mode span, body.dark-mode label,
+body.dark-mode li, body.dark-mode td, body.dark-mode th { color: inherit; }
 body.dark-mode input,
 body.dark-mode textarea,
 body.dark-mode select { color: #e2e8f0; }
 body.dark-mode table th,
 body.dark-mode table td { color: #e2e8f0; }
+body.dark-mode a { color: #93c5fd; }
 

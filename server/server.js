@@ -484,7 +484,7 @@ const sseClients = new Map(); // userId -> Set of response objects
 
 app.use(cors());
 app.use(express.json());
-app.use((req, res, next) => { console.log(new Date().toISOString(), req.method, req.url, 'Content-Type:', req.headers['content-type'] || 'none'); next(); });
+// (request logging disabled for performance)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, '../client/build')));
 
@@ -2384,11 +2384,17 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
       // Respond immediately so the UI never waits on slow SMTP; the email
       // is delivered in the background. If delivery fails, the OTP is
       // invalidated (same as before) so a retry issues a fresh code.
-      res.json({ message: 'Verification code sent to your email.', resent: true });
-      sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_SECONDS, req).catch(async (err) => {
-        console.error('[ForgotOTP] background SMTP send failed for', user.email, ':', (err && err.message) || err);
+      try {
+        await sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_SECONDS, req);
+      } catch (err) {
+        console.error('[ForgotOTP] SMTP send failed for', user.email, ':', (err && err.message) || err);
         try { await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE id = $1', [otpId]); } catch (e) { /* ignore */ }
-      });
+        const kind = (err && err.message) || '';
+        if (kind === 'SMTP_NO_SUCH_USER' || kind === 'SMTP_INVALID_DOMAIN') return res.status(400).json({ error: 'That email address does not exist or cannot receive mail. Please check the address and try again.' });
+        if (kind === 'SMTP_AUTH' || kind === 'SMTP_UNAVAILABLE' || kind === 'SMTP_TIMEOUT') return res.status(503).json({ error: 'Email service is temporarily unavailable. Please try again later.' });
+        return res.status(500).json({ error: 'Failed to send verification code. Please try again.' });
+      }
+      res.json({ message: 'Verification code sent to your email.', resent: true });
       return;
     }
   } catch (err) {
@@ -2592,15 +2598,20 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
       try { await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]); } catch (e) { /* ignore */ }
       return res.status(503).json({ error: 'Email service is not configured. Please contact the administrator.' });
     }
-    // Respond immediately so clicking Register never waits on SMTP; the
-    // email is delivered in the background. If delivery fails, the unsent
-    // code is removed so a retry sends fresh instead of hitting the
-    // cooldown and falsely reporting success.
-    res.json({ message: 'Verification code sent.', resent: true });
-    sendRegistrationVerificationEmail(email, name, code, req).catch(async (err) => {
-      console.error('[EmailVerify] background SMTP send failed for', email, ':', (err && err.message) || err);
+    // Deliver the OTP before reporting success so we never claim a code was
+    // sent when delivery actually failed. A failure removes the unsent code
+    // and returns a clear error so the user can retry.
+    try {
+      await sendRegistrationVerificationEmail(email, name, code, req);
+    } catch (err) {
+      console.error('[EmailVerify] SMTP send failed for', email, ':', (err && err.message) || err);
       try { await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]); } catch (e) { /* ignore */ }
-    });
+      const kind = (err && err.message) || '';
+      if (kind === 'SMTP_NO_SUCH_USER' || kind === 'SMTP_INVALID_DOMAIN') return res.status(400).json({ error: 'That email address does not exist or cannot receive mail. Please check the address and try again.' });
+      if (kind === 'SMTP_AUTH' || kind === 'SMTP_UNAVAILABLE' || kind === 'SMTP_TIMEOUT') return res.status(503).json({ error: 'Email service is temporarily unavailable. Please try again later.' });
+      return res.status(500).json({ error: 'Failed to send verification code. Please try again.' });
+    }
+    res.json({ message: 'Verification code sent.', resent: true });
     return;
   } catch (err) {
     console.error('Request email verification error:', err);

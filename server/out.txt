@@ -1,0 +1,31 @@
+RHMS Server running on http://localhost:5000
+user_groups table and groups ready
+system_settings table ready
+request_groups table ready
+feedback table ready
+categories ready
+requests columns ready
+company_name column ready
+ownership trail columns ready
+language column ready
+approved column ready
+moderated column ready
+google_id column ready
+companies table ready
+activity_log table ready
+statuses ready
+knowledge_base table ready
+announcements table ready
+sla_policies table ready
+tags and request_tags tables ready
+templates table ready
+attachments table ready
+notifications table ready
+comment_read_tracking table ready
+sessions table ready
+login_audit table ready
+password_reset_tokens table ready
+password_reset_otps table ready
+email_verification_codes table ready
+sla_tracking table ready
+request_watchers table ready

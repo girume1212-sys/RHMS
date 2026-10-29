@@ -459,7 +459,7 @@ export default function Signup() {
               ))}
             </div>
             <ValidationError message={errors.code} />
-            <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+            <p style={{ margin: '2px 0 0', fontSize: '13px', color: darkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)' }}>
               {t('common.verificationCodeHint')}
             </p>
           </div>
@@ -468,7 +468,7 @@ export default function Signup() {
               {t('common.backToDetails')}
             </button>
             {resendSeconds > 0 ? (
-              <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+              <span style={{ fontSize: '13px', color: darkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)' }}>
                 Resend in {resendSeconds}s
               </span>
             ) : (
