@@ -1,1 +1,2 @@
 ◇ injected env (15) from .env
+Failed to persist notification: insert or update on table "notifications" violates foreign key constraint "notifications_user_id_fkey"

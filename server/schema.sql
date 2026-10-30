@@ -65,7 +65,8 @@ CREATE TABLE groups (
   name VARCHAR(255) NOT NULL,
   description TEXT,
   color VARCHAR(20) DEFAULT '#6B7280',
-  company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL
+  company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL,
+  is_default BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE users (
@@ -78,6 +79,7 @@ CREATE TABLE users (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   group_id VARCHAR(50),
   company_name VARCHAR(255) DEFAULT '',
+  company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL,
   approved BOOLEAN DEFAULT false,
   login_attempts INTEGER DEFAULT 0,
   language VARCHAR(10) DEFAULT 'en',

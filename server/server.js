@@ -44,6 +44,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
       ON CONFLICT DO NOTHING
     `);
     await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS client_deleted BOOLEAN NOT NULL DEFAULT FALSE`);
     console.log('user_groups table and groups ready');
 
@@ -125,6 +126,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`ALTER TABLE comments ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT '[]'`);
     console.log('requests columns ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255) DEFAULT ''`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL`);
     console.log('company_name column ready');
     // Ownership trail for account reclaim after admin deletion: stores the
     // owner's verified email so a later verified re-registration with the same
@@ -1016,7 +1018,7 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
       : '') +
     `<tr><td style="padding:18px 32px 0;">` +
     closing.map(escPara).join('') +
-    `<p style="margin:16px 0 0;font-size:14px;line-height:1.7;color:#E8EEFF;"><strong style="color:#ffffff;">Best regards,</strong><br><strong style="color:#ffffff;">RHMS Support Team</strong></p>` +
+    `<p style="margin:16px 0 0;font-size:14px;line-height:1.7;color:#E8EEFF;"><strong style="color:#ffffff;">Thank you,</strong><br><strong style="color:#ffffff;">RHMS Notification System</strong></p>` +
     `</td></tr>` +
     (appLink
       ? `<tr><td align="center" style="padding:24px 32px 8px;">` +
@@ -1040,7 +1042,7 @@ function buildRequestWorkflowText({ title, greetingName, lead, groupLine, status
     (resolution != null ? `Resolution\n${resolution}\n\n` : '') +
     (extraSection != null ? `${extraSection.title}\n${extraSection.body}\n\n` : '') +
     closing.join('\n\n') +
-    `\n\nBest regards,\nRHMS Support Team`
+    `\n\nThank you,\nRHMS Notification System`
   );
 }
 
@@ -1094,10 +1096,16 @@ async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
-    const grp = await pool.query(
-      'SELECT g.id, g.name FROM request_groups rg JOIN groups g ON g.id = rg.group_id WHERE rg.request_id = $1',
+    let grp = await pool.query(
+      'SELECT g.id, g.name FROM requests r JOIN groups g ON g.id = r.assigned_group WHERE r.id = $1',
       [requestId]
     );
+    if (grp.rows.length === 0) {
+      grp = await pool.query(
+        'SELECT g.id, g.name FROM request_groups rg JOIN groups g ON g.id = rg.group_id WHERE rg.request_id = $1',
+        [requestId]
+      );
+    }
     if (grp.rows.length === 0) { console.log('[WorkflowEmail:group-new] skipped — request has no group'); return; }
     const emailed = new Set();
     for (const g of grp.rows) {
@@ -1127,31 +1135,27 @@ async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, s
     const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
     const clientName = ctx.client_name || 'a client';
     const members = await getAssignmentGroupRecipients(groupId);
+    const companyName = ctx.client_company || 'N/A';
     for (const m of members) {
-      if (m.role !== 'developer' && m.role !== 'support') continue;
+      if (m.role !== 'developer') continue;
       if (submitterId && String(m.id) === String(submitterId)) continue;
-      const isDeveloper = m.role === 'developer';
-      const subject = isDeveloper
-        ? `New Support Request Assigned to Your Group - #${requestId}`
-        : `New Support Request for Your Group - #${requestId}`;
+      const subject = `New Request from ${companyName} – Submitted by ${clientName}`;
       fireWorkflowEmail({
         to: m.email,
         subject,
         tag: 'group-new', req, requestId,
         body: {
-          title: isDeveloper ? 'New Support Request Assigned to Your Group' : 'New Support Request for Your Group',
-          greetingName: m.name || (isDeveloper ? 'Developer' : 'Team Member'),
-          lead: `A new support request has been submitted by ${clientName} and is associated with your group. ` +
-            (isDeveloper
-              ? 'Please review the request details below and take the appropriate action according to the RHMS support workflow.'
-              : 'Please review the request details below and take the appropriate action according to the RHMS escalation workflow.'),
+          title: 'New Request Notification',
+          greetingName: m.name || 'Developer',
+          lead: `A new service request has been submitted by ${clientName} from ${companyName} company and has been assigned to your support group.`,
           groupLine: groupName,
           statusBadge: 'NEW',
           infoRows:
             workflowInfoRow('Request ID', `#${requestId}`) +
-            workflowInfoRow('Client', ctx.client_name || 'N/A') +
+            workflowInfoRow('Request Title', ctx.subject || 'N/A') +
+            workflowInfoRow('Company Name', companyName) +
+            workflowInfoRow('Submitted By', clientName) +
             workflowInfoRow('Client Email', clientEmail) +
-            workflowInfoRow('Group', groupName) +
             `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;">` +
             `<span style="color:#60A5FA;">&#8226;&nbsp;&nbsp;</span>` +
             `<strong style="color:#BFDBFE;">Category:</strong> ` +
@@ -1162,17 +1166,16 @@ async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, s
             `<strong style="color:#BFDBFE;">Priority:</strong> ` +
             `<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#ffffff;background:${ctx.priority_color || '#6B7280'};">${escapeEmailHtml(ctx.priority_name || 'N/A')}</span>` +
             `</td></tr>` +
-            workflowInfoRow('Submitted On', submittedOn),
+            workflowInfoRow('Assigned Group', groupName) +
+            workflowInfoRow('Submitted Date', submittedOn) +
+            workflowInfoRow('Current Status', ctx.status_name || 'N/A'),
           infoText:
-            `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\nGroup: ${groupName}\nCategory: ${category}\n` +
-            `Priority: ${ctx.priority_name || 'N/A'}\nSubmitted On: ${submittedOn}`,
+            `Request ID: #${requestId}\nRequest Title: ${ctx.subject || 'N/A'}\nCompany Name: ${companyName}\nSubmitted By: ${clientName}\nClient Email: ${clientEmail}\nCategory: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\nAssigned Group: ${groupName}\nSubmitted Date: ${submittedOn}\nCurrent Status: ${ctx.status_name || 'N/A'}`,
           detailsTitle: ctx.subject,
           detailsBody: ctx.description || 'N/A',
           resolution: null,
           closing: [
-            isDeveloper
-              ? 'Please review the request and proceed with the necessary action.'
-              : 'Please review the request and take the necessary action according to the escalation workflow.',
+            'Please log in to the RHMS Developer Dashboard to review this request and begin handling it.',
           ],
         },
       });
@@ -1470,7 +1473,7 @@ async function getEscalationNote(requestId) {
 // Recipients are the support-role members of the request's request_groups
 // rows via getAssignmentGroupRecipients; the escalator is excluded so they
 // never email themselves.
-async function emailEscalationTeamOnEscalation(requestId, escalator, req) {
+async function emailEscalationTeamOnEscalation(requestId, escalator, req, previousGroupId) {
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
@@ -1481,10 +1484,23 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req) {
     if (grp.rows.length === 0) { console.log('[WorkflowEmail:escalated] skipped — request has no group'); return; }
     const category = workflowCategoryOf(ctx);
     const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
+    const companyName = ctx.client_company || 'N/A';
+    const clientName = ctx.client_name || 'a client';
     const escalatedOn = formatEmailDateTime(ctx.updated_at);
     const note = await getEscalationNote(requestId);
     const escalatorName = (escalator && escalator.name) || 'A developer';
     const escalatorId = escalator && escalator.id;
+    // Resolve previous (original) group name
+    let previousGroupName = 'N/A';
+    const prevId = previousGroupId || ctx.assigned_group; // fallback
+    // previousGroupId passed is original before escalation; prefer it
+    const effectivePrevId = previousGroupId || null;
+    if (effectivePrevId) {
+      const pg = await pool.query('SELECT name FROM groups WHERE id = $1', [effectivePrevId]);
+      if (pg.rows.length > 0) previousGroupName = pg.rows[0].name;
+    } else if (ctx.group_name) {
+      previousGroupName = ctx.group_name;
+    }
     let sent = 0;
     const alreadyEmailed = new Set();
     for (const g of grp.rows) {
@@ -1496,33 +1512,39 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req) {
         if (alreadyEmailed.has(key)) continue;
         alreadyEmailed.add(key);
         sent += 1;
+        const subject = `Request Escalated – ${companyName} – Submitted by ${clientName}`;
         fireWorkflowEmail({
           to: m.email,
-          subject: `Support Request Escalated to Your Team - #${requestId}`,
+          subject,
           tag: 'escalated', req, requestId,
           body: {
-            title: 'Support Request Escalated to Your Team',
+            title: 'Request Escalation Notification',
             greetingName: m.name || 'Team Member',
-            lead: `A support request from ${ctx.client_name || 'a client'} has been escalated to your team and requires your attention.`,
+            lead: `A service request originally submitted by **${clientName}** from **${companyName}** has been escalated to your team by developer **${escalatorName}**.`,
             groupLine: g.name,
             statusBadge: 'ESCALATED',
             infoRows:
               workflowInfoRow('Request ID', `#${requestId}`) +
-              workflowInfoRow('Client', ctx.client_name || 'N/A') +
+              workflowInfoRow('Request Title', ctx.subject || 'N/A') +
+              workflowInfoRow('Company Name', companyName) +
+              workflowInfoRow('Original Client', clientName) +
               workflowInfoRow('Client Email', clientEmail) +
-              workflowInfoRow('Group', g.name) +
-              workflowInfoRow('Category', category) +
+              workflowInfoRow('Request Category', category) +
               workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+              workflowInfoRow('Previous Assigned Group', previousGroupName) +
+              workflowInfoRow('Escalated To', g.name) +
               workflowInfoRow('Escalated By', escalatorName) +
-              workflowInfoRow('Escalated On', escalatedOn),
+              workflowInfoRow('Escalation Date', escalatedOn) +
+              workflowInfoRow('Current Status', ctx.status_name || 'N/A'),
             infoText:
-              `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\nGroup: ${g.name}\nCategory: ${category}\n` +
-              `Priority: ${ctx.priority_name || 'N/A'}\nEscalated By: ${escalatorName}\nEscalated On: ${escalatedOn}`,
+              `Request ID: #${requestId}\nRequest Title: ${ctx.subject || 'N/A'}\nCompany Name: ${companyName}\nOriginal Client: ${clientName}\nClient Email: ${clientEmail}\nRequest Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\nPrevious Assigned Group: ${previousGroupName}\nEscalated To: ${g.name}\nEscalated By: ${escalatorName}\nEscalation Date: ${escalatedOn}\nCurrent Status: ${ctx.status_name || 'N/A'}`,
             detailsTitle: ctx.subject,
             detailsBody: ctx.description || 'N/A',
             resolution: null,
-            extraSection: { title: "Developer's Escalation Note", body: note },
-            closing: ['Please review the request and take the necessary action.'],
+            extraSection: { title: 'Reason for Escalation', body: note },
+            closing: [
+              'Please log in to the RHMS Escalation Dashboard to review the request and take the appropriate action.',
+            ],
           },
         });
       }
@@ -3589,13 +3611,30 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     emailAdminOnNewRequest(id, req);
     // Automatic email to the Developer/Escalation Team members of the
     // group(s) the new request belongs to (fire-and-forget).
-    // Auto-assign request to the client's company default group, if configured.
+    // Auto-assign request to the client's company's designated (default/primary)
+    // support group, if configured. Uses actual company IDs, not name matching.
     try {
-      const cg = await pool.query("SELECT g.id FROM groups g JOIN companies c ON c.id = g.company_id JOIN users u ON u.company_name = c.name WHERE u.id = $1 LIMIT 1", [clientId]);
-      if (cg.rows.length > 0) {
-        await pool.query('UPDATE requests SET assigned_group = $1 WHERE id = $2', [cg.rows[0].id, id]);
+      const clientRow = await pool.query('SELECT company_id, company_name FROM users WHERE id = $1', [clientId]);
+      let companyId = clientRow.rows[0]?.company_id || null;
+      if (!companyId && clientRow.rows[0]?.company_name) {
+        const c = await pool.query('SELECT id FROM companies WHERE name = $1 LIMIT 1', [clientRow.rows[0].company_name]);
+        companyId = c.rows[0]?.id || null;
       }
-    } catch (e) { /* best-effort */ }
+      if (companyId) {
+        const cg = await pool.query(
+          'SELECT id FROM groups WHERE company_id = $1 ORDER BY is_default DESC NULLS LAST, id ASC LIMIT 1',
+          [companyId]
+        );
+        if (cg.rows.length > 0) {
+          const groupId = cg.rows[0].id;
+          await pool.query('UPDATE requests SET assigned_group = $1 WHERE id = $2', [groupId, id]);
+          await pool.query('INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, groupId]);
+        } else {
+          console.log(`[WorkflowEmail:auto-assign] no group configured for company ${companyId}; request ${id} left unassigned for admin`);
+          notifyAdmins(`New request #${id} requires manual assignment (no support group configured for company)`, { type: 'manual_assignment_needed', requestId: id, userId: req.user.id, userName: req.user.name });
+        }
+      }
+    } catch (e) { console.error('[auto-assign] failed:', e.message); }
     emailGroupMembersOnNewRequest(id, req.user.id, req);
 
     res.status(201).json({ id, subject, description, clientId, categoryId: effectiveCategoryId, customCategory: customCategoryValue, priorityId: priorityId || '2', statusId: '1', assignedTo: null, attachments: attachments || [], createdAt: now, updatedAt: now });
@@ -3772,7 +3811,7 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       // only point at which the Escalation Team is emailed for an
       // escalation-driven flow.
       if (statusId === '9' || statusName === 'Escalated') {
-        emailEscalationTeamOnEscalation(req.params.id, { id: req.user.id, name: req.user.name }, req);
+        emailEscalationTeamOnEscalation(req.params.id, { id: req.user.id, name: req.user.name }, req, existing.rows[0].assigned_group);
       }
     }
 
@@ -4962,6 +5001,10 @@ app.post('/api/groups', authMiddleware, roleMiddleware('admin'), async (req, res
   try {
     const { name, description, color, company_id } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
+    if (company_id) {
+      const existing = await pool.query('SELECT id, name FROM groups WHERE company_id = $1 LIMIT 1', [company_id]);
+      if (existing.rows.length > 0) return res.status(400).json({ error: 'This company is already assigned to another support group' });
+    }
     const id = uuidv4();
     const result = await pool.query(
       'INSERT INTO groups (id, name, description, color, company_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
@@ -4977,6 +5020,10 @@ app.post('/api/groups', authMiddleware, roleMiddleware('admin'), async (req, res
 app.put('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const { name, description, color, company_id } = req.body;
+    if (company_id) {
+      const existing = await pool.query('SELECT id FROM groups WHERE company_id = $1 AND id <> $2 LIMIT 1', [company_id, req.params.id]);
+      if (existing.rows.length > 0) return res.status(400).json({ error: 'This company is already assigned to another support group' });
+    }
     const result = await pool.query(
       'UPDATE groups SET name = COALESCE($1, name), description = COALESCE($2, description), color = COALESCE($3, color), company_id = $4 WHERE id = $5 RETURNING *',
       [name, description, color, company_id ?? null, req.params.id]
