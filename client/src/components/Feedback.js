@@ -46,6 +46,12 @@ export default function Feedback() {
   }, []);
 
   useEffect(() => { loadFeedback(); }, []);
+  useEffect(() => {
+    const id = setInterval(loadFeedback, 60000);
+    const onVis = () => { if (document.visibilityState === 'visible') loadFeedback(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
+  }, []);
 
   const loadFeedback = () => {
     setError('');
@@ -206,61 +212,68 @@ export default function Feedback() {
               else { periodStart = new Date(now.getFullYear(), now.getMonth(), 1); periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999); }
               const periodFeedback = feedback.filter(f => { const d = new Date(f.created_at); return d >= periodStart && d <= periodEnd; });
               const cats = [
-                { key: 'verySatisfied', label: 'Very Satisfied', color: '#059669' },
-                { key: 'satisfied', label: 'Satisfied', color: '#10B981' },
-                { key: 'neutral', label: 'Neutral', color: '#F59E0B' },
+                { key: 'verySatisfied', label: 'Very Satisfied', color: '#22C55E' },
+                { key: 'satisfied', label: 'Satisfied', color: '#0EA5E9' },
+                { key: 'neutral', label: 'Neutral', color: '#FACC15' },
                 { key: 'dissatisfied', label: 'Dissatisfied', color: '#F97316' },
-                { key: 'veryDissatisfied', label: 'Very Dissatisfied', color: '#DC2626' },
+                { key: 'veryDissatisfied', label: 'Very Dissatisfied', color: '#EF4444' },
               ];
               const counts = cats.map(c => ({ ...c, count: periodFeedback.filter(f => satisfactionFor(f.rating).key === c.key).length }));
               const total = periodFeedback.length || 1;
-              // Build time-series buckets for the chart (like Requests Overview).
+              // Build time-series buckets for the chart (7 days / 7 weeks / 12 months).
+              const emptyBucket = (label) => ({ label, ...Object.fromEntries(cats.map(c => [c.key, 0])) });
               let buckets = [];
               if (period === 'daily') {
+                const days = [];
+                for (let i = 6; i >= 0; i--) {
+                  const d = new Date(now); d.setDate(now.getDate() - i); d.setHours(0,0,0,0);
+                  days.push(d);
+                }
                 const map = {};
-                periodFeedback.forEach(f => {
+                days.forEach(d => { const key = d.toISOString().slice(0,10); map[key] = emptyBucket(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })); });
+                feedback.forEach(f => {
                   const d = new Date(f.created_at);
-                  const key = d.toISOString().slice(0, 10);
-                  if (!map[key]) {
-                    const [y, m, day] = key.split('-').map(Number);
-                    map[key] = { label: new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), key, ...Object.fromEntries(cats.map(c => [c.key, 0])) };
-                  }
-                  map[key][satisfactionFor(f.rating).key] += 1;
+                  const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0,10);
+                  if (map[key]) map[key][satisfactionFor(f.rating).key] += 1;
                 });
-                buckets = Object.keys(map).sort().map(k => map[k]);
+                buckets = days.map(d => map[d.toISOString().slice(0,10)]);
               } else if (period === 'weekly') {
-                const map = {};
-                periodFeedback.forEach(f => {
-                  const d = new Date(f.created_at);
-                  const day = d.getDay();
-                  const diff = (day === 0 ? -6 : 1 - day);
+                const weeks = [];
+                for (let i = 6; i >= 0; i--) {
+                  const d = new Date(now); d.setDate(now.getDate() - i*7);
+                  const day = d.getDay(); const diff = (day === 0 ? -6 : 1 - day);
                   const monday = new Date(d); monday.setDate(d.getDate() + diff); monday.setHours(0,0,0,0);
-                  const key = monday.toISOString().slice(0, 10);
-                  if (!map[key]) {
-                    map[key] = { label: monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), key, ...Object.fromEntries(cats.map(c => [c.key, 0])) };
-                  }
-                  map[key][satisfactionFor(f.rating).key] += 1;
-                });
-                buckets = Object.keys(map).sort().map(k => map[k]);
-              } else {
+                  weeks.push(monday);
+                }
+                // dedupe by monday
+                const seen = new Set();
+                const uniqueWeeks = weeks.filter(w => { const k = w.toISOString().slice(0,10); if (seen.has(k)) return false; seen.add(k); return true; });
                 const map = {};
-                periodFeedback.forEach(f => {
+                uniqueWeeks.forEach(w => { const key = w.toISOString().slice(0,10); map[key] = emptyBucket(w.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })); });
+                feedback.forEach(f => {
                   const d = new Date(f.created_at);
-                  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                  if (!map[key]) {
-                    map[key] = { label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), key, ...Object.fromEntries(cats.map(c => [c.key, 0])) };
-                  }
-                  map[key][satisfactionFor(f.rating).key] += 1;
+                  const day = d.getDay(); const diff = (day === 0 ? -6 : 1 - day);
+                  const monday = new Date(d); monday.setDate(d.getDate() + diff); monday.setHours(0,0,0,0);
+                  const key = monday.toISOString().slice(0,10);
+                  if (map[key]) map[key][satisfactionFor(f.rating).key] += 1;
                 });
-                buckets = Object.keys(map).sort().map(k => map[k]);
+                buckets = uniqueWeeks.map(w => map[w.toISOString().slice(0,10)]);
+              } else {
+                const months = [];
+                for (let i = 11; i >= 0; i--) {
+                  const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                  months.push(d);
+                }
+                const map = {};
+                months.forEach(m => { const key = `${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,'0')}`; map[key] = emptyBucket(m.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })); });
+                feedback.forEach(f => {
+                  const d = new Date(f.created_at);
+                  const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                  if (map[key]) map[key][satisfactionFor(f.rating).key] += 1;
+                });
+                buckets = months.map(m => map[`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,'0')}`]);
               }
-              const fixedLabels = ['Aug 24', 'Dec 17', 'Apr 11', 'Aug 4', 'Nov 27', 'Mar 22', 'Jul 15'];
-              const chartData = fixedLabels.map((lbl, i) => {
-                const b = buckets[i] || {};
-                const o = { label: lbl };
-                cats.forEach(c => { o[c.key] = b[c.key] || 0; });
-                return o;
-              });
+              const chartData = buckets;
               const avgRating = periodFeedback.length ? (periodFeedback.reduce((s,f)=>s+Number(f.rating||0),0)/periodFeedback.length) : 0;
               const posRate = periodFeedback.length ? ((counts.find(c=>c.key==='satisfied').count + counts.find(c=>c.key==='verySatisfied').count)/periodFeedback.length*100) : 0;
               const negRate = periodFeedback.length ? ((counts.find(c=>c.key==='dissatisfied').count + counts.find(c=>c.key==='veryDissatisfied').count)/periodFeedback.length*100) : 0;
@@ -315,7 +328,7 @@ export default function Feedback() {
                               return (
                                 <div key={r} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                                   <span style={{ width: '12px', fontWeight: 600 }}>{r}</span>
-                                  <span style={{ color: '#0EA5E9' }}>★</span>
+                                  <span style={{ color: '#FACC15' }}>★</span>
                                   <div style={{ flex: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
                                     <div style={{ width: `${width}%`, height: '100%', background: `linear-gradient(90deg, ${grads[5-r].split(',')[0]}, ${grads[5-r].split(',')[1]})`, borderRadius: '4px', transition: 'width 0.3s' }} />
                                   </div>
@@ -334,7 +347,7 @@ export default function Feedback() {
                       <h4 style={{ margin: 0 }}>Client Satisfaction Trends</h4>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         {['daily', 'weekly', 'monthly'].map(p => (
-                          <button key={p} className={period === p ? 'btn btn-primary' : 'btn btn-outline'} style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => setPeriod(p)}>
+                          <button key={p} type="button" className={period === p ? 'btn btn-primary' : 'btn btn-outline'} style={{ padding: '0px 10px', fontSize: '9px', height: '10px', lineHeight: '8px', background: period === p ? 'linear-gradient(135deg, #C3CFF6 0%, #B9C9F5 45%, #D5DEF9 100%)' : undefined, border: period === p ? 'none' : undefined, color: period === p ? '#fff' : undefined }} onClick={() => setPeriod(p)}>
                             {p.charAt(0).toUpperCase() + p.slice(1)}
                           </button>
                         ))}
@@ -347,10 +360,16 @@ export default function Feedback() {
                     <ResponsiveContainer width="100%" height={260} key={period}>
                       <AreaChart data={chartData}>
                         <defs>
-                          {cats.map(c => (
-                            <linearGradient key={c.key} id={`grad-${c.key}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor={c.color} stopOpacity={0.35} />
-                              <stop offset="100%" stopColor={c.color} stopOpacity={0.02} />
+                          {[
+                            { key: 'verySatisfied', dark: '#166534', light: '#86EFAC' },
+                            { key: 'satisfied', dark: '#0369A1', light: '#7DD3FC' },
+                            { key: 'neutral', dark: '#CA8A04', light: '#FDE68A' },
+                            { key: 'dissatisfied', dark: '#C2410C', light: '#FDBA74' },
+                            { key: 'veryDissatisfied', dark: '#B91C1C', light: '#FCA5A5' },
+                          ].map(g => (
+                            <linearGradient key={g.key} id={`grad-${g.key}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={g.dark} stopOpacity={0.45} />
+                              <stop offset="100%" stopColor={g.light} stopOpacity={0.03} />
                             </linearGradient>
                           ))}
                         </defs>
@@ -369,7 +388,7 @@ export default function Feedback() {
                         <YAxis allowDecimals={false} domain={[0, 'auto']} width={50} label={{ value: 'Number of Clients', angle: -90, position: 'insideLeft', fill: '#6b7280', style: { textAnchor: 'middle' } }} />
                         <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', color: '#f8fafc', borderRadius: '8px' }} />
                         {cats.map(c => (
-                          <Area key={c.key} type="monotone" dataKey={c.key} name={c.label} stroke={c.color} fill={`url(#grad-${c.key})`} />
+                          <Area key={c.key} type="monotone" dataKey={c.key} name={c.label} stroke={c.color} strokeWidth={2} fill={`url(#grad-${c.key})`} dot={{ r: 3, fill: c.color }} />
                         ))}
                       </AreaChart>
                     </ResponsiveContainer>
