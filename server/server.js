@@ -913,7 +913,6 @@ async function getRequestEmailContext(requestId) {
   const r = await pool.query(
     `SELECT r.id, r.subject, r.description, r.client_id, r.client_email,
             r.created_at, r.updated_at, r.custom_category,
-            c.name AS category_name, p.name AS priority_name, s.name AS status_name,
             u.name AS client_name, u.email AS client_account_email,
             u.role AS client_role, u.company_name AS client_company,
             u.created_at AS client_since,
@@ -945,7 +944,7 @@ function workflowInfoRow(label, value) {
   return (
     `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;">` +
     `<span style="color:#60A5FA;">&#8226;&nbsp;&nbsp;</span>` +
-    `<strong style="color:#BFDBFE;">${escapeEmailHtml(label)}:</strong> ${escapeEmailHtml(value)}` +
+    `<strong style="color:#BFDBFE;">${escapeEmailHtml(label)}:</strong> ` + ((label === 'Rating' || label === 'Category' || label === 'Priority') ? `<span style="color:#FACC15;font-weight:700;">${escapeEmailHtml(value)}</span>` : escapeEmailHtml(value)) +
     `</td></tr>`
   );
 }
@@ -962,7 +961,7 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
   const appLink = req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '';
-  const badgeColors = { NEW: '#3B82F6', ASSIGNED: '#8B5CF6', ESCALATED: '#EF4444', RESOLVED: '#10B981' };
+  const badgeColors = { NEW: '#3B82F6', ASSIGNED: '#8B5CF6', ESCALATED: '#EF4444', RESOLVED: '#10B981', FEEDBACK: '#10B981' };
   const badgeColor = (statusBadge && badgeColors[statusBadge]) || '#3B82F6';
   const para = (t) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#E8EEFF;">${t}</p>`;
   const escPara = (t) => para(escapeEmailHtml(t));
@@ -1155,8 +1154,16 @@ async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, s
             workflowInfoRow('Client', ctx.client_name || 'N/A') +
             workflowInfoRow('Client Email', clientEmail) +
             workflowInfoRow('Group', groupName) +
-            workflowInfoRow('Category', category) +
-            workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
+            `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;">` +
+            `<span style="color:#60A5FA;">&#8226;&nbsp;&nbsp;</span>` +
+            `<strong style="color:#BFDBFE;">Category:</strong> ` +
+            `<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#ffffff;background:${ctx.category_color || '#6B7280'};">${escapeEmailHtml(category)}</span>` +
+            `</td></tr>` +
+            `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;">` +
+            `<span style="color:#60A5FA;">&#8226;&nbsp;&nbsp;</span>` +
+            `<strong style="color:#BFDBFE;">Priority:</strong> ` +
+            `<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#ffffff;background:${ctx.priority_color || '#6B7280'};">${escapeEmailHtml(ctx.priority_name || 'N/A')}</span>` +
+            `</td></tr>` +
             workflowInfoRow('Submitted On', submittedOn),
           infoText:
             `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\nGroup: ${groupName}\nCategory: ${category}\n` +
@@ -1224,17 +1231,13 @@ async function emailAdminOnFeedback(requestId, rating, comment, req) {
     const stars = '★'.repeat(Math.min(5, Math.max(1, parseInt(rating) || 0)));
     let sent = 0;
     for (const a of recipients) {
-      if (!(await isEmailVerified(a.email))) {
-        console.log(`[WorkflowEmail:feedback] skipped — ${a.email} is not a verified email`);
-        continue;
-      }
       sent += 1;
       fireWorkflowEmail({
         to: a.email,
         subject: `New Feedback Received - #${requestId}`,
         tag: 'feedback', req, requestId,
         body: {
-          title: 'New Feedback Received',
+          title: 'New Client Feedback Received',
           greetingName: a.name || 'Admin',
           lead: `A client has submitted feedback on request #${requestId}.`,
           statusBadge: 'FEEDBACK',
