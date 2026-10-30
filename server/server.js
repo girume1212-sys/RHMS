@@ -746,7 +746,10 @@ async function isEmailVerified(email) {
       'SELECT 1 FROM email_verification_codes WHERE LOWER(email) = LOWER($1) AND used_at IS NOT NULL LIMIT 1',
       [String(email).trim()]
     );
-    return r.rows.length > 0;
+    if (r.rows.length > 0) return true;
+    // Google sign-in users are already verified by Google.
+    const g = await pool.query("SELECT 1 FROM users WHERE LOWER(email) = LOWER($1) AND google_id IS NOT NULL LIMIT 1", [String(email).trim()]);
+    return g.rows.length > 0;
   } catch (e) {
     console.error('[WorkflowEmail] verification lookup failed:', e.message);
     return false;
@@ -913,6 +916,9 @@ async function getRequestEmailContext(requestId) {
   const r = await pool.query(
     `SELECT r.id, r.subject, r.description, r.client_id, r.client_email,
             r.created_at, r.updated_at, r.custom_category,
+            c.name AS category_name, c.color AS category_color,
+            p.name AS priority_name, p.color AS priority_color,
+            s.name AS status_name,
             u.name AS client_name, u.email AS client_account_email,
             u.role AS client_role, u.company_name AS client_company,
             u.created_at AS client_since,
@@ -1124,14 +1130,6 @@ async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, s
     for (const m of members) {
       if (m.role !== 'developer' && m.role !== 'support') continue;
       if (submitterId && String(m.id) === String(submitterId)) continue;
-      if (!(await isEmailVerified(m.email))) {
-        console.log(`[WorkflowEmail:group-new] skipped — ${m.email} is not a verified email`);
-        continue;
-      }
-      const key = `${m.id}|${groupId}`;
-      if (alreadyEmailed.has(key)) continue;
-      alreadyEmailed.add(key);
-      emailedKeys.push(key);
       const isDeveloper = m.role === 'developer';
       const subject = isDeveloper
         ? `New Support Request Assigned to Your Group - #${requestId}`
@@ -1310,7 +1308,11 @@ async function emailAdminOnNewRequest(requestId, req) {
             workflowInfoRow('Group', groupNames) +
             workflowInfoRow('Category', category) +
             workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
-            workflowInfoRow('Status', ctx.status_name || 'N/A') +
+            `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;">` +
+            `<span style="color:#60A5FA;">&#8226;&nbsp;&nbsp;</span>` +
+            `<strong style="color:#BFDBFE;">Status:</strong> ` +
+            `<span style="color:${ctx.status_color || '#3B82F6'};font-weight:700;">${escapeEmailHtml(ctx.status_name || 'N/A')}</span>` +
+            `</td></tr>` +
             workflowInfoRow('Submitted On', submittedOn),
           infoText:
             `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nClient Email: ${clientEmail}\n` +
@@ -1490,10 +1492,6 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req) {
       for (const m of members) {
         if (m.role !== 'support') continue;
         if (escalatorId && String(m.id) === String(escalatorId)) continue;
-        if (!(await isEmailVerified(m.email))) {
-          console.log(`[WorkflowEmail:escalated] skipped — ${m.email} is not a verified email`);
-          continue;
-        }
         const key = `${m.id}|${g.id}`;
         if (alreadyEmailed.has(key)) continue;
         alreadyEmailed.add(key);
@@ -3591,6 +3589,13 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     emailAdminOnNewRequest(id, req);
     // Automatic email to the Developer/Escalation Team members of the
     // group(s) the new request belongs to (fire-and-forget).
+    // Auto-assign request to the client's company default group, if configured.
+    try {
+      const cg = await pool.query("SELECT g.id FROM groups g JOIN companies c ON c.id = g.company_id JOIN users u ON u.company_name = c.name WHERE u.id = $1 LIMIT 1", [clientId]);
+      if (cg.rows.length > 0) {
+        await pool.query('UPDATE requests SET assigned_group = $1 WHERE id = $2', [cg.rows[0].id, id]);
+      }
+    } catch (e) { /* best-effort */ }
     emailGroupMembersOnNewRequest(id, req.user.id, req);
 
     res.status(201).json({ id, subject, description, clientId, categoryId: effectiveCategoryId, customCategory: customCategoryValue, priorityId: priorityId || '2', statusId: '1', assignedTo: null, attachments: attachments || [], createdAt: now, updatedAt: now });

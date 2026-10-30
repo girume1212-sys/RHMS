@@ -402,6 +402,15 @@ export default function Groups() {
                 <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div className="form-group">
+                <label>{t("common.company")}</label>
+                <select value={form.company_id} onChange={(e) => setForm({ ...form, company_id: e.target.value })}>
+                  <option value="">{companies.length === 0 ? "No companies available. Create one in Company Management." : "Select company"}</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
                 <label>{t('common.description')}</label>
                 <input type="text" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
               </div>
