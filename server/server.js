@@ -1290,17 +1290,13 @@ async function emailAdminOnNewRequest(requestId, req) {
     const submittedOn = formatEmailDateTime(ctx.created_at);
     let sent = 0;
     for (const a of recipients) {
-      if (!(await isEmailVerified(a.email))) {
-        console.log(`[WorkflowEmail:new-request] skipped — ${a.email} is not a verified email`);
-        continue;
-      }
       sent += 1;
       fireWorkflowEmail({
         to: a.email,
-        subject: `New Support Request Received - #${requestId}`,
+        subject: 'New Request Submitted - RHMS Notification',
         tag: 'new-request', req, requestId,
         body: {
-          title: 'New Support Request Received',
+          title: 'New Request Submitted',
           greetingName: a.name || 'Admin',
           lead: `A new support request has been submitted by ${ctx.client_name || 'a client'} and is awaiting your review.`,
           statusBadge: 'NEW',
