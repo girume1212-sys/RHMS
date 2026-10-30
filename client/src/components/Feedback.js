@@ -200,18 +200,11 @@ export default function Feedback() {
           <div style={{ marginBottom: '24px' }}>
             {(() => {
               const now = new Date();
-              // Aggregate all feedback into time buckets based on the selected
-              // period (like Requests Overview), instead of filtering to a
-              // single day/week/month.
-              const periodFeedback = feedback.filter(f => {
-                const d = new Date(f.created_at);
-                if (period === 'daily') return d.toDateString() === now.toDateString();
-                if (period === 'weekly') {
-                  const start = new Date(now); start.setDate(now.getDate() - now.getDay()); start.setHours(0,0,0,0);
-                  return d >= start;
-                }
-                return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-              });
+              let periodStart, periodEnd;
+              if (period === 'daily') { periodStart = new Date(now); periodStart.setHours(0,0,0,0); periodEnd = new Date(now); periodEnd.setHours(23,59,59,999); }
+              else if (period === 'weekly') { const d = now.getDay(); const diff = (d === 0 ? -6 : 1 - d); periodStart = new Date(now); periodStart.setDate(now.getDate() + diff); periodStart.setHours(0,0,0,0); periodEnd = new Date(periodStart); periodEnd.setDate(periodStart.getDate() + 6); periodEnd.setHours(23,59,59,999); }
+              else { periodStart = new Date(now.getFullYear(), now.getMonth(), 1); periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999); }
+              const periodFeedback = feedback.filter(f => { const d = new Date(f.created_at); return d >= periodStart && d <= periodEnd; });
               const cats = [
                 { key: 'verySatisfied', label: 'Very Satisfied', color: '#059669' },
                 { key: 'satisfied', label: 'Satisfied', color: '#10B981' },
@@ -225,7 +218,7 @@ export default function Feedback() {
               let buckets = [];
               if (period === 'daily') {
                 const map = {};
-                feedback.forEach(f => {
+                periodFeedback.forEach(f => {
                   const d = new Date(f.created_at);
                   const key = d.toISOString().slice(0, 10);
                   if (!map[key]) {
@@ -237,7 +230,7 @@ export default function Feedback() {
                 buckets = Object.keys(map).sort().map(k => map[k]);
               } else if (period === 'weekly') {
                 const map = {};
-                feedback.forEach(f => {
+                periodFeedback.forEach(f => {
                   const d = new Date(f.created_at);
                   const day = d.getDay();
                   const diff = (day === 0 ? -6 : 1 - day);
@@ -251,7 +244,7 @@ export default function Feedback() {
                 buckets = Object.keys(map).sort().map(k => map[k]);
               } else {
                 const map = {};
-                feedback.forEach(f => {
+                periodFeedback.forEach(f => {
                   const d = new Date(f.created_at);
                   const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                   if (!map[key]) {
@@ -261,28 +254,80 @@ export default function Feedback() {
                 });
                 buckets = Object.keys(map).sort().map(k => map[k]);
               }
-              const chartData = buckets;
+              const fixedLabels = ['Aug 24', 'Dec 17', 'Apr 11', 'Aug 4', 'Nov 27', 'Mar 22', 'Jul 15'];
+              const chartData = fixedLabels.map((lbl, i) => {
+                const b = buckets[i] || {};
+                const o = { label: lbl };
+                cats.forEach(c => { o[c.key] = b[c.key] || 0; });
+                return o;
+              });
+              const avgRating = periodFeedback.length ? (periodFeedback.reduce((s,f)=>s+Number(f.rating||0),0)/periodFeedback.length) : 0;
+              const posRate = periodFeedback.length ? ((counts.find(c=>c.key==='satisfied').count + counts.find(c=>c.key==='verySatisfied').count)/periodFeedback.length*100) : 0;
+              const negRate = periodFeedback.length ? ((counts.find(c=>c.key==='dissatisfied').count + counts.find(c=>c.key==='veryDissatisfied').count)/periodFeedback.length*100) : 0;
+              const followup = counts.find(c=>c.key==='dissatisfied').count + counts.find(c=>c.key==='veryDissatisfied').count;
               return (
+                <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '16px' }}>
+                  <div style={{ background: 'linear-gradient(135deg,#3b82f6,#06b6d4)', color: '#fff', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ fontSize: '12px', opacity: 0.9 }}>Average Satisfaction Rating</div>
+                    <div style={{ fontSize: '28px', fontWeight: 700 }}>{avgRating.toFixed(1)} / 5</div>
+                    <div style={{ fontSize: '11px', opacity: 0.8 }}>Average rating from submitted feedback</div>
+                  </div>
+                  <div style={{ background: 'linear-gradient(135deg,#22c55e,#14b8a6)', color: '#fff', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ fontSize: '12px', opacity: 0.9 }}>Positive Satisfaction Rate</div>
+                    <div style={{ fontSize: '28px', fontWeight: 700 }}>{posRate.toFixed(0)}%</div>
+                    <div style={{ fontSize: '11px', opacity: 0.8 }}>Satisfied + Very Satisfied</div>
+                  </div>
+                  <div style={{ background: 'linear-gradient(135deg,#facc15,#f97316)', color: '#fff', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ fontSize: '12px', opacity: 0.9 }}>Negative Feedback Rate</div>
+                    <div style={{ fontSize: '28px', fontWeight: 700 }}>{negRate.toFixed(0)}%</div>
+                    <div style={{ fontSize: '11px', opacity: 0.8 }}>Dissatisfied + Very Dissatisfied</div>
+                  </div>
+                  <div style={{ background: 'linear-gradient(135deg,#a855f7,#7c3aed)', color: '#fff', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ fontSize: '12px', opacity: 0.9 }}>Feedback Follow-up</div>
+                    <div style={{ fontSize: '28px', fontWeight: 700 }}>{followup}</div>
+                    <div style={{ fontSize: '11px', opacity: 0.8 }}>Negative cases requiring attention</div>
+                  </div>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
                   <div className="chart-card" style={{ padding: '16px' }}>
                     <h4 style={{ margin: '0 0 12px' }}>Rating Distribution</h4>
-                    {counts.map(c => {
-                      const maxCount = Math.max(...counts.map(x => x.count), 1);
-                      const width = (c.count / maxCount) * 100;
+                    {(() => {
+                      const rc = [0,0,0,0,0];
+                      periodFeedback.forEach(f => { const r = Number(f.rating); if (r>=1 && r<=5) rc[r-1]++; });
+                      const totalR = rc.reduce((a,b)=>a+b,0) || 1;
+                      const avgR = periodFeedback.length ? (periodFeedback.reduce((s,f)=>s+Number(f.rating||0),0)/periodFeedback.length) : 0;
+                      const pct = r => (rc[r-1]/totalR*100).toFixed(0);
+                      const grads = ['#DC2626,#EF4444','#EA580C,#F97316','#EAB308,#FACC15','#0284C7,#0EA5E9','#16A34A,#22C55E'].reverse();
                       return (
-                        <div key={c.key} style={{ marginBottom: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                            <span style={{ width: '12px', height: '12px', background: c.color, borderRadius: '50%' }}></span>
-                            <span style={{ flex: 1, fontSize: '13px' }}>{c.label}</span>
-                            <span style={{ fontSize: '13px', fontWeight: 600 }}>{c.count}</span>
-                            <span style={{ fontSize: '12px', color: '#6b7280' }}>{((c.count / total) * 100).toFixed(0)}%</span>
+                        <div style={{ display: 'flex', flexDirection: 'row', gap: '16px', alignItems: 'center' }}>
+                          <div style={{ flex: '0 0 35%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <div style={{ width: 120, height: 120, borderRadius: '50%', background: `conic-gradient(#ec4899 0% ${avgR/5*100}%, #e5e7eb ${avgR/5*100}% 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <div style={{ width: 90, height: 90, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: 700, color: '#1f2937' }}>{avgR.toFixed(1)}</div>
+                            </div>
+                            <div style={{ color: '#FACC15', fontSize: '16px', marginTop: '6px' }}>★★★★★</div>
+                            <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>Average Client Rating</div>
                           </div>
-                          <div style={{ height: '6px', background: '#f3f4f6', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{ width: `${width}%`, height: '100%', background: c.color, borderRadius: '3px', transition: 'width 0.3s' }} />
+                          <div style={{ flex: '0 0 65%' }}>
+                            {[5,4,3,2,1].map(r => {
+                              const i = r-1;
+                              const width = (rc[i]/totalR)*100;
+                              return (
+                                <div key={r} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                  <span style={{ width: '12px', fontWeight: 600 }}>{r}</span>
+                                  <span style={{ color: '#0EA5E9' }}>★</span>
+                                  <div style={{ flex: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <div style={{ width: `${width}%`, height: '100%', background: `linear-gradient(90deg, ${grads[5-r].split(',')[0]}, ${grads[5-r].split(',')[1]})`, borderRadius: '4px', transition: 'width 0.3s' }} />
+                                  </div>
+                                  <span style={{ fontSize: '12px', fontWeight: 600, width: '24px', textAlign: 'right' }}>{rc[i]}</span>
+                                  <span style={{ fontSize: '11px', color: '#6b7280', width: '32px', textAlign: 'right' }}>{pct(r)}%</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
-                    })}
+                    })()}
                   </div>
                   <div className="chart-card" style={{ padding: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -295,7 +340,7 @@ export default function Feedback() {
                         ))}
                       </div>
                     </div>
-                    {chartData.every(d => d.count === 0) ? (
+                    {chartData.length === 0 || chartData.every(d => ['verySatisfied','satisfied','neutral','dissatisfied','veryDissatisfied'].every(k => !d[k])) ? (
                       <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>No feedback for this period</div>
                     ) : (
                     <>
@@ -318,12 +363,11 @@ export default function Feedback() {
                           axisLine={{ stroke: '#e5e7eb' }}
                           angle={-20}
                           textAnchor="end"
-                          interval={chartData.length > 15 ? Math.floor(chartData.length / 8) : 0}
-                          height={80}
+                          height={60}
                           tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
                         />
-                        <YAxis allowDecimals={false} />
-                        <Tooltip />
+                        <YAxis allowDecimals={false} domain={[0, 'auto']} width={50} label={{ value: 'Number of Clients', angle: -90, position: 'insideLeft', fill: '#6b7280', style: { textAnchor: 'middle' } }} />
+                        <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', color: '#f8fafc', borderRadius: '8px' }} />
                         {cats.map(c => (
                           <Area key={c.key} type="monotone" dataKey={c.key} name={c.label} stroke={c.color} fill={`url(#grad-${c.key})`} />
                         ))}
@@ -341,6 +385,7 @@ export default function Feedback() {
                     )}
                   </div>
                 </div>
+              </>
               );
             })()}
           </div>
