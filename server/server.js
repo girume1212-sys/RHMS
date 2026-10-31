@@ -44,6 +44,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
       ON CONFLICT DO NOTHING
     `);
     await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_company_id ON groups(company_id) WHERE company_id IS NOT NULL`);
     await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS client_deleted BOOLEAN NOT NULL DEFAULT FALSE`);
     console.log('user_groups table and groups ready');
@@ -768,7 +769,7 @@ async function isEmailVerified(email) {
 // not email. The email triggers filter by isEmailVerified() themselves.
 async function getAssignmentGroupRecipients(groupId) {
   const membersResult = await pool.query(
-    "SELECT u.id, u.name, u.email, u.role FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support') AND u.email IS NOT NULL AND u.email <> ''",
+    "SELECT u.id, u.name, u.email, u.role FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support') AND u.email IS NOT NULL AND u.email <> '' AND COALESCE(u.approved, TRUE) = TRUE",
     [groupId]
   );
   return membersResult.rows;
@@ -984,7 +985,7 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
     `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#ffffff;font-weight:700;">${escapeEmailHtml(title)}</h1>` +
     `</td></tr>` +
     `<tr><td style="padding:0 32px 8px;">` +
-    escPara(`Hello ${greetingName},`) +
+    escPara(`Dear ${greetingName},`) +
     escPara(lead) +
     (groupLine
       ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#E8EEFF;"><strong style="color:#ffffff;">Group:</strong> ${escapeEmailHtml(groupLine)}</p>`
@@ -1138,7 +1139,10 @@ async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, s
     const companyName = ctx.client_company || 'N/A';
     for (const m of members) {
       if (m.role !== 'developer') continue;
+      const dedupKey = `${m.id}|${groupId}`;
+      if (alreadyEmailed && alreadyEmailed.has(dedupKey)) continue;
       if (submitterId && String(m.id) === String(submitterId)) continue;
+      emailedKeys.push(dedupKey);
       const subject = `New Request from ${companyName} – Submitted by ${clientName}`;
       fireWorkflowEmail({
         to: m.email,
@@ -2232,7 +2236,7 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
   } catch (e) { /* fall back to default sender */ }
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
-  const subject = 'RHMS Password Reset Code';
+  const subject = 'RHMS Password Reset Verification Code';
   const text =
     `Request Handling Management System\n\n` +
     `Your password reset verification code is:\n\n` +
@@ -2252,11 +2256,13 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
     `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#ffffff;font-weight:700;">Request Handling Management System</h1>` +
     `</td></tr>` +
     `<tr><td style="padding:32px;">` +
+    `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Hello ${userName || 'User'},</p>` +
     `<p style="margin:0 0 16px;font-size:16px;color:#f1f5f9;">Your password reset verification code is:</p>` +
     `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;"><tr><td align="center" bgcolor="#2563EB" style="border-radius:8px;">` +
     `<div style="display:inline-block;padding:14px 32px;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:6px;border-radius:8px;">${otp}</div>` +
     `</td></tr></table>` +
     `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#D7E3FF;">This code will expire in ${ttlSeconds} seconds.</p>` +
+    `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#D7E3FF;">Security warning: Never share this code with anyone.</p>` +
     `<p style="margin:0;font-size:14px;line-height:1.7;color:#D7E3FF;">If you did not request a password reset, please ignore this email.</p>` +
     `</td></tr>` +
     contactFooter +
@@ -2362,20 +2368,8 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
     // but never finished (codes exist, none consumed).
     const userResult = await pool.query('SELECT id, name, email, approved FROM users WHERE LOWER(email) = $1', [email]);
     if (userResult.rows.length === 0) {
-      const verifiedOnce = await pool.query(
-        'SELECT id FROM email_verification_codes WHERE email = $1 AND used_at IS NOT NULL LIMIT 1',
-        [email]
-      );
-      if (verifiedOnce.rows.length === 0) {
-        const attempted = await pool.query(
-          'SELECT id FROM email_verification_codes WHERE email = $1 LIMIT 1',
-          [email]
-        );
-        if (attempted.rows.length > 0) {
-          return res.status(400).json({ error: 'Account is not registered or email verification is incomplete.' });
-        }
-      }
-      return res.status(404).json({ error: 'Account not registered.' });
+      // Generic response to prevent account enumeration.
+      return res.json({ message: 'If an account exists for this email, a verification code will be sent.' });
     }
     const otpUser = userResult.rows[0];
     // Blocked / never-approved accounts are not eligible for password reset.
@@ -3620,7 +3614,10 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
         const c = await pool.query('SELECT id FROM companies WHERE name = $1 LIMIT 1', [clientRow.rows[0].company_name]);
         companyId = c.rows[0]?.id || null;
       }
-      if (companyId) {
+      if (!companyId) {
+         console.log(`[WorkflowEmail:auto-assign] client ${clientId} has no company; request ${id} left unassigned for admin`);
+         notifyAdmins(`New request #${id} requires manual assignment (client has no company)`, { type: 'manual_assignment_needed', requestId: id, userId: req.user.id, userName: req.user.name });
+       } else {
         const cg = await pool.query(
           'SELECT id FROM groups WHERE company_id = $1 ORDER BY is_default DESC NULLS LAST, id ASC LIMIT 1',
           [companyId]

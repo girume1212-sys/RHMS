@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { validateEmail } from '../utils/validation';
 import ValidationError from './ValidationError';
@@ -30,7 +30,13 @@ export default function Login() {
   const { login, googleLogin, systemName, systemLogo, darkMode, toggleDarkMode } = useAuth();
   const [googleLoading, setGoogleLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const otpRefs = useRef([]);
+  useEffect(() => {
+    if (location.state && location.state.email) {
+      setUsernameOrEmail(location.state.email);
+    }
+  }, [location.state]);
   const [resendSeconds, setResendSeconds] = useState(0);
 
   // Countdown for resend-code button (UI only)
@@ -151,7 +157,11 @@ export default function Login() {
 
   const validateField = (name, value) => {
     let err = '';
-    if (name === 'forgotEmail' || name === 'usernameOrEmail') err = validateEmail(value);
+    if (name === 'forgotEmail') err = validateEmail(value);
+    else if (name === 'usernameOrEmail') {
+      if (value.includes('@')) err = validateEmail(value);
+      else if (!value.trim()) err = t('common.required') || 'Required';
+    }
     setErrors(prev => ({ ...prev, [name]: err }));
     return err;
   };

@@ -164,7 +164,13 @@ export default function Signup() {
       setResendSeconds(data.retryAfter || 60);
       setError('');
     } catch (err) {
-      setError(err.message);
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('already exists')) {
+        // Account already exists for this email: send the user to sign in.
+        navigate('/login', { state: { email } });
+        return;
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }

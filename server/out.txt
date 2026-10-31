@@ -29,7 +29,3 @@ password_reset_otps table ready
 email_verification_codes table ready
 sla_tracking table ready
 request_watchers table ready
-[WorkflowEmail:group-new] skipped — no group member emails
-[WorkflowEmail:new-request] sent to girume1212@gmail.com (messageId: <cc0f460e-f67a-b413-25f0-d3dce93d8966@gmail.com>)
-[WorkflowEmail:group-new] sent to girumyb024@gmail.com (messageId: <8f6ae907-d7b9-70ae-c83a-e32564938bbd@gmail.com>)
-[WorkflowEmail:group-new] sent to ggyb9456@gmail.com (messageId: <bee35e3d-5000-0914-e15c-d59ae085827d@gmail.com>)
