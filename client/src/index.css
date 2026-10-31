@@ -5249,7 +5249,7 @@ body.dark-mode .tag {
   margin-bottom: 8px;
   color: var(--cat-color);
 }
-.category-manage-icon svg { width: 32px; height: 32px; }
+.category-manage-icon svg { width: 60px; height: 60px; }
 .category-manage-count {
   font-size: 12px;
   font-weight: 500;

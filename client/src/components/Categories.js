@@ -60,7 +60,7 @@ export default function Categories() {
               return (
                 <div key={c.id} className="category-manage-card" style={{ '--cat-color': c.color, cursor: 'pointer' }} onClick={() => handleViewDetails(c.id)}>
                   <div className="category-manage-card-top">
-                    <div className="category-manage-icon"><Icon name={c.icon} size={32} /></div>
+                    <div className="category-manage-icon"><Icon name={c.icon} size={60} /></div>
                     <span className="category-manage-count">{t('category.requestsCount', { count })}</span>
                   </div>
                   <div className="category-manage-name">{t('category.' + c.name)}</div>
