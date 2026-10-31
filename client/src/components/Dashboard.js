@@ -597,10 +597,10 @@ export default function Dashboard() {
         const totalCards = statusCards.length + 1;
         const perRow = Math.ceil(totalCards / 2);
         const row1 = [<StatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} share={shareOfTotalPercent(stats.total, stats.total)} shareLabel={shareLabel} color="#FACC15" onClick={() => navigate('/requests')} />, ...statusCards.slice(0, perRow - 1).map(s => (
-          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
+          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={t(`status.${s.name}`, { defaultValue: s.name })} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
         ))];
         const row2 = statusCards.slice(perRow - 1).map(s => (
-          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={s.name} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
+          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={t(`status.${s.name}`, { defaultValue: s.name })} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
         ));
         return (
           <>

@@ -4483,6 +4483,12 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
       }
       devMap[row.developer_name][row.day] = { created: parseInt(row.created), resolved: parseInt(row.resolved) };
     });
+    // Ensure every developer/support user in the users table appears in the
+    // performance graph, even if they have no assigned requests in range.
+    const allDevUsers = await pool.query(`SELECT name FROM users WHERE role IN ('developer', 'support') ORDER BY name`);
+    allDevUsers.rows.forEach(row => {
+      if (row.name && !devMap[row.name]) devMap[row.name] = {};
+    });
     const byDeveloper = Object.entries(devMap).map(([name, dayData]) => ({
       name,
       data: dates.map((d, i) => ({ date: labels[i], created: dayData[d]?.created || 0, resolved: dayData[d]?.resolved || 0 }))
@@ -4505,6 +4511,10 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
         devStatusMap[row.developer_name] = {};
       }
       devStatusMap[row.developer_name][row.status_name] = row.count;
+    });
+    const allDevUsers2 = await pool.query(`SELECT name FROM users WHERE role IN ('developer', 'support')`);
+    allDevUsers2.rows.forEach(row => {
+      if (row.name && !devStatusMap[row.name]) devStatusMap[row.name] = {};
     });
     const developerStats = Object.entries(devStatusMap).map(([name, statuses]) => ({
       name,
@@ -4555,17 +4565,17 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
         u.id AS id,
         u.name AS name,
         u.role AS role,
-        COUNT(*)::int AS assigned,
+        COUNT(r.id)::int AS assigned,
         COUNT(*) FILTER (WHERE s.name IN ('Resolved', 'Closed'))::int AS resolved,
         COUNT(*) FILTER (WHERE s.name IN ('New', 'Assigned', 'In Progress', 'Waiting for Client'))::int AS in_progress,
         AVG(EXTRACT(EPOCH FROM (r.updated_at - r.created_at)) / 3600.0)
           FILTER (WHERE s.name IN ('Resolved', 'Closed') AND r.updated_at >= r.created_at)
           AS avg_resolution_hours
-      FROM requests r
-      JOIN users u ON r.assigned_to = u.id
+      FROM users u
+      LEFT JOIN requests r ON r.assigned_to = u.id
+        AND ($1::int IS NULL OR r.created_at::date >= (CURRENT_DATE - ($1::int || ' days')::interval))
       LEFT JOIN statuses s ON r.status_id = s.id
       WHERE u.role = 'developer'
-        AND ($1::int IS NULL OR r.created_at::date >= (CURRENT_DATE - ($1::int || ' days')::interval))
       GROUP BY u.id, u.name, u.role
       ORDER BY assigned DESC, u.name
     `, [days]);
@@ -4671,7 +4681,14 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
       ORDER BY total DESC, name NULLS LAST
     `, [days]);
 
-    const team = teamResult.rows.map(r => {
+    const supportUsers = await pool.query(`SELECT id, name, role FROM users WHERE role = 'support'`);
+    const teamRows = [...teamResult.rows];
+    for (const u of supportUsers.rows) {
+      if (!teamRows.some(r => r.user_id === u.id)) {
+        teamRows.push({ user_id: u.id, name: u.name, role: u.role, total: 0, resolved: 0, pending: 0, avg_resolution_hours: null });
+      }
+    }
+    const team = teamRows.map(r => {
       const total = r.total || 0;
       return {
         userId: r.user_id || null,

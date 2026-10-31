@@ -681,7 +681,14 @@
     "Resolved": "Resolved",
     "Closed": "Closed",
     "Escalated": "Escalated",
-    "Rejected": "Rejected"
+    "Rejected": "Rejected",
+    "On Hold": "On Hold",
+    "On hold": "On Hold",
+    "Pending": "Pending",
+    "Cancelled": "Cancelled",
+    "Under Review": "Under Review",
+    "Reopened": "Reopened",
+    "Completed": "Completed"
   },
   "category": {
     "Hardware": "Hardware",

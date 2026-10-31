@@ -375,7 +375,7 @@ export default function Company() {
                  {logoUploading && <div style={{ fontSize: '12px', color: '#6b7280' }}>Uploading...</div>}
                  {logoPreview && (
                    <div style={{ marginTop: '8px' }}>
-                     <img src={`${API_BASE}${logoPreview}`} alt="Company logo preview" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                     <img src={logoPreview.startsWith('http') ? logoPreview : `${API_BASE}${logoPreview}`} alt="Company logo preview" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '60%', border: '2px solid #e5e7eb' }} />
                    </div>
                  )}
                  {!logoPreview && (
@@ -402,7 +402,7 @@ export default function Company() {
           <div className="category-cards-grid">
             {companies.map((c) => (
               <div key={c.id} className="category-manage-card" style={{ '--cat-color': getIndustryColor(c.industry), cursor: 'pointer' }} onClick={() => { setSelectedCompany(c); setUserPage(1); }}>
-                <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>{c.logo ? <img src={`${API_BASE}${c.logo}`} alt={c.name} style={{ width: '140px', height: '100px', objectFit: 'contain', borderRadius: '12px', background: '#f8fafc', padding: '6px' }} /> : <div style={{ width: '140px', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px', background: '#e5e7eb', color: '#9ca3af', fontSize: '12px' }}>No logo</div>}</div>
+                <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>{c.logo ? <img src={c.logo.startsWith('http') ? c.logo : `${API_BASE}${c.logo}`} alt={c.name} style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '50%', border: '2px solid #e5e7eb', background: '#f8fafc' }} /> : <div style={{ width: '100px', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#e5e7eb', color: '#9ca3af', fontSize: '12px', border: '2px solid #e5e7eb' }}>No logo</div>}</div>
                  <div className="category-manage-name" style={{ textAlign: 'center' }}>{c.name}</div>
                  <div className="category-manage-count" style={{ textAlign: 'center', marginTop: '4px' }}>{t('company.usersCount', { count: getUserCount(c.name) })}</div>
                 {c.company_id && <div className="category-manage-desc" style={{ fontSize: '11px', color: '#9ca3af' }}>{t('company.idLabel', { id: c.company_id })}</div>}

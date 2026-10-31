@@ -680,7 +680,14 @@
     "Resolved": "ተፈትቷል",
     "Closed": "ተዘግቷል",
     "Escalated": "ተላልፏል",
-    "Rejected": "ውድቅ ተደርጓል"
+    "Rejected": "ውድቅ ተደርጓል",
+    "On Hold": "በእረፍት ላይ",
+    "On hold": "በእረፍት ላይ",
+    "Pending": "በመጠባበቅ ላይ",
+    "Cancelled": "ተሰርዟል",
+    "Under Review": "በግምገማ ላይ",
+    "Reopened": "እንደገና ተከፍቷል",
+    "Completed": "ተጠናቋል"
   },
   "category": {
     "Hardware": "ሃርድዌር",
