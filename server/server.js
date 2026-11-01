@@ -329,6 +329,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_request_id ON notifications(request_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC)`);
+    await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS actor_id VARCHAR(50)`);
     console.log('notifications table ready');
 
     await pool.query(`
@@ -572,10 +573,11 @@ async function persistNotification(userId, message, data = {}) {
   const id = uuidv4();
   try {
     await pool.query(
-      `INSERT INTO notifications (id, user_id, type, title, message, request_id, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      `INSERT INTO notifications (id, user_id, type, title, message, request_id, actor_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
       [id, userId, data.type || 'info', data.title || null,
-        message || '', (data.requestId && String(data.requestId).match(/^REQ-\d+/)) ? data.requestId : null]
+        message || '', (data.requestId && String(data.requestId).match(/^REQ-\d+/)) ? data.requestId : null,
+        data.userId ? String(data.userId) : null]
     );
     return id;
   } catch (err) {
@@ -1636,7 +1638,6 @@ async function emailClientOnResolved(requestId, req) {
 
 
 app.get('/api/notifications/stream', async (req, res) => {
-  
   const token = req.query.token;
   if (!token) return res.status(401).json({ error: 'No token provided' });
   

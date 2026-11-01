@@ -6,6 +6,7 @@ import { api, API_BASE, isTokenExpired } from '../api';
 import GlobalSearch from './GlobalSearch';
 import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
+import { showStatusToast } from '../notify';
 import Icon from './Icon';
 import { SIDEBAR_MENUS, useTrackPrevMenu } from '../utils/sidebarNav';
 import { isCriticalUnworked } from '../utils/criticalIndicator';
@@ -34,6 +35,9 @@ export default function Layout() {
   const [refreshing, setRefreshing] = useState(false);
   const dismissedIds = useRef(new Set());
   const processedIds = useRef(new Set());
+  const seenIds = useRef(new Set());
+  const initialSeenLoaded = useRef(false);
+  const [debugCount, setDebugCount] = useState(0);
   const eventSourceRef = useRef(null);
   const audioUnlocked = useRef(false);
   const notificationAudio = useRef(null);
@@ -92,6 +96,7 @@ export default function Layout() {
     requestId: n.request_id,
     timestamp: n.created_at,
     userName: n.user_name || null,
+    actorId: n.actor_id || null,
     is_read: !!n.is_read
   })), []);
 
@@ -319,6 +324,48 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
   }, [user, playNotificationSound]);
 
   
+  // Polling fallback to guarantee incoming toasts even if SSE is unavailable
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const check = () => {
+      api.get('/api/notifications').then(data => {
+        if (cancelled) return;
+        const rows = data.notifications || [];
+        if (!initialSeenLoaded.current) {
+          rows.forEach(r => seenIds.current.add(r.id));
+          initialSeenLoaded.current = true;
+          return;
+        }
+        rows.forEach(r => {
+          if (seenIds.current.has(r.id)) return;
+          seenIds.current.add(r.id);
+          setDebugCount(c => c + 1);
+          const actorId = r.actor_id || null;
+          if (actorId && String(actorId) === String(user.id)) return;
+          showStatusToast(r.message || 'New notification', 'info');
+          const notif = {
+            id: r.id,
+            notificationId: r.id,
+            type: r.type || 'default',
+            message: r.message,
+            requestId: r.request_id,
+            userId: actorId,
+            timestamp: r.created_at
+          };
+          if (!dismissedIds.current.has(notif.id)) {
+            setBubbleNotifications(prev => [notif, ...prev].slice(0, 5));
+            setTimeout(() => removeBubble(notif.id), 5000);
+          }
+          refreshNotifications();
+        });
+      }).catch(() => {});
+    };
+    check();
+    const interval = setInterval(check, 4000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user, refreshNotifications, removeBubble]);
+
   const [statusToast, setStatusToast] = useState(null);
   const statusToastTimeout = useRef(null);
 
@@ -426,6 +473,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
           )}
         </div>
       </aside>
+      <div style={{ position: 'fixed', bottom: '10px', right: '10px', background: 'red', color: 'white', padding: '4px 8px', zIndex: 9999 }}>POLLING ACTIVE: {debugCount}</div>
       {bubbleNotifications.map((n, i) => (
         <div
           key={n.id}

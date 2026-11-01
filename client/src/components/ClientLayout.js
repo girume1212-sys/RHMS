@@ -6,6 +6,7 @@ import { api, API_BASE, isTokenExpired } from '../api';
 import GlobalSearch from './GlobalSearch';
 import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
+import { showStatusToast } from '../notify';
 import Icon from './Icon';
 import { useTrackPrevMenu } from '../utils/sidebarNav';
 
@@ -36,6 +37,8 @@ export default function ClientLayout() {
   const eventSourceRef = useRef(null);
   const dismissedIds = useRef(new Set());
   const processedIds = useRef(new Set());
+  const seenIds = useRef(new Set());
+  const initialSeenLoaded = useRef(false);
   const audioUnlocked = useRef(false);
 
   
@@ -88,6 +91,7 @@ export default function ClientLayout() {
     requestId: n.request_id,
     timestamp: n.created_at,
     userName: n.user_name || null,
+    actorId: n.actor_id || null,
     is_read: !!n.is_read
   })), []);
 
@@ -269,6 +273,46 @@ export default function ClientLayout() {
   }, [user, refreshNotifications]);
 
   
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const check = () => {
+      api.get('/api/notifications').then(data => {
+        if (cancelled) return;
+        const rows = data.notifications || [];
+        if (!initialSeenLoaded.current) {
+          rows.forEach(r => seenIds.current.add(r.id));
+          initialSeenLoaded.current = true;
+          return;
+        }
+        rows.forEach(r => {
+          if (seenIds.current.has(r.id)) return;
+          seenIds.current.add(r.id);
+          const actorId = r.actor_id || null;
+          if (actorId && String(actorId) === String(user.id)) return;
+          showStatusToast(r.message || 'New notification', 'info');
+          const notif = {
+            id: r.id,
+            notificationId: r.id,
+            type: r.type || 'default',
+            message: r.message,
+            requestId: r.request_id,
+            userId: actorId,
+            timestamp: r.created_at
+          };
+          if (!dismissedIds.current.has(notif.id)) {
+            setBubbleNotifications(prev => [notif, ...prev].slice(0, 5));
+            setTimeout(() => removeBubble(notif.id), 5000);
+          }
+          refreshNotifications();
+        });
+      }).catch(() => {});
+    };
+    check();
+    const interval = setInterval(check, 4000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user, refreshNotifications, removeBubble]);
+
   const [statusToast, setStatusToast] = useState(null);
   const statusToastTimeout = useRef(null);
 
