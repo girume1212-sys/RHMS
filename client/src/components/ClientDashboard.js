@@ -51,8 +51,8 @@ export default function ClientDashboard() {
     }).catch(err => setError(t('common.failedToLoadData') + ' ' + err.message));
   }, []);
 
-  // Derived from `requests` rather than snapshotted in the fetch above, so the
-  // cards stay correct when a status is changed or a request deleted inline.
+  
+  
   const stats = useMemo(() => {
     const byStatus = name => requests.filter(r => r.status?.name === name).length;
     return {
@@ -183,7 +183,7 @@ export default function ClientDashboard() {
     });
 
   const totalPages = Math.ceil(filteredRequests.length / perPage);
-  // Keep current page valid when page size / filters change.
+  
   useEffect(() => {
     if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
     else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);

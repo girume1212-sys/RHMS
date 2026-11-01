@@ -74,7 +74,7 @@ export default function DatabaseTables() {
   }) : [];
 
   const totalPages = Math.ceil(sortedRows.length / perPage);
-  // Keep current page valid when page size / filters change.
+  
   useEffect(() => {
     if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
     else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);

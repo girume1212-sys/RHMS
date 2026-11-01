@@ -19,16 +19,16 @@ const getAvatarUrl = (avatar) => {
   return `${API_BASE}${avatar}`;
 };
 
-// Performance is a percentage, so its axis is pinned to 0-100 with a fixed tick
-// set. Recharts therefore cannot auto-fit the scale, and a 70% point sits
-// exactly on the 70% tick while 90% sits on the 90% tick: the series is never
-// stretched or compressed to fit the data.
+
+
+
+
 const RATE_AXIS = { domain: [0, 100], ticks: [0, 25, 50, 75, 100] };
 
-// Recommended neon tones for dark glassmorphism (visual only):
-// Developer = sky blue → cyan (trust, productivity),
-// Escalation = violet → soft pink (attention, urgency).
-// Data, calculations and ordering are unchanged — only line/fill colors.
+
+
+
+
 const PERF_TONES = {
   escalation: { line: '#A78BFA', lineTo: '#F472B6', fillFrom: '#A78BFA', fillTo: '#F472B6' },
   developer: { line: '#38BDF8', lineTo: '#22D3EE', fillFrom: '#38BDF8', fillTo: '#22D3EE' }
@@ -59,10 +59,10 @@ function StatCard({ icon, value, label, share, color, onClick, shareLabel }) {
   );
 }
 
-// Tooltip for the shaded performance trend charts. It leads with the exact
-// performance percentage, then lists the underlying counts that produced it so
-// the rate is never a number without context. `rows` describes the count rows
-// to show, `tone` tints the percentage badge to match that chart's line.
+
+
+
+
 function PerfTooltip({ active, payload, t, rows, tone, rateLabelKey, formatHours, sublabel, showHours }) {
   if (!active || !payload || !payload.length) return null;
   const row = payload[0]?.payload;
@@ -168,13 +168,13 @@ export default function Dashboard() {
       .catch(err => console.error('Escalation perf fetch error:', err));
   }, [user, rangeDays]);
 
-  // Both performance cards share the same shell (.charts-row > .chart-card.wide,
-  // 5 KPI cards, 400px chart). The escalation card's KPI hint row and legend
-  // note are mirrored as invisible placeholders in the developer card, so both
-  // cards are naturally the same width and height. The measured min-height is
-  // kept only as a safety net for font/translation differences. Only the
-  // escalation card is observed, so resizing the developer card can never feed
-  // back into the measurement.
+  
+  
+  
+  
+  
+  
+  
   useEffect(() => {
     const el = escPerfCardRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return undefined;
@@ -231,9 +231,9 @@ export default function Dashboard() {
     closed: acc.closed + d.closed
   }), { created: 0, resolved: 0, closed: 0 }), [weekData]);
 
-  // Count rows shown underneath the percentage in each performance tooltip.
-  // These are the same numbers the series is computed from, so the rate always
-  // has its inputs visible.
+  
+  
+  
   const ESC_COUNT_ROWS = useMemo(() => ([
     { dataKey: 'totalEscalated', labelKey: 'dashboard.totalEscalated', color: '#3B82F6' },
     { dataKey: 'resolvedEscalated', labelKey: 'dashboard.resolvedEscalated', color: '#10B981' },
@@ -248,9 +248,9 @@ export default function Dashboard() {
     { dataKey: 'resolved', labelKey: 'dashboard.resolvedDev', color: '#10B981' }
   ]), []);
 
-  // Developer chart: only real developer users (users.role === 'developer').
-  // Anything else from the API is dropped here as a guard so Escalation Team
-  // (support) names can never render in this chart.
+  
+  
+  
   const devChartData = useMemo(() => {
     const rows = escPerfData?.developers;
     if (!Array.isArray(rows) || rows.length === 0) return [];
@@ -274,8 +274,8 @@ export default function Dashboard() {
     [devChartData]
   );
 
-  // Team-wide success rate, weighted by workload, rather than an unweighted
-  // mean of per-developer percentages.
+  
+  
   const devSuccessRate = useMemo(() => {
     if (devTotalAssigned === 0) return 0;
     const resolved = devChartData.reduce((s, d) => s + d.resolved, 0);
@@ -301,13 +301,13 @@ export default function Dashboard() {
     return t('dashboard.escalationRangeAll');
   }, [rangeDays, t]);
 
-  // One bar group per Support/Escalation team member, named from the database
-  // (users.name via requests.assigned_to). The rows come from the same
-  // escalations set the KPIs above are computed from, so they always add up to
-  // the totals. Escalated requests with nobody assigned are kept as a single
-  // Escalation chart: only real Escalation/Support team members
-  // (users.role === 'support'). Anything else from the API is dropped here
-  // as a guard so Developer names can never render in this chart.
+  
+  
+  
+  
+  
+  
+  
   const escTeam = useMemo(() => {
     const rows = escPerfData?.team;
     if (!Array.isArray(rows) || rows.length === 0) return [];
@@ -326,9 +326,9 @@ export default function Dashboard() {
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   }, [escPerfData?.team]);
 
-  // Combined rows for the "Escalation Team and Developer Performance" table
-  // below the charts. Same data source as the charts, so RBAC/visibility
-  // rules are identical — no extra API call.
+  
+  
+  
   const userPerfRows = useMemo(() => {
     const rows = [];
     escTeam.forEach(m => {
@@ -408,13 +408,13 @@ export default function Dashboard() {
   const teamPerfTotalPages = Math.ceil(sortedTeamPerf.length / teamPerfPerPage);
   const paginatedTeamPerf = sortedTeamPerf.slice((teamPerfPage - 1) * teamPerfPerPage, teamPerfPage * teamPerfPerPage);
 
-  // X-axis label: the real member name, or the unassigned label when the
-  // request had nobody attached. Kept short so the axis stays readable.
+  
+  
   const escTeamLabel = useCallback((row) => (
     row.name || t('dashboard.unassignedMember')
   ), [t]);
 
-  // Role label shared by both performance tooltips.
+  
   const perfRoleLabel = useCallback((row) => {
     if (!row || !row.role) return '';
     if (row.role === 'support') return t('role.support');
@@ -430,7 +430,7 @@ export default function Dashboard() {
         label: escTeamLabel(row)
       }));
     }
-    // Fallback to the single aggregate column if no per-member rows came back.
+    
     if (!escMetrics) return [];
     return [{
       userId: null,
@@ -1158,7 +1158,7 @@ export default function Dashboard() {
                             data={devChartData}
                             margin={{ top: 24, right: 28, left: 60, bottom: 100 }}
                             onClick={(state) => {
-                              // preserve the existing per-developer drilldown
+                              
                               const name = state?.activePayload?.[0]?.payload?.name;
                               const item = (perfData?.byDeveloper || []).find(d => d.name === name);
                               if (item) setSelectedDetail({ type: 'developer', data: item });

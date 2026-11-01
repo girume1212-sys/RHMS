@@ -69,7 +69,7 @@ async function apiFetch(url, options = {}) {
   const token = localStorage.getItem('rhms_token');
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (token) headers.Authorization = `Bearer ${token}`;
-  // Never leave the UI waiting indefinitely (e.g. slow SMTP on the server).
+  
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs || 30000;
   const timer = setTimeout(() => controller.abort(), timeoutMs);

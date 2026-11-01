@@ -251,7 +251,7 @@ const RequestsTable = forwardRef(function RequestsTable({
     });
 
   const totalPages = Math.ceil(filteredRequests.length / perPage);
-  // Keep current page valid when page size / filters change.
+  
   useEffect(() => {
     if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
     else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);

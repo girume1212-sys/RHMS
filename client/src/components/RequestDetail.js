@@ -54,7 +54,7 @@ export default function RequestDetail() {
   const isClient = user?.role === 'client';
   const basePath = isClient ? '/client' : '';
 
-  // Support and developer can only comment on their own assigned requests
+  
   const canComment = (() => {
     if (user?.role === 'admin' || isClient) return true;
     if (user?.role === 'support' || user?.role === 'developer') {
@@ -64,9 +64,9 @@ export default function RequestDetail() {
     return true;
   })();
 
-  // A Resolved request Closed/Rejected by the Client is read-only for staff:
-  // Admin, Developer and Escalation Team can view everything (details,
-  // comments, history, Status Flow) but must not change the status.
+  
+  
+  
   const closedByClient = (() => {
     if (!request || (request.statusId !== '6' && request.statusId !== '8')) return false;
     const closers = (activityLog || [])
@@ -134,7 +134,7 @@ export default function RequestDetail() {
     loadFeedback();
   }, [id]);
 
-  // Auto-scroll chat to the bottom on first load and when new comments arrive while at the bottom
+  
   useEffect(() => {
     if (!request) return;
     if (!initialScrollDoneRef.current) {
@@ -148,7 +148,7 @@ export default function RequestDetail() {
     }
   }, [request?.comments?.length]);
 
-  // Reset the unread counter when the user scrolls to the latest comments
+  
   useEffect(() => {
     const el = chatRef.current;
     if (!el) return;
@@ -159,7 +159,7 @@ export default function RequestDetail() {
     return () => el.removeEventListener('scroll', onScroll);
   }, [request?.comments?.length]);
 
-  // Real-time chat: poll comments so new ones appear without a manual refresh
+  
   useEffect(() => {
     if (!id) return;
     const timer = setInterval(() => {
@@ -386,10 +386,10 @@ export default function RequestDetail() {
     return colors[status?.name] || '#6B7280';
   };
 
-  // Abstract gradient background for each Status Flow dot (visual only).
-  // Soft radial highlight + deep blend, auto-derived from the status color
-  // so custom statuses get a matching professional gradient automatically.
-  // Existing status colors, icons, and animations are unchanged.
+  
+  
+  
+  
   const hexAlpha = (hex, a) => {
     let h = String(hex || '#6B7280').replace('#', '');
     if (h.length === 3) h = h.split('').map((c) => c + c).join('');
@@ -397,18 +397,18 @@ export default function RequestDetail() {
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
   };
 
-  // Abstract gradient background for each Status Flow STEP CARD (visual only).
-  // Soft light tints auto-derived from the status color so custom statuses
-  // get a matching professional card background automatically. The animated
-  // dot itself keeps its solid status color; icons and animations unchanged.
+  
+  
+  
+  
   const getStatusCardBackground = (color) => {
     const base = color || '#6B7280';
     return `radial-gradient(circle at 20% 12%, ${hexAlpha(base, 0.22)} 0%, ${hexAlpha(base, 0)} 60%), radial-gradient(circle at 88% 90%, ${hexAlpha(base, 0.16)} 0%, ${hexAlpha(base, 0)} 55%), linear-gradient(165deg, ${hexAlpha(base, 0.12)} 0%, ${hexAlpha(base, 0.04)} 100%)`;
   };
 
-  // Abstract per-status animation for the Status Flow dots (visual only).
-  // Custom statuses are matched by meaning-keywords; unknown names fall back
-  // to a subtle neutral animation. Colors always come from getStatusColor.
+  
+  
+  
   const getStatusAnim = (name) => {
     const n = String(name || '').toLowerCase();
     if (/escalat|urgent|critical|alert|alarm/.test(n)) return 'anim-escalated';
@@ -667,10 +667,10 @@ export default function RequestDetail() {
     }));
   };
 
-  // Keep the active/current status always fully visible in the Status Flow.
-  // Whenever the flow renders or the status changes, scroll horizontally
-  // so the current step is brought into view (centered when possible),
-  // without altering sequence, styling, or animations.
+  
+  
+  
+  
   useEffect(() => {
     if (!showHistory) return;
     const scrollActiveIntoView = () => {
@@ -678,7 +678,7 @@ export default function RequestDetail() {
       if (!container) return;
       const active = container.querySelector('.lifecycle-step.current');
       if (!active) return;
-      // Only scroll the flow container horizontally; never the whole page.
+      
       const containerRect = container.getBoundingClientRect();
       const activeRect = active.getBoundingClientRect();
       const fullyVisible =
@@ -691,7 +691,7 @@ export default function RequestDetail() {
         (container.clientWidth - activeRect.width) / 2;
       container.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
     };
-    // Run after paint so layout/animations are settled; retry once for fonts.
+    
     const raf = requestAnimationFrame(scrollActiveIntoView);
     const t1 = setTimeout(scrollActiveIntoView, 150);
     const t2 = setTimeout(scrollActiveIntoView, 500);
@@ -741,7 +741,7 @@ export default function RequestDetail() {
 
       <div className="detail-grid">
         <div className="detail-main">
-          {/* Request Details Card */}
+          {}
           <div className="detail-card">
             <div className="detail-card-header">
               <h3>{t('common.requestDetails')}</h3>
@@ -841,7 +841,7 @@ export default function RequestDetail() {
             )}
           </div>
 
-          {/* Upload Additional Files (Client) */}
+          {}
           {isClient && !editing && (
             <div className="detail-card">
               <h3><Icon name="paperclip" size={16} /> {t('common.uploadAdditionalFiles')}</h3>
@@ -876,9 +876,9 @@ export default function RequestDetail() {
             </div>
           )}
 
-          {/* Timeline / History removed from main - moved to sidebar */}
+          {}
 
-          {/* Feedback Section (Client, Resolved/Closed only) */}
+          {}
           {isClient && (request.status?.name === 'Resolved' || request.status?.name === 'Closed') && (
             <div className="feedback-card">
               {existingFeedback && feedbackSubmitted ? (
@@ -984,7 +984,7 @@ export default function RequestDetail() {
             </div>
           )}
 
-          {/* Comments / Chat */}
+          {}
           <div className="chat-card">
             <div className="chat-header">
               <div className="chat-header-title">
@@ -1175,7 +1175,7 @@ export default function RequestDetail() {
           </div>
         </div>
 
-        {/* Sidebar */}
+        {}
         <div className="detail-sidebar">
           <div className="detail-card">
             <h3>{t('common.information')}</h3>
@@ -1213,7 +1213,7 @@ export default function RequestDetail() {
             </div>
           </div>
 
-          {/* Actions (Admin/Support only) — hidden for client-closed requests */}
+          {}
           {!isClient && !staffReadOnly && (
             <div className="detail-card">
               <h3>{t('common.actions')}</h3>
@@ -1261,7 +1261,7 @@ export default function RequestDetail() {
             </div>
           )}
 
-          {/* Client Actions */}
+          {}
           {isClient && (
             <div className="detail-card">
               <h3>{t('common.actions')}</h3>
@@ -1282,7 +1282,7 @@ export default function RequestDetail() {
             </div>
           )}
 
-          {/* Assignee */}
+          {}
           <div className="detail-card">
             <h3>{t('common.assignedTo')}</h3>
             {request.assignee ? (
@@ -1298,11 +1298,11 @@ export default function RequestDetail() {
             )}
           </div>
 
-          {/* Timeline / History moved to full-width section below Comments */}
+          {}
         </div>
       </div>
 
-      {/* History (full width: Request Details → Comments → History) */}
+      {}
       <div className="detail-history-full">
           <div className="detail-card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -1319,7 +1319,7 @@ export default function RequestDetail() {
 
             {showHistory && (
               <>
-                {/* Status Lifecycle Flow */}
+                {}
                 <div className="status-lifecycle">
                   <div className="lifecycle-header">
                     <span className="lifecycle-icon"><Icon name="refresh" size={16} /></span>

@@ -27,9 +27,9 @@ export default function Layout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
-  // All persisted notification rows for this user (read + unread).
-  // Badges and panels derive from real DB is_read state; opening a panel
-  // never marks anything read — only clicking an item (or its Read control).
+  
+  
+  
   const [allNotifications, setAllNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const dismissedIds = useRef(new Set());
@@ -37,7 +37,7 @@ export default function Layout() {
   const audioUnlocked = useRef(false);
   const notificationAudio = useRef(null);
 
-  // Unlock audio on first user interaction
+  
   useEffect(() => {
     const unlockAudio = () => {
       if (audioUnlocked.current) return;
@@ -83,7 +83,7 @@ export default function Layout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Map persisted rows to panel items, preserving DB read state.
+  
   const mapNotifRows = useCallback((rows) => (rows || []).map(n => ({
     id: n.id,
     type: n.type,
@@ -100,20 +100,20 @@ export default function Layout() {
     }).catch(() => {});
   }, [mapNotifRows]);
 
-  // Mark exactly one item read (persisted). Badge derives from state, so it
-  // decreases by exactly 1 per item.
+  
+  
   const markNotificationRead = useCallback((id) => {
     if (!id) return;
     setAllNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     api.put(`/api/notifications/${id}/read`).catch(() => refreshNotifications());
   }, [refreshNotifications]);
 
-  // Bell panel = non-comment notifications; message panel = comment ones.
+  
   const bellNotes = allNotifications.filter(n => n.type !== 'comment');
   const commentNotes = allNotifications.filter(n => n.type === 'comment');
   const unreadBell = bellNotes.filter(n => !n.is_read).length;
   const unreadMsgs = commentNotes.filter(n => !n.is_read).length;
-  // Panel filters: show only read or only unread items per panel.
+  
   const [notifFilter, setNotifFilter] = useState('unread');
   const [msgFilter, setMsgFilter] = useState('unread');
 const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.is_read);
@@ -196,10 +196,10 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
     [location.pathname, location.search, user?.role, t]
   );
 
-  // SSE: incoming events are already persisted server-side per user, so
-  // refetch real rows (with DB ids) instead of inventing local items. This
-  // keeps badges exact, prevents duplicates, and preserves read state.
-  // Seed badges + panels from persisted DB read state (survives reloads).
+  
+  
+  
+  
   useEffect(() => {
     if (!user) return;
     refreshNotifications();
@@ -208,7 +208,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
     return () => window.removeEventListener('refresh-requests', h);
   }, [user, refreshNotifications]);
 
-  // SSE real-time notifications
+  
   useEffect(() => {
     if (!user) return;
 
@@ -308,7 +308,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
     };
   }, [user, playNotificationSound]);
 
-  // Status toast listener
+  
   const [statusToast, setStatusToast] = useState(null);
   const statusToastTimeout = useRef(null);
 
@@ -326,14 +326,14 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
     };
   }, []);
 
-  // Opening a panel never marks anything read — only item clicks do.
+  
   const openNotifications = () => {
     const next = !showNotifications;
     setShowNotifications(next);
     setShowMessages(false);
   };
 
-  // Explicit "mark all read" control (user-initiated, persisted).
+  
   const markAllRead = useCallback(() => {
     setAllNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     api.put('/api/notifications/read-all').catch(() => refreshNotifications());

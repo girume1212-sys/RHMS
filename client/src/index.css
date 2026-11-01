@@ -14,7 +14,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Loading */
+
 .loading-screen {
   display: flex;
   justify-content: center;
@@ -31,7 +31,7 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ========== LOGIN PAGE ========== */
+
 .login-page {
   min-height: 100vh;
   display: flex;
@@ -144,7 +144,7 @@ body {
   padding: 32px 36px;
 }
 
-/* --- OTP 6-box inputs (reset password modal) --- */
+
 .otp-boxes {
   display: flex;
   gap: 10px;
@@ -484,7 +484,7 @@ body {
   text-decoration: underline;
 }
 
-/* Modal */
+
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -521,10 +521,10 @@ body {
   line-height: 1.5;
 }
 
-/* ========== LAYOUT ========== */
+
 .layout { display: flex; min-height: 100vh; }
 
-/* Sidebar */
+
 .sidebar {
   width: 260px;
   background: #ffffff;
@@ -572,7 +572,7 @@ body.dark-mode {
   --activity-separator: rgba(255,255,255,0.2);
 }
 
-/* Custom scrollbar */
+
 ::-webkit-scrollbar {
   width: 3px;
   height: 3px;
@@ -657,13 +657,12 @@ body.dark-mode {
 .user-name-small { font-size: 13px; font-weight: 500; }
 .user-role-small { font-size: 11px; color: #94a3b8; }
 
-/* Main Area */
+
 .main-area { flex: 1; margin-left: 260px; transition: margin-left 0.3s; }
 .sidebar.collapsed ~ .main-area { margin-left: 72px; }
 
-/* Topbar */
-/* Topbar — Light Periwinkle gradient in bright mode (all dashboards).
-   Dark mode keeps its own background below. */
+
+
 .topbar {
   height: 64px;
   background: linear-gradient(135deg, #E5EAFC 0%, #DDE5FA 50%, #EEF1FF 100%);
@@ -673,16 +672,14 @@ body.dark-mode {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  /* Fixed to the viewport so vertical page scrolling never moves the header.
-     `position: sticky` failed because body uses overflow-x: hidden, which
-     breaks sticky positioning in some browsers. */
+  
   position: fixed;
   top: 0;
   right: 0;
   left: 260px;
   z-index: 50;
 }
-/* Track the sidebar width (sidebar itself is position: fixed). */
+
 .sidebar.collapsed ~ .main-area .topbar { left: 72px; }
 .topbar-left { display: flex; align-items: center; gap: 16px; }
 .topbar-page-title {
@@ -786,7 +783,7 @@ body.dark-mode {
 .dropdown-panel-item.notification-new { background: #fef2f2; border-left: 3px solid #ef4444; }
 body.dark-mode .dropdown-panel-item.notification-new { background: #3b1a1a; border-left-color: #ef4444; }
 .dropdown-panel-item:last-child { border-bottom: none; }
-/* Per-item read/unread state — small professional controls, design unchanged */
+
 .dropdown-panel-item.notif-unread { background: #eff6ff; }
 body.dark-mode .dropdown-panel-item.notif-unread { background: #1e3a5f; }
 .dropdown-panel-read {
@@ -825,7 +822,7 @@ body.dark-mode .notif-read-btn:hover { background: #334155; }
   color: #9ca3af;
   white-space: nowrap;
 }
-/* Read/Unread filter tabs inside notification/message panels */
+
 .notif-filter-tabs {
   display: flex;
   justify-content: space-between;
@@ -1076,11 +1073,11 @@ body.dark-mode .refresh-overlay { background: rgba(2, 6, 23, 0.6); }
 body.dark-mode .refresh-overlay-card { background: #1e293b; }
 body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 
-/* Content */
-/* Top padding reserves room for the fixed 64px topbar so nothing hides under it. */
+
+
 .content { padding: 88px 24px 24px; min-height: 100vh; }
 
-/* ========== DASHBOARD ========== */
+
 .date-filter { display: flex; gap: 8px; }
 .date-input {
   padding: 8px 12px;
@@ -1091,7 +1088,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   cursor: pointer;
 }
 
-/* Stat Cards */
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1125,12 +1122,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 .stat-change.up { color: #10B981; }
 .stat-change.down { color: #EF4444; }
 
-/* Admin request stat card hover — same treatment as the performance stat cards:
-   small contained lift, accent-tinted glow, accent left border. The lift and
-   shadow are kept smaller than the grid/flex gaps so the hovered card never
-   visually connects with its neighbors. The left border is
-   transparent at rest so it never shifts the layout on hover. Confined to
-   devices with a real cursor so touch screens don't get a stuck highlight. */
+
 .stat-card {
   border-left: 2px solid transparent;
   transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
@@ -1152,10 +1144,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   body.dark-mode .stat-card-interactive:hover { transform: none; }
 }
 
-/* Stat-card accent: solid color bar on the left side of each card, using the
-   card's own --stat-accent (same as the performance cards, always visible).
-   Placed after the base/hover rules so it wins at rest; hover sets the same
-   color. Cards without an accent keep the transparent border. */
+
 .stat-card { border-left-color: var(--stat-accent, transparent); }
 
 .stat-card-simple {
@@ -1168,7 +1157,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 .stat-card-simple h3 { font-size: 32px; font-weight: 700; color: #3B82F6; }
 .stat-card-simple p { color: #6b7280; font-size: 14px; margin-top: 4px; }
 
-/* Charts */
+
 .charts-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -1196,7 +1185,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
 .legend-label { flex: 1; }
 .legend-value { color: #6b7280; }
 
-/* Performance Chart */
+
 .perf-header {
   display: flex;
   justify-content: space-between;
@@ -1237,11 +1226,8 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   letter-spacing: 0.5px;
 }
 
-/* Escalation Performance Chart */
-/* Five KPI cards laid out side by side in a single horizontal row. Flexbox rather
-   than grid so the row stays centred at every breakpoint; the media queries only
-   ever change --esc-kpi-cols. Card width is derived from the column count and the
-   real column gap, so all five stay exactly equal. */
+
+
 .esc-kpi-grid {
   --esc-kpi-cols: 5;
   --esc-kpi-gap-x: 12px;
@@ -1265,7 +1251,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
 
-/* Five cards don't divide evenly into three, so the last two centre as a pair. */
+
 @media (max-width: 1200px) {
   .esc-kpi-grid { --esc-kpi-cols: 3; }
 }
@@ -1288,11 +1274,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   margin-top: 2px;
 }
 
-/* Performance stat card hover — mirrors the admin request StatCard: contained
-   4px lift, accent-tinted glow at the card's own color + '30', accent left
-   border. Lift and shadow stay inside the card's own gap so neighbors are
-   never touched. Confined to devices with a real cursor so touch screens
-   don't get a card stuck in the highlighted state. */
+
 @media (hover: hover) and (pointer: fine) {
   .esc-kpi:hover,
   body.dark-mode .esc-kpi:hover {
@@ -1305,7 +1287,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   }
 }
 
-/* Keep the effect, drop the motion, for users who ask for less animation. */
+
 @media (prefers-reduced-motion: reduce) {
   .esc-kpi,
   .esc-kpi-value {
@@ -1322,9 +1304,7 @@ body.dark-mode .refresh-overlay-card p { color: #e2e8f0; }
   font-weight: 600;
   fill: #6b7280;
 }
-/* Neon gradient performance charts — visual layer only. Light glassmorphism
-   plot background in bright mode, dark glass in dark mode. Sizes, data and
-   tooltip content are unchanged. */
+
 .perf-neon-chart {
   background: linear-gradient(135deg, rgba(224, 231, 255, 0.85) 0%, rgba(226, 232, 240, 0.92) 45%, rgba(204, 251, 241, 0.7) 100%);
   border: 1px solid rgba(148, 163, 184, 0.45);
@@ -1349,7 +1329,7 @@ body.dark-mode .perf-neon-chart {
 body.dark-mode .perf-neon-chart .recharts-cartesian-axis-tick text { fill: #E2E8F0; }
 body.dark-mode .perf-neon-chart .esc-axis-label.perf-neon-axis { fill: #94A3B8; }
 body.dark-mode .perf-neon-chart .recharts-legend-item-text { color: #E2E8F0 !important; }
-/* Basis note below the Developer Performance chart — abstract display style */
+
 .perf-basis-note {
   margin-top: 16px;
   text-align: center;
@@ -1419,9 +1399,7 @@ body.dark-mode .perf-neon-chart .recharts-legend-item-text { color: #E2E8F0 !imp
   color: #9ca3af;
 }
 .perf-rate-counts .esc-tooltip-row:first-child { margin-top: 0; }
-/* Name strip under both shaded performance charts (PerfNameRow). Shared by the
-   escalation and developer cards so the two rows sit on the same baseline with
-   the same font, alignment, spacing and chip treatment. */
+
 .perf-name-row {
   display: flex;
   align-items: baseline;
@@ -1524,7 +1502,7 @@ body.dark-mode .perf-name-chip-role { color: #94a3b8; }
 body.dark-mode .esc-tooltip-row { color: #cbd5e1; }
 body.dark-mode .esc-tooltip-footer { border-top-color: #334155; }
 
-/* Bottom Row */
+
 .bottom-row {
   display: grid;
   grid-template-columns: 380px 1fr;
@@ -1569,7 +1547,7 @@ body.dark-mode .esc-tooltip-footer { border-top-color: #334155; }
 }
 .view-all-link:hover { text-decoration: underline; }
 
-/* Table */
+
 .table-header {
   display: flex;
   justify-content: space-between;
@@ -1728,7 +1706,7 @@ body.dark-mode .esc-tooltip-footer { border-top-color: #334155; }
   flex-shrink: 0;
 }
 
-/* Select Box Grid */
+
 .select-box-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1785,7 +1763,7 @@ body.dark-mode .select-box-dot {
   background: #475569;
 }
 
-/* Checkbox Group */
+
 .checkbox-group {
   display: flex;
   flex-wrap: wrap;
@@ -1834,7 +1812,7 @@ body.dark-mode .checkbox-item:has(input:checked) {
   background: color-mix(in srgb, #6366f1 12%, #334155);
 }
 
-/* Multi-Select Dropdown */
+
 .multi-select-dropdown {
   position: relative;
 }
@@ -2008,7 +1986,7 @@ body.dark-mode .multi-select-option.selected {
 }
 body.dark-mode .page-ellipsis { color: #64748b; }
 
-/* ========== BUTTONS ========== */
+
 .btn {
   padding: 8px 16px;
   border-radius: 8px;
@@ -2029,12 +2007,12 @@ body.dark-mode .page-ellipsis { color: #64748b; }
 .btn-danger { background: #ef4444; color: white; }
 .btn-success { background: #10b981; color: white; }
 
-/* ========== PAGES ========== */
+
 .page-container {
   max-width: 1600px;
 }
 
-/* Page Header - Light Periwinkle gradient in bright mode (all dashboards) */
+
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -2071,7 +2049,7 @@ body.dark-mode .page-container .page-header {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.35);
 }
-/* Account Details Card */
+
 .account-details-card {
   background: #f8fafc;
   border: 1px solid #e5e7eb;
@@ -2101,8 +2079,7 @@ body.dark-mode .detail-label {
 body.dark-mode .detail-value {
   color: #e2e8f0;
 }
-/* User Details modal: soft gradient on the Account Details card
-   (scoped to this modal so Profile pages are unaffected). */
+
 .user-details-modal .account-details-card {
   background: linear-gradient(150deg, #EFF6FF 0%, #DBEAFE 45%, #F8FAFC 100%);
   border: 1px solid rgba(59, 130, 246, 0.2);
@@ -2161,7 +2138,7 @@ body.dark-mode .req-cal-btn-arrow { color: rgba(255, 255, 255, 0.85); }
   box-shadow: 0 4px 16px rgba(80, 100, 180, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
-/* ========== REQUEST CALENDAR ========== */
+
 .req-calendar {
   position: relative;
 }
@@ -2544,7 +2521,7 @@ body.dark-mode .page-header .btn-primary:hover {
   background: #1D4ED8;
   box-shadow: 0 4px 15px rgba(37, 99, 235, 0.5);
 }
-/* Calendar trigger inside page headers: periwinkle header gradient */
+
 .page-header .calendar-icon-btn {
   background: linear-gradient(135deg, #C3CFF6 0%, #B9C9F5 45%, #D5DEF9 100%);
   border-color: rgba(99, 125, 205, 0.65);
@@ -2570,7 +2547,7 @@ body.dark-mode .page-header .req-cal-btn-label { color: #1E2A5A; }
 body.dark-mode .page-header .req-cal-btn-arrow { color: rgba(30, 42, 90, 0.85); }
 body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
 
-/* Filters Bar */
+
 .filters-bar {
   display: flex;
   gap: 12px;
@@ -2632,8 +2609,7 @@ body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
   outline: none;
   border-color: #00b4d8;
 }
-/* Shared search + filter toolbar (outside/above tables).
-   Search left, filters right, table starts below. Responsive stacks. */
+
 .sf-toolbar {
   display: flex;
   gap: 12px;
@@ -2683,8 +2659,7 @@ body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
   .sf-toolbar-right { width: 100%; justify-content: flex-start; }
   .sf-toolbar-right select { flex: 1 1 140px; }
 }
-/* Search (far left) + Filters (far right) share one row, visually joined
-   with the table card directly below — no separate detached toolbar card. */
+
 .sf-toolbar-right:empty { display: none; }
 .filters-bar.sf-toolbar {
   margin-bottom: 0;
@@ -2698,7 +2673,7 @@ body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
   margin-top: 0 !important;
   border-top: none;
 }
-/* Toolbar already nested inside the table card: flatten to a single row */
+
 .chart-card > .filters-bar.sf-toolbar {
   background: transparent;
   border: none;
@@ -2710,10 +2685,7 @@ body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
   .filters-bar.sf-toolbar + .chart-card { padding-top: 16px; }
 }
 
-/* Table Card - Colored Accent.
-   The card itself is the scroll container (both axes) so wide tables scroll
-   horizontally and tall viewports can scroll vertically (header + rows stay
-   aligned as one unit) instead of being clipped or compressed. */
+
 .table-card {
   background: white;
   border-radius: 12px;
@@ -2740,17 +2712,13 @@ body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
 .table-card::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
-/* Table keeps its natural content-based width (never squeezed/clipped);
-   it fills the card when narrow and triggers scrolling when wide. */
+
 .table-card .data-table {
   width: max-content;
   min-width: 100%;
 }
 
-/* Horizontal-scroll indicator: a small professional ↔ pill rendered in the
-   table footer (never covers table content). It appears only while the
-   table actually overflows (footer gets data-hscroll="true" from the
-   TableScrollHints observer) and disappears otherwise. */
+
 .table-footer .table-footer-info::after {
   content: '';
   display: none;
@@ -2963,7 +2931,7 @@ body.dark-mode .file-preview-name {
   color: #e2e8f0;
 }
 
-/* ========== ATTACHMENTS ========== */
+
 .attachments-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -3007,7 +2975,7 @@ body.dark-mode .attachment-file {
   color: #e2e8f0;
 }
 
-/* Info attachments */
+
 .info-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -3054,7 +3022,7 @@ body.dark-mode .info-attachment-file:hover {
   background: #334155;
 }
 
-/* ========== LIGHTBOX ========== */
+
 .lightbox-overlay {
   position: fixed;
   top: 0;
@@ -3126,7 +3094,7 @@ body.dark-mode .info-attachment-file:hover {
   to { opacity: 1; }
 }
 
-/* ========== DETAIL PAGE ========== */
+
 .back-link {
   background: transparent;
   border: 1px solid #9CA3AF;
@@ -3160,9 +3128,7 @@ body.dark-mode .info-attachment-file:hover {
 }
 .detail-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
 
-/* Full-width History section below Comments (Request Details → Comments → History).
-   Spans the whole content width; Status Flow stays inside the same History card.
-   Margin-top pulls it tight against the grid above to remove empty space. */
+
 .detail-history-full {
   margin-top: 4px;
   width: 100%;
@@ -3178,7 +3144,7 @@ body.dark-mode .info-attachment-file:hover {
 .detail-description { font-size: 14px; color: #374151; line-height: 1.7; white-space: pre-wrap; }
 .detail-content { padding: 0; }
 
-/* Edit form */
+
 .edit-form {
   padding: 8px 0;
 }
@@ -3269,7 +3235,7 @@ body.dark-mode .info-attachment-file:hover {
   box-shadow: 0 6px 16px rgba(14, 165, 233, 0.4);
 }
 
-/* Comments */
+
 .comments-list { display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; }
 .comment-item { display: flex; gap: 12px; }
 .comment-avatar {
@@ -3302,7 +3268,7 @@ body.dark-mode .info-attachment-file:hover {
 .comment-form textarea:focus { outline: none; border-color: #3B82F6; }
 .comment-form .btn { align-self: flex-end; }
 
-/* ===== Chat Conversation ===== */
+
 .chat-card {
   background: #fff;
   border-radius: 16px;
@@ -3689,7 +3655,7 @@ body.dark-mode .composer-textarea { background: #0f172a; border-color: #334155; 
 body.dark-mode .composer-textarea:focus { border-color: #3B82F6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
 body.dark-mode .composer-hint { color: #64748b; }
 
-/* Info list */
+
 .info-list { display: flex; flex-direction: column; gap: 12px; }
 .info-row {
   display: flex;
@@ -3701,7 +3667,7 @@ body.dark-mode .composer-hint { color: #64748b; }
 }
 .info-label { color: #6b7280; }
 
-/* Actions */
+
 .action-list { display: flex; flex-direction: column; gap: 12px; }
 .action-group { display: flex; flex-direction: column; gap: 4px; }
 .action-group label { font-size: 13px; color: #6b7280; font-weight: 500; }
@@ -3712,7 +3678,7 @@ body.dark-mode .composer-hint { color: #64748b; }
   font-size: 14px;
 }
 
-/* Assignee */
+
 .assignee-info { display: flex; align-items: center; gap: 12px; }
 .assignee-avatar-lg {
   width: 44px;
@@ -3729,7 +3695,7 @@ body.dark-mode .composer-hint { color: #64748b; }
 .assignee-role { font-size: 12px; color: #6b7280; }
 .unassigned { color: #9ca3af; font-size: 14px; }
 
-/* ========== GRID CARDS ========== */
+
 .grid-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -3768,7 +3734,7 @@ body.dark-mode .composer-hint { color: #64748b; }
   font-size: 12px;
 }
 
-/* ========== REQUESTS BY CATEGORY CARD ========== */
+
 .requests-by-category-card {
   background: #f8fafc;
   border: 1px solid #e5e7eb;
@@ -3897,7 +3863,7 @@ body.dark-mode .requests-by-category-card h3 {
   }
 }
 
-/* ========== ACTIVITY TIMELINE ========== */
+
 .activity-timeline { display: flex; flex-direction: column; gap: 0; }
 .timeline-item {
   display: flex;
@@ -3923,7 +3889,7 @@ body.dark-mode .requests-by-category-card h3 {
 .timeline-request { color: #3B82F6; font-weight: 600; font-size: 13px; }
 .timeline-meta { font-size: 12px; color: #9ca3af; margin-top: 4px; }
 
-/* ========== MODAL ========== */
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -3966,8 +3932,7 @@ body.dark-mode .requests-by-category-card h3 {
   padding-bottom: 16px;
   border-bottom: 2px solid rgba(0, 180, 216, 0.15);
 }
-/* Admin User Details: profile + account cards side by side, equal height,
-   top-aligned; stacked vertically on small screens. */
+
 .user-details-modal {
   width: calc(100vw - 48px);
 }
@@ -4023,15 +3988,13 @@ body.dark-mode .requests-by-category-card h3 {
   border-top: 1px solid #e5e7eb;
 }
 
-/* Modal Dark Mode */
+
 body.dark-mode .modal {
   background: #1e293b;
   border-color: #334155;
 }
 
-/* Confirmation-dialog text: must stay readable on the modal panel in both
-   bright (white) and dark (slate) themes. !important overrides the legacy
-   inline `color: #fff` on the message <p>. */
+
 .modal > p {
   color: #374151 !important;
 }
@@ -4055,7 +4018,7 @@ body.dark-mode .modal .form-actions {
   border-top-color: #334155;
 }
 
-/* Modal header */
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -4119,14 +4082,14 @@ body.dark-mode .modal-subtitle { color: #94a3b8; }
 body.dark-mode .modal-close { color: #94a3b8; }
 body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
 
-/* ========== SETTINGS ========== */
+
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
   gap: 20px;
 }
 
-/* Settings Layout - Tabs + Content */
+
 .settings-layout {
   display: flex;
   gap: 24px;
@@ -4204,7 +4167,7 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
   border-bottom: none;
 }
 
-/* Language Options */
+
 .language-options {
   display: flex;
   flex-direction: column;
@@ -4250,7 +4213,7 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
   font-size: 18px;
 }
 
-/* Color Picker */
+
 .color-picker-row {
   display: flex;
   align-items: center;
@@ -4270,7 +4233,7 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
   font-family: monospace;
 }
 
-/* Radio Group */
+
 .radio-group {
   display: flex;
   gap: 16px;
@@ -4300,7 +4263,7 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
   background: rgba(0, 180, 216, 0.06);
 }
 
-/* Checkbox Group */
+
 .checkbox-group {
   display: flex;
   gap: 12px;
@@ -4330,14 +4293,14 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
   font-weight: 500;
 }
 
-/* Form Row */
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
 
-/* Page Header with Save Button */
+
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -4456,7 +4419,7 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
   font-size: 12px;
 }
 
-/* Empty State */
+
 .empty-state {
   text-align: center;
   padding: 40px;
@@ -4464,7 +4427,7 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
   font-size: 14px;
 }
 
-/* Shaded line graph (Requests Overview) */
+
 .chart-card-header {
   display: flex;
   align-items: flex-start;
@@ -4532,7 +4495,7 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
 .chart-summary-label { color: #6b7280; }
 .chart-summary-value { font-weight: 700; color: #111827; }
 
-/* ========== RESPONSIVE ========== */
+
 @media (max-width: 1200px) {
   .stats-grid { grid-template-columns: repeat(3, 1fr); }
   .charts-row { grid-template-columns: 1fr; }
@@ -4576,7 +4539,7 @@ body.dark-mode .modal-close:hover { background: #334155; color: #e2e8f0; }
   .otp-box { width: 38px; height: 46px; font-size: 18px; }
 }
 
-/* ========== DARK MODE ========== */
+
 .theme-toggle {
   display: flex;
   align-items: center;
@@ -4613,7 +4576,7 @@ body.dark-mode .content {
   background: #0f172a;
 }
 
-/* Sidebar Dark */
+
 body.dark-mode .sidebar,
 body.dark-sidebar .sidebar {
   background: #1e293b;
@@ -4665,7 +4628,7 @@ body.dark-sidebar .user-name-small {
   color: #e2e8f0;
 }
 
-/* Topbar Dark */
+
 body.dark-mode .topbar {
   background: #1e293b;
   border-bottom: 1px solid #334155;
@@ -4689,7 +4652,7 @@ body.dark-mode .user-menu-btn span {
   color: #e2e8f0;
 }
 
-/* ========== GLOBAL SEARCH ========== */
+
 .global-search {
   position: relative;
   display: flex;
@@ -4865,7 +4828,7 @@ body.dark-mode .user-menu-btn span {
   background: #eff6ff;
 }
 
-/* Global search results page */
+
 .search-results-tabs {
   display: flex;
   gap: 8px;
@@ -4959,7 +4922,7 @@ body.dark-mode .user-menu-btn span {
   margin-left: auto;
 }
 
-/* Global search dark mode */
+
 body.dark-mode .global-search-input-wrap {
   background: #334155;
 }
@@ -5021,7 +4984,7 @@ body.dark-mode .search-result-row-meta {
   color: #94a3b8;
 }
 
-/* Cards Dark */
+
 body.dark-mode .stat-card,
 body.dark-mode .stat-card-simple,
 body.dark-mode .chart-card,
@@ -5035,8 +4998,7 @@ body.dark-mode .settings-card {
   border: 1px solid #334155;
   box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
-/* Dark mode resets the border shorthand above, so restore the stat-card
-   accent bar (4px + card color, same as light mode and performance cards). */
+
 body.dark-mode .stat-card {
   border-left: 2px solid var(--stat-accent, #334155);
 }
@@ -5098,7 +5060,7 @@ body.dark-mode .color-input {
   border-color: #475569;
 }
 
-/* Table Dark */
+
 body.dark-mode .data-table th {
   color: #94a3b8;
   border-bottom: 1px solid #334155;
@@ -5127,7 +5089,7 @@ body.dark-mode .per-page-select select {
   color: #e2e8f0;
 }
 
-/* Filters Dark */
+
 body.dark-mode .filters-bar {
   background: #1e293b;
   border-color: #334155;
@@ -5142,7 +5104,7 @@ body.dark-mode .filter-search::placeholder {
   color: #94a3b8;
 }
 
-/* Form Dark */
+
 body.dark-mode .form-card .form-group label {
   color: #e2e8f0;
 }
@@ -5177,7 +5139,7 @@ body.dark-mode .tag {
   color: #e2e8f0;
 }
 
-/* Category Cards Select */
+
 .category-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -5219,7 +5181,7 @@ body.dark-mode .tag {
   color: #9ca3af;
 }
 
-/* Category Management Cards */
+
 .category-cards-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -5337,25 +5299,25 @@ body.dark-mode .category-manage-actions .category-delete-btn:hover {
   border-color: #ef4444;
 }
 
-/* Page Header Dark Override */
+
 body.dark-mode .page-container > .page-header,
 body.dark-mode .page-container .page-header {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* Badge Dark */
+
 body.dark-mode .badge {
   background: #ef4444;
   color: #ffffff;
 }
 
-/* Status/Priority Badges Dark */
+
 body.dark-mode .priority-badge,
 body.dark-mode .status-badge {
   border: 1px solid rgba(255,255,255,0.1);
 }
 
-/* Detail Page Dark */
+
 body.dark-mode .detail-description {
   color: #cbd5e1;
 }
@@ -5369,7 +5331,7 @@ body.dark-mode .detail-sidebar .info-row span:last-child {
   color: #e2e8f0;
 }
 
-/* Detail Card Colorful */
+
 .detail-card h3 {
   color: #1e293b;
   border-bottom: 2px solid #0ea5e9;
@@ -5389,7 +5351,7 @@ body.dark-mode .detail-card-header h3 {
   color: #f1f5f9;
 }
 
-/* Sidebar Cards Colorful */
+
 .detail-sidebar .detail-card {
   border-left: 4px solid #0ea5e9;
 }
@@ -5405,7 +5367,7 @@ body.dark-mode .detail-sidebar .detail-card h3 {
   color: #38bdf8;
 }
 
-/* Status and Priority Badges Enhanced */
+
 .status-badge, .priority-badge {
   padding: 5px 14px;
   border-radius: 20px;
@@ -5415,7 +5377,7 @@ body.dark-mode .detail-sidebar .detail-card h3 {
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
-/* Comments Dark */
+
 body.dark-mode .comment-body p {
   color: #cbd5e1;
 }
@@ -5428,7 +5390,7 @@ body.dark-mode .comment-form textarea:focus {
   border-color: #00b4d8;
 }
 
-/* Comments Colorful */
+
 .comments-list h3 {
   color: #1e293b;
   border-bottom: 2px solid #8b5cf6;
@@ -5456,7 +5418,7 @@ body.dark-mode .comment-item:hover {
   background: #273548;
 }
 
-/* Action Area Colorful */
+
 .action-list h3 {
   color: #1e293b;
 }
@@ -5474,7 +5436,7 @@ body.dark-mode .action-group label {
   color: #94a3b8;
 }
 
-/* Action selects Dark */
+
 body.dark-mode .action-group select,
 body.dark-mode .action-group label {
   background: #334155;
@@ -5482,7 +5444,7 @@ body.dark-mode .action-group label {
   border-color: #475569;
 }
 
-/* Action Group Enhanced */
+
 .action-group {
   display: flex;
   flex-direction: column;
@@ -5541,7 +5503,7 @@ body.dark-mode .action-group option {
   background: #0f172a;
 }
 
-/* Edit Form Dark */
+
 body.dark-mode .edit-form .form-group label {
   color: #94a3b8;
   font-weight: 600;
@@ -5587,7 +5549,7 @@ body.dark-mode .edit-form .btn-primary:hover {
   box-shadow: 0 6px 16px rgba(14, 165, 233, 0.35);
 }
 
-/* Assignee Dark */
+
 body.dark-mode .assignee-name {
   color: #e2e8f0;
 }
@@ -5598,7 +5560,7 @@ body.dark-mode .unassigned {
   color: #94a3b8;
 }
 
-/* Assignee Colorful */
+
 .assignee-info {
   background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
   padding: 16px;
@@ -5651,7 +5613,7 @@ body.dark-mode .assignee-role {
   color: #60a5fa;
 }
 
-/* Activity Dark */
+
 body.dark-mode .activity-content p {
   color: #cbd5e1;
 }
@@ -5659,12 +5621,12 @@ body.dark-mode .legend-value {
   color: #94a3b8;
 }
 
-/* Empty State Dark */
+
 body.dark-mode .empty-state {
   color: #64748b;
 }
 
-/* Dropdown Dark */
+
 body.dark-mode .user-menu-btn:hover,
 body.dark-mode .user-menu-btn:focus-visible {
   background: rgba(59, 130, 246, 0.15);
@@ -5707,7 +5669,7 @@ body.dark-mode .dropdown-item.logout:hover {
   background: rgba(239, 68, 68, 0.15);
 }
 
-/* Button Overrides Dark */
+
 body.dark-mode .btn-outline {
   background: #1e293b;
   border-color: #475569;
@@ -5717,7 +5679,7 @@ body.dark-mode .btn-outline:hover {
   background: #334155;
 }
 
-/* Back Link Dark — transparent fill with visible border, light readable text */
+
 body.dark-mode .back-link {
   background: transparent;
   color: #e2e8f0;
@@ -5731,17 +5693,17 @@ body.dark-mode .back-link:hover {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* Error Dark */
+
 body.dark-mode .form-error {
   background: rgba(239, 68, 68, 0.15);
 }
 
-/* User Dropdown Dark */
+
 body.dark-mode .user-dropdown {
   background: #1e293b;
 }
 
-/* ========== TOAST / BUBBLE NOTIFICATIONS ========== */
+
 .toast-container {
   position: fixed;
   top: 20px;
@@ -5819,7 +5781,7 @@ body.dark-mode .user-dropdown {
   }
 }
 
-/* ========== SMS BUBBLE NOTIFICATIONS ========== */
+
 .notification-bubble {
   position: fixed;
   z-index: 9998;
@@ -5858,7 +5820,7 @@ body.dark-mode .user-dropdown {
   }
 }
 
-/* Stacked positions */
+
 .notification-bubble:nth-child(1) { top: 20px; right: 20px; }
 .notification-bubble:nth-child(2) { top: 90px; right: 20px; }
 .notification-bubble:nth-child(3) { top: 160px; right: 20px; }
@@ -5952,7 +5914,7 @@ body.dark-mode .user-dropdown {
   background: #dc2626;
 }
 
-/* Bubble type colors */
+
 .bubble-type-request .bubble-pill-icon {
   background: linear-gradient(135deg, #3B82F6, #2563EB);
 }
@@ -5973,7 +5935,7 @@ body.dark-mode .user-dropdown {
 }
 .bubble-type-assignment .bubble-pill-title { color: #7C3AED; }
 
-/* Incoming pulse */
+
 .bubble-incoming .bubble-pill-icon {
   animation: bubbleGlow 1.2s ease-in-out;
 }
@@ -5983,7 +5945,7 @@ body.dark-mode .user-dropdown {
   50% { box-shadow: 0 2px 20px rgba(0, 119, 182, 0.5), 0 0 0 6px rgba(0, 119, 182, 0.1); }
 }
 
-/* Dark mode */
+
 body.dark-mode .bubble-pill {
   background: #1e293b;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
@@ -5996,12 +5958,12 @@ body.dark-mode .bubble-type-status .bubble-pill-title { color: #fbbf24; }
 body.dark-mode .bubble-type-assignment .bubble-pill-title { color: #a78bfa; }
 body.dark-mode .bubble-pill-close { border-color: #1e293b; }
 
-/* Dark mode toast */
+
 body.dark-mode .toast-container {
   filter: none;
 }
 
-/* Category Modal Dark */
+
 body.dark-mode .category-modal-content {
   background: #1e293b;
   color: #e2e8f0;
@@ -6010,7 +5972,7 @@ body.dark-mode .category-modal-header {
   border-bottom-color: #334155;
 }
 
-/* ========== SETTINGS PAGE ========== */
+
 .settings-page {
   padding: 0;
 }
@@ -6064,7 +6026,7 @@ body.dark-mode .category-modal-header {
   cursor: not-allowed;
 }
 
-/* 2 Column Grid */
+
 .settings-grid-2col {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -6077,7 +6039,7 @@ body.dark-mode .category-modal-header {
   gap: 24px;
 }
 
-/* Settings Card */
+
 .settings-card {
   background: white;
   border-radius: 12px;
@@ -6094,7 +6056,7 @@ body.dark-mode .category-modal-header {
   border-bottom: 2px solid #2563eb;
 }
 
-/* Settings Field */
+
 .settings-field {
   margin-bottom: 18px;
 }
@@ -6129,7 +6091,7 @@ body.dark-mode .category-modal-header {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
-/* Logo Upload */
+
 .logo-upload-area {
   display: flex;
   align-items: center;
@@ -6221,7 +6183,7 @@ body.dark-mode .logo-upload-btn:hover {
   cursor: not-allowed;
 }
 
-/* Sidebar Logo */
+
 .sidebar-logo {
   width: 96px;
   height: 96px;
@@ -6250,7 +6212,7 @@ body.dark-mode .logo-upload-btn:hover {
   }
 }
 
-/* Input with Unit */
+
 .input-with-unit {
   display: flex;
   align-items: center;
@@ -6266,7 +6228,7 @@ body.dark-mode .logo-upload-btn:hover {
   color: #6b7280;
 }
 
-/* Color Input */
+
 .settings-field input[type="color"] {
   width: 48px;
   height: 48px;
@@ -6286,7 +6248,7 @@ body.dark-mode .settings-field input[type="color"] {
   border-color: #475569;
 }
 
-/* Time Input */
+
 .settings-field input[type="time"] {
   width: 100%;
   padding: 10px 14px;
@@ -6309,7 +6271,7 @@ body.dark-mode .settings-field input[type="time"] {
   color: #e2e8f0;
 }
 
-/* Inline flex for color + select */
+
 .settings-inline {
   display: flex;
   align-items: center;
@@ -6319,7 +6281,7 @@ body.dark-mode .settings-field input[type="time"] {
   flex: 1;
 }
 
-/* Checkbox List */
+
 .checkbox-list {
   display: flex;
   flex-direction: column;
@@ -6340,7 +6302,7 @@ body.dark-mode .settings-field input[type="time"] {
   cursor: pointer;
 }
 
-/* Language Select */
+
 .language-select {
   display: flex;
   align-items: center;
@@ -6367,7 +6329,7 @@ body.dark-mode .settings-field input[type="time"] {
   box-shadow: none;
 }
 
-/* Managed Languages Table */
+
 .managed-languages-table {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
@@ -6421,7 +6383,7 @@ body.dark-mode .settings-field input[type="time"] {
   color: #ef4444;
 }
 
-/* Add Language Button */
+
 .btn-add-language {
   background: none;
   border: 1px dashed #d1d5db;
@@ -6438,7 +6400,7 @@ body.dark-mode .settings-field input[type="time"] {
   background: rgba(37, 99, 235, 0.04);
 }
 
-/* Settings Card Split */
+
 .settings-card-split {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -6463,7 +6425,7 @@ body.dark-mode .settings-field input[type="time"] {
   font-size: 15px;
 }
 
-/* Toggle Row Settings */
+
 .toggle-row-settings {
   display: flex;
   justify-content: space-between;
@@ -6487,7 +6449,7 @@ body.dark-mode .settings-field input[type="time"] {
   margin-top: 2px;
 }
 
-/* Toggle Switch */
+
 .toggle {
   position: relative;
   display: inline-block;
@@ -6522,7 +6484,7 @@ body.dark-mode .settings-field input[type="time"] {
   transform: translateX(20px);
 }
 
-/* Dark Mode Settings */
+
 body.dark-mode .settings-header h1 { color: #e2e8f0; }
 body.dark-mode .settings-date { background: #1e293b; border-color: #334155; color: #94a3b8; }
 body.dark-mode .settings-card { background: #1e293b; border-color: #334155; }
@@ -6550,7 +6512,7 @@ body.dark-mode .toggle-label { color: #e2e8f0; }
 body.dark-mode .toggle-sublabel { color: #64748b; }
 body.dark-mode .checkbox-item { color: #cbd5e1; }
 
-/* Request Table Action Buttons */
+
 .actions-cell {
   display: flex;
   gap: 8px;
@@ -6586,7 +6548,7 @@ body.dark-mode .checkbox-item { color: #cbd5e1; }
   background: #dc2626;
 }
 
-/* Feedback/Star Rating Section */
+
 .star-rating {
   display: flex;
   gap: 4px;
@@ -6605,7 +6567,7 @@ body.dark-mode .checkbox-item { color: #cbd5e1; }
   transform: scale(1.2);
 }
 
-/* Feedback Card */
+
 .detail-card:has(.star-rating) {
   border: 1px solid #fbbf24;
   background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
@@ -6615,8 +6577,8 @@ body.dark-mode .detail-card:has(.star-rating) {
   border-color: #854d0e;
 }
 
-/* Timeline Styles */
-/* Status Lifecycle Flow */
+
+
 .status-lifecycle {
   padding: 14px;
   margin-bottom: 12px;
@@ -6725,21 +6687,18 @@ body.dark-mode .detail-card:has(.star-rating) {
   100% { transform: scale(1.5); opacity: 0; }
 }
 
-/* Per-status abstract animations for the Status Flow dots. Each animation
-   uses the step's own color (--step-color, set inline) so custom statuses
-   stay consistent. All effects are absolutely-positioned rings/dots outside
-   the 40px dot, so size, alignment and layout never change. */
+
 .lifecycle-dot[class*="anim-"]::after {
   content: '';
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
 }
-/* Only the current/last status is animated; past steps stay static. */
+
 .lifecycle-dot.anim-none::after {
   display: none;
 }
-/* New — subtle notification pulse (soft expanding ring) */
+
 .lifecycle-dot.anim-new::after {
   inset: 0;
   border: 2px solid var(--step-color, #3B82F6);
@@ -6750,27 +6709,27 @@ body.dark-mode .detail-card:has(.star-rating) {
   70% { transform: scale(1.45); opacity: 0; }
   100% { transform: scale(1.45); opacity: 0; }
 }
-/* Assigned — user handoff (small satellite dot orbiting the step) */
+
 .lifecycle-dot.anim-assigned::after {
   inset: -5px;
   background: radial-gradient(circle 3px at 50% 1px, var(--step-color, #8B5CF6) 98%, transparent 100%);
   animation: lifecycle-spin 3s linear infinite;
 }
-/* In Progress — active progress (rotating arc) */
+
 .lifecycle-dot.anim-progress::after {
   inset: -4px;
   border: 2px solid transparent;
   border-top-color: var(--step-color, #F59E0B);
   animation: lifecycle-spin 1.6s linear infinite;
 }
-/* Waiting for Client — rotating dashed loading ring */
+
 .lifecycle-dot.anim-waiting::after {
   inset: -4px;
   border: 2px dashed var(--step-color, #F97316);
   opacity: 0.75;
   animation: lifecycle-spin 4s linear infinite;
 }
-/* Resolved — success glow (soft breathing halo) */
+
 .lifecycle-dot.anim-resolved::after {
   inset: 0;
   border: 2px solid var(--step-color, #10B981);
@@ -6780,7 +6739,7 @@ body.dark-mode .detail-card:has(.star-rating) {
   0%, 100% { transform: scale(1); opacity: 0.55; box-shadow: 0 0 0 0 transparent; }
   50% { transform: scale(1.12); opacity: 0.9; box-shadow: 0 0 10px 0 var(--step-color, #10B981); }
 }
-/* Closed — completed lock (steady double ring, barely breathing) */
+
 .lifecycle-dot.anim-closed::after {
   inset: -4px;
   border: 2px solid var(--step-color, #6B7280);
@@ -6791,7 +6750,7 @@ body.dark-mode .detail-card:has(.star-rating) {
   0%, 100% { transform: scale(1); opacity: 0.3; }
   50% { transform: scale(1.04); opacity: 0.45; }
 }
-/* Escalated — alert (quick double-blink expanding ring) */
+
 .lifecycle-dot.anim-escalated::after {
   inset: 0;
   border: 2px solid var(--step-color, #EF4444);
@@ -6801,7 +6760,7 @@ body.dark-mode .detail-card:has(.star-rating) {
   0% { transform: scale(1); opacity: 0.9; }
   100% { transform: scale(1.6); opacity: 0; }
 }
-/* Rejected / neutral / custom fallback — subtle neutral breathe */
+
 .lifecycle-dot.anim-rejected::after,
 .lifecycle-dot.anim-neutral::after {
   inset: -3px;
@@ -6881,8 +6840,7 @@ body.dark-mode .detail-card:has(.star-rating) {
   animation: lifecycle-grow 0.5s ease backwards;
 }
 
-/* Small arrow travelling along each connector — highly visible: larger
-   bright chevron with glow, gliding from one status to the next. */
+
 .lifecycle-connector {
   overflow: visible;
 }
@@ -7066,19 +7024,19 @@ body.dark-mode .timeline-user {
   color: #9ca3af;
 }
 
-/* Comment Role Badge */
+
 .comment-role {
   display: inline-block;
 }
 
-/* Upload Section */
+
 .detail-card h3 {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-/* Sidebar select dropdown open upward */
+
 .detail-sidebar select {
   direction: rtl;
   text-align: left;
@@ -7088,7 +7046,7 @@ body.dark-mode .timeline-user {
   direction: ltr;
 }
 
-/* ========== STATUS TOAST ========== */
+
 .status-toast {
   position: fixed;
   top: 90px;
@@ -7151,7 +7109,7 @@ body.dark-mode .status-toast {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* ========== PERFORMANCE TOGGLE ========== */
+
 .performance-section {
   margin-top: 24px;
 }
@@ -7215,7 +7173,7 @@ body.dark-mode .perf-toggle-btn.active {
   box-shadow: 0 4px 16px rgba(14, 165, 233, 0.3);
 }
 
-/* ========== TABLE HEADER BAR ========== */
+
 .table-header-bar {
   display: flex;
   justify-content: space-between;
@@ -7279,7 +7237,7 @@ body.dark-mode .perf-toggle-btn.active {
   color: #9ca3af;
 }
 
-/* ========== ASSIGNED USER CELL ========== */
+
 .assigned-user-cell {
   display: flex;
   align-items: center;
@@ -7298,7 +7256,7 @@ body.dark-mode .perf-toggle-btn.active {
   flex-shrink: 0;
 }
 
-/* ========== INLINE ACTIONS ========== */
+
 .actions-cell-inline {
   display: flex;
   align-items: center;
@@ -7351,7 +7309,7 @@ body.dark-mode .perf-toggle-btn.active {
   border-color: #3B82F6;
 }
 
-/* ========== TABLE FOOTER / PAGINATION ========== */
+
 .table-footer {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -7360,7 +7318,7 @@ body.dark-mode .perf-toggle-btn.active {
   border-top: 1px solid #e5e7eb;
   position: relative;
 }
-/* Keep the per-page selector above any overlapping layer so its dropdown always opens. */
+
 .table-footer-info {
   display: flex;
   align-items: center;
@@ -7371,8 +7329,7 @@ body.dark-mode .perf-toggle-btn.active {
   z-index: 2;
   justify-self: start;
 }
-/* Pagination lives in the center grid column (visually centered like before)
-   but can no longer overlay/cover the per-page dropdown. */
+
 .table-footer .table-pagination {
   position: static;
   left: auto;
@@ -7428,7 +7385,7 @@ body.dark-mode .perf-toggle-btn.active {
   cursor: not-allowed;
 }
 
-/* Sortable columns */
+
 .sortable {
   cursor: pointer;
   user-select: none;
@@ -7454,7 +7411,7 @@ body.dark-mode .perf-toggle-btn.active {
   opacity: 0.7;
 }
 
-/* Dark mode for new table elements */
+
 body.dark-mode .table-header-bar {
   border-bottom-color: #334155;
 }
@@ -7512,9 +7469,7 @@ body.dark-mode .inline-status-select {
   color: #e2e8f0;
 }
 
-/* ============================
-   Feedback Card (Client Dashboard)
-   ============================ */
+
 .feedback-card {
   background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
   border: 1px solid rgba(16, 185, 129, 0.25);
@@ -7539,7 +7494,7 @@ body.dark-mode .feedback-card {
   border-color: rgba(16, 185, 129, 0.15);
 }
 
-/* Submitted State */
+
 .feedback-submitted {
   text-align: center;
   padding: 8px 0;
@@ -7654,7 +7609,7 @@ body.dark-mode .feedback-comment-display p {
   color: #cbd5e1;
 }
 
-/* Form State */
+
 .feedback-form {
   animation: feedbackFadeIn 0.4s ease-out;
 }
@@ -7686,7 +7641,7 @@ body.dark-mode .feedback-form-prompt {
   color: #94a3b8;
 }
 
-/* Star Buttons */
+
 .feedback-stars-container {
   text-align: center;
   margin-bottom: 18px;
@@ -7745,7 +7700,7 @@ body.dark-mode .feedback-star-btn.active svg {
   fill: #F59E0B;
 }
 
-/* Rating Hint */
+
 .feedback-rating-hint {
   margin-top: 10px;
   font-size: 14px;
@@ -7771,7 +7726,7 @@ body.dark-mode .hint-default {
 .hint-active.rating-4 { color: #22c55e; }
 .hint-active.rating-5 { color: #10b981; }
 
-/* Textarea */
+
 .feedback-textarea-group {
   margin-bottom: 16px;
 }
@@ -7827,7 +7782,7 @@ body.dark-mode .feedback-textarea:focus {
   margin-top: 4px;
 }
 
-/* Submit Button */
+
 .feedback-submit-btn {
   width: 100%;
   padding: 14px;
@@ -7872,9 +7827,7 @@ body.dark-mode .feedback-textarea:focus {
   to { transform: rotate(360deg); }
 }
 
-/* ============================
-   Feedback Admin Table (Dark Mode / White Text)
-   ============================ */
+
 .feedback-cell-muted {
   font-size: 13px;
   transition: color 0.2s;
@@ -7932,9 +7885,7 @@ body.dark-mode .feedback-label {
   color: #ffffff !important;
 }
 
-/* ============================
-   Add Member Panel (Groups)
-   ============================ */
+
 .add-member-panel {
   margin-bottom: 16px;
 }
@@ -8062,7 +8013,7 @@ body.dark-mode .member-checkbox-email {
   min-width: 80px;
 }
 
-/* ===== Language Selector ===== */
+
 .lang-selector { position: relative; display: inline-flex; }
 .lang-selector-btn {
   display: flex;
@@ -8117,7 +8068,7 @@ body.dark-mode .lang-selector-item { color: #e5e7eb; }
 body.dark-mode .lang-selector-item:hover { background: #334155; }
 body.dark-mode .lang-selector-item.active { background: #1d4ed8; color: #bfdbfe; }
 
-/* Dark mode: colored hover for Continue with Google */
+
 body.dark-mode .google-btn:hover {
   background: linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 100%);
   border-color: #3b82f6;
@@ -8136,7 +8087,7 @@ body.dark-mode .google-btn:active .google-btn-text {
   color: #dbeafe;
 }
 
-/* Topbar variant */
+
 .lang-selector-topbar .lang-selector-btn {
   border: none;
   background: transparent;
@@ -8147,7 +8098,7 @@ body.dark-mode .google-btn:active .google-btn-text {
 body.dark-mode .lang-selector-topbar .lang-selector-btn { color: #e5e7eb; }
 body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e293b; }
 
-/* Login variant */
+
 .lang-selector-login .lang-selector-btn {
   border-color: rgba(255,255,255,0.35);
   background: rgba(255,255,255,0.08);
@@ -8158,7 +8109,7 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
 .lang-selector-login { position: fixed; top: 20px; right: 24px; }
 .lang-selector-login .lang-selector-menu { right: 0; left: auto; }
 
-/* Login top controls (theme toggle + language) */
+
 .login-top-controls {
   position: fixed;
   top: 20px;
@@ -8207,7 +8158,7 @@ body.dark-mode .lang-selector-topbar .lang-selector-btn:hover { background: #1e2
   display: block;
 }
 
-/* Bright mode (default / not dark): light login & signup theme */
+
 body:not(.dark-mode) .login-page {
   background: linear-gradient(135deg, #e0f2fe 0%, #dbeafe 30%, #eff6ff 60%, #f8fafc 100%);
 }
@@ -8341,14 +8292,10 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   color: #0077b6;
 }
 
-/* Settings / profile variant */
+
 .lang-selector-inline .lang-selector-menu { left: 0; }
 
-/* ==========================================================================
-   RHMS ENTERPRISE DESIGN SYSTEM
-   Consistent tables, buttons and UI language across all dashboards.
-   Appended overrides - keep existing functionality intact.
-   ========================================================================== */
+
 
 :root {
   --rhms-primary: #2563EB;
@@ -8376,23 +8323,15 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   --rhms-border: #E5E7EB;
   --rhms-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.05);
 
-  /* Shared hover treatment for stat cards (.stat-card / .esc-kpi).
-     One deliberate brand-blue accent instead of each card's own color: the raw
-     accents include alarm-red for Escalated/Success Rate, and a red glow reads
-     as an error state rather than a pointer affordance. Deepened blue keeps
-     the depth cue, and the layered slate beneath keeps the card grounded on
-     light backgrounds where a blue-only shadow can look washed out. */
+  
   --rhms-stat-hover-border: #1D4ED8;
   --rhms-stat-hover-shadow: 0 20px 38px rgba(29, 78, 216, 0.28), 0 4px 12px rgba(15, 23, 42, 0.10);
 
-  /* Admin request cards tint their hover glow with the card's own status color
-     (--stat-shadow, set inline per card) instead of one shared brand blue, so
-     Resolved reads green and Escalated reads red. The contact layer underneath
-     stays neutral slate — a second tinted layer muddies the hue. */
+  
   --rhms-stat-hover-contact: 0 4px 12px rgba(15, 23, 42, 0.10);
 }
 
-/* ================= TABLES ================= */
+
 
 .table-card {
   border-radius: 14px;
@@ -8408,7 +8347,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   min-width: 0;
 }
 
-/* Header */
+
 .table-card .data-table thead tr,
 .data-table thead tr {
   background: var(--rhms-table-header);
@@ -8436,7 +8375,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   border-top-right-radius: 14px;
 }
 
-/* Header sort controls */
+
 .table-card .data-table thead .sortable:hover,
 .data-table thead .sortable:hover {
   color: #BFDBFE;
@@ -8452,8 +8391,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   opacity: 1;
 }
 
-/* Sort icons sit right next to the column name and the whole header always
-   stays on one row so the arrow never wraps below the column name. */
+
 .dashboard .table-card .data-table thead th.sortable,
 .data-table thead th.sortable {
   white-space: nowrap;
@@ -8473,7 +8411,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   opacity: 1;
 }
 
-/* Body rows */
+
 .data-table tbody tr {
   background: #FFFFFF;
   transition: background 0.15s ease;
@@ -8497,7 +8435,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   border-bottom: none;
 }
 
-/* Long text in a table cell shows as an ellipsis (...) instead of wrapping */
+
 .truncate-cell {
   display: inline-block;
   max-width: 80px;
@@ -8512,7 +8450,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   }
 }
 
-/* Row action buttons */
+
 .action-btn-text {
   padding: 6px 12px;
   border-radius: 8px;
@@ -8547,7 +8485,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   border-color: var(--rhms-danger);
 }
 
-/* Table chrome */
+
 .table-header-bar h3 {
   font-weight: 700;
 }
@@ -8558,7 +8496,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   border-radius: 9px;
 }
 
-/* Pagination */
+
 .table-pagination .page-btn {
   min-width: 34px;
   height: 34px;
@@ -8579,7 +8517,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   border-radius: 7px;
 }
 
-/* Filter bar inputs */
+
 .filters-bar {
   border-radius: 14px;
 }
@@ -8588,7 +8526,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   border-radius: 9px;
 }
 
-/* ================= BUTTONS ================= */
+
 
 .btn {
   display: inline-flex;
@@ -8627,7 +8565,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   box-shadow: none;
 }
 
-/* Primary (Create / Add / Save / Submit) */
+
 .btn-primary {
   background: var(--rhms-primary);
   color: #FFFFFF;
@@ -8636,7 +8574,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   background: var(--rhms-primary-hover);
 }
 
-/* Success (Resolve / Complete / Approve) */
+
 .btn-success {
   background: var(--rhms-success);
   color: #FFFFFF;
@@ -8645,7 +8583,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   background: var(--rhms-success-hover);
 }
 
-/* Warning (Pending / Escalate / Reassign) */
+
 .btn-warning {
   background: var(--rhms-warning);
   color: #FFFFFF;
@@ -8654,7 +8592,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   background: var(--rhms-warning-hover);
 }
 
-/* Danger (Delete / Reject / Close) */
+
 .btn-danger {
   background: var(--rhms-danger);
   color: #FFFFFF;
@@ -8663,7 +8601,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   background: var(--rhms-danger-hover);
 }
 
-/* Secondary (Cancel / Reset / Back) */
+
 .btn-outline {
   background: #FFFFFF;
   color: var(--rhms-secondary);
@@ -8677,7 +8615,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   transform: none;
 }
 
-/* Info (View / Details) */
+
 .btn-info {
   background: var(--rhms-info);
   color: #FFFFFF;
@@ -8693,7 +8631,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   border-radius: 8px;
 }
 
-/* Legacy action buttons used in card grids */
+
 .btn-action-edit {
   border-radius: 8px;
   font-weight: 600;
@@ -8707,7 +8645,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   background: var(--rhms-danger-hover);
 }
 
-/* Back link — transparent fill with visible border (all modes) */
+
 .back-link {
   display: inline-flex;
   align-items: center;
@@ -8732,7 +8670,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   filter: brightness(1.0);
 }
 
-/* Save button */
+
 .btn-save {
   border-radius: 10px;
   background: var(--rhms-primary);
@@ -8745,7 +8683,7 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
   background: var(--rhms-primary-hover);
 }
 
-/* ================= DARK MODE OVERRIDES ================= */
+
 
 body.dark-mode .table-card {
   border-color: #334155;
@@ -8804,7 +8742,7 @@ body.dark-mode .btn-outline:hover:not(:disabled) {
   color: #F1F5F9;
 }
 
-/* ================= RESPONSIVE TABLES ================= */
+
 
 @media (max-width: 768px) {
   .data-table thead th,
@@ -8846,7 +8784,7 @@ body.dark-mode .btn-outline:hover:not(:disabled) {
   }
 }
 
-/* ================= RESPONSIVE PAGE HEADERS ================= */
+
 
 @media (max-width: 768px) {
   .page-header,
@@ -8889,11 +8827,7 @@ body.dark-mode .btn-outline:hover:not(:disabled) {
   }
 }
 
-/* ==========================================================================
-   RESPONSIVE LAYOUT / VIEWPORT FIT
-   Keeps every page inside the viewport - no horizontal overflow.
-   Visual/layout only - no functionality changes.
-   ========================================================================== */
+
 
 html {
   overflow-x: hidden;
@@ -8905,7 +8839,7 @@ body,
   max-width: 100%;
 }
 
-/* Allow flex/grid children to shrink below their intrinsic content size */
+
 .main-area,
 .content,
 .page-container,
@@ -8945,7 +8879,7 @@ body,
   width: 100%;
 }
 
-/* Long unbreakable content should wrap instead of overflowing */
+
 .detail-description,
 .comment-body p,
 .dropdown-panel-message,
@@ -8955,7 +8889,7 @@ body,
   word-wrap: break-word;
 }
 
-/* Responsive topbar - let the search box absorb available space */
+
 .topbar {
   min-width: 0;
 }
@@ -8973,7 +8907,7 @@ body,
   max-width: 420px;
 }
 
-/* Table header bars wrap instead of overflowing */
+
 .table-header-bar {
   flex-wrap: wrap;
   gap: 10px;
@@ -8982,7 +8916,7 @@ body,
   flex-wrap: wrap;
 }
 
-/* Chart cards wrap gracefully */
+
 .chart-container {
   flex-wrap: wrap;
 }
@@ -8991,7 +8925,7 @@ body,
   min-width: 0;
 }
 
-/* Pie charts: keep legend to the right of the chart */
+
 .chart-container.pie-chart-layout {
   flex-wrap: nowrap;
 }
@@ -9005,7 +8939,7 @@ body,
   max-width: 45%;
 }
 
-/* Page headers allow wrapping on medium screens */
+
 .page-header,
 .page-container > .page-header,
 .page-container .page-header {
@@ -9016,14 +8950,14 @@ body,
   flex-wrap: wrap;
 }
 
-/* ========== MEDIUM SCREENS (<= 1200px) ========== */
+
 @media (max-width: 1200px) {
-  /* Detail pages: stack the info sidebar below the main content */
+  
   .detail-grid {
     grid-template-columns: 1fr;
   }
 
-  /* Category management cards: 4 -> 3 columns */
+  
   .category-cards-grid {
     grid-template-columns: repeat(3, 1fr);
   }
@@ -9036,13 +8970,13 @@ body,
   }
 }
 
-/* ========== MEDIUM-SMALL SCREENS (<= 992px) ========== */
+
 @media (max-width: 992px) {
   .category-cards-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  /* Settings: stack tabs above content */
+  
   .settings-layout {
     flex-direction: column;
   }
@@ -9063,7 +8997,7 @@ body,
     grid-template-columns: 1fr;
   }
 
-  /* Compact topbar controls */
+  
   .theme-toggle .theme-toggle-label {
     display: none;
   }
@@ -9085,7 +9019,7 @@ body,
   }
 }
 
-/* ========== SMALL SCREENS (<= 768px) ========== */
+
 @media (max-width: 768px) {
   .content {
     padding: 80px 16px 16px;
@@ -9099,7 +9033,7 @@ body,
     max-width: 120px;
   }
 
-  /* Compact topbar */
+  
   .topbar {
     padding: 0 16px;
   }
@@ -9107,7 +9041,7 @@ body,
     padding: 4px;
   }
 
-  /* Keep dropdown panels inside the viewport */
+  
   .dropdown-panel,
   .notification-panel {
     width: min(420px, calc(100vw - 24px)) !important;
@@ -9121,7 +9055,7 @@ body,
     min-width: min(300px, calc(100vw - 80px));
   }
 
-  /* Forms stack to one column */
+  
   .form-row {
     grid-template-columns: 1fr;
   }
@@ -9144,7 +9078,7 @@ body,
   }
 }
 
-/* ========== EXTRA SMALL SCREENS (<= 480px) ========== */
+
 @media (max-width: 480px) {
   .content {
     padding: 76px 12px 12px;
@@ -9190,56 +9124,44 @@ body,
   }
 }
 
-/* ==========================================================================
-   DASHBOARD TABLES - FIT AVAILABLE WIDTH
-   Dashboard tables use all the available card width - no horizontal
-   scrolling, so columns, headers and data all stay fully visible.
-   Visual/layout only - no functionality changes.
-   ========================================================================== */
 
-/* Slightly wider desktop content area so dashboards use more of the screen */
-/* Top padding reserves room for the fixed 64px topbar. */
+
+
+
 @media (min-width: 769px) {
   .content {
     padding: 84px 20px 20px;
   }
 }
 
-/* Dashboard tables always size to their card (overrides the 640px minimum) */
+
 .dashboard .data-table {
   min-width: 0;
   width: 100%;
 }
 
-/* Balanced cell padding + content wraps instead of stretching the table */
+
 .dashboard .table-card .data-table tbody td {
   padding: 12px 10px;
   overflow-wrap: anywhere;
 }
 
-/* Headers wrap onto two lines instead of stretching the table wide */
+
 .dashboard .table-card .data-table thead th {
   padding: 12px 10px;
   white-space: normal;
 }
 
-/* Long text (request titles, names, group tags) wraps inside its cell so the
-   full value stays visible and columns never stretch out of the table. */
+
 .dashboard .table-card .data-table tbody td,
 .requests-list .table-card .data-table tbody td {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-/* ==========================================================================
-   CONTRAST & VISIBILITY FIXES  (Bright + Dark)
-   Visual only - no functionality, logic or behavior changes.
-   These rules only raise low-contrast colors to readable levels in both
-   themes. Bright-mode overrides come first; dark-mode overrides (higher
-   specificity, later in the sheet) win when .dark-mode is active.
-   ========================================================================== */
 
-/* ---- Bright mode: raise faded #9ca3af/#94a3b8 text to #6b7280 (WCAG AA) ---- */
+
+
 .comment-time,
 .dropdown-panel-time,
 .dropdown-panel-empty,
@@ -9280,7 +9202,7 @@ body,
   color: #6b7280;
 }
 
-/* Bright mode: primary-colored link text darkens to #2563eb for AA on white */
+
 .view-all-link,
 .timeline-request,
 .feedback-link,
@@ -9291,7 +9213,7 @@ body,
   color: #2563eb;
 }
 
-/* Bright mode: small icon / control affordances */
+
 .sort-icon {
   color: #6b7280;
   opacity: 0.6;
@@ -9303,7 +9225,7 @@ body,
   color: #6b7280;
 }
 
-/* ---- Bright mode: login/signup page readability ---- */
+
 .login-subtitle {
   color: rgba(255, 255, 255, 0.75);
 }
@@ -9335,9 +9257,9 @@ body,
   color: rgba(255, 255, 255, 0.75);
 }
 
-/* ============================ DARK MODE ============================ */
 
-/* Dark mode: raise slate-500 #64748b and faded text to slate-400 #94a3b8 */
+
+
 body.dark-mode .comment-time,
 body.dark-mode .dropdown-panel-time,
 body.dark-mode .dropdown-panel-empty,
@@ -9385,7 +9307,7 @@ body.dark-mode .action-group label {
   color: #94a3b8;
 }
 
-/* Dark mode: ensure headings / values are bright on slate panels */
+
 body.dark-mode .stat-content h3,
 body.dark-mode .chart-card h3,
 body.dark-mode .legend-label,
@@ -9397,7 +9319,7 @@ body.dark-mode .stat-card-simple h3 {
   color: #60a5fa;
 }
 
-/* Dark mode: requests overview chart header, toggle and totals */
+
 body.dark-mode .chart-subtitle,
 body.dark-mode .chart-summary-label {
   color: #94a3b8;
@@ -9423,7 +9345,7 @@ body.dark-mode .range-toggle-btn.active {
   color: #fff;
 }
 
-/* Dark mode: primary-colored links/ids brighten to blue-300 for contrast */
+
 body.dark-mode .view-all-link,
 body.dark-mode .timeline-request,
 body.dark-mode .global-search-see-all,
@@ -9435,13 +9357,13 @@ body.dark-mode .req-id {
   color: #7dd3fc;
 }
 
-/* Dark mode: generic sort icons become visible on dark panels */
+
 body.dark-mode .sort-icon {
   color: #94a3b8;
   opacity: 0.8;
 }
 
-/* Dark mode: destructive/small muted controls */
+
 body.dark-mode .ml-menu:hover {
   color: #fca5a5;
 }
@@ -9449,20 +9371,19 @@ body.dark-mode .composer-pending-remove:hover {
   color: #fca5a5;
 }
 
-/* Dark mode: status/priority/category badges keep their meaning but text is
-   lightened so the value stays legible on slate backgrounds. */
+
 body.dark-mode .status-badge,
 body.dark-mode .priority-badge,
 body.dark-mode .category-tag {
   filter: brightness(1.4) saturate(1.1);
 }
 
-/* Dark mode: table sortable header control remains readable */
+
 body.dark-mode .data-table thead .sortable:hover {
   color: #93c5fd;
 }
 
-/* ---- Muted text helper (replaces inline #9ca3af across dashboards) ---- */
+
 .muted-text {
   color: #6b7280;
 }
@@ -9470,20 +9391,16 @@ body.dark-mode .muted-text {
   color: #94a3b8;
 }
 
-/* Dark mode: recharts axis lines/ticks stay readable on slate chart cards */
+
 body.dark-mode .chart-card .recharts-cartesian-axis-line,
 body.dark-mode .chart-card .recharts-cartesian-axis-tick-line,
 body.dark-mode .chart-card .recharts-cartesian-axis-tick-value {
   stroke: #94a3b8 !important;
 }
 
-/* --------------------------------------------------------------------------
-   ADDITIONAL CONTRAST FIXES (Bright + Dark)
-   Visual only. Extends the block above to cover remaining low-contrast text,
-   icons, placeholders and sidebar labels so themes stay readable/consistent.
-   -------------------------------------------------------------------------- */
 
-/* Bright mode: raise remaining faded #9ca3af text/icons to #6b7280 */
+
+
 .form-card .form-group input::placeholder,
 .form-card .form-group textarea::placeholder,
 .edit-form .form-group input::placeholder,
@@ -9500,7 +9417,7 @@ body.dark-mode .chart-card .recharts-cartesian-axis-tick-value {
   color: #6b7280;
 }
 
-/* Dark mode: raise remaining slate-500 #64748b to slate-400 #94a3b8 */
+
 body.dark-mode .form-card .form-group input::placeholder,
 body.dark-mode .form-card .form-group textarea::placeholder,
 body.dark-mode .edit-form .form-group input::placeholder,
@@ -9514,7 +9431,7 @@ body.dark-mode .feedback-no-comment {
   color: #94a3b8;
 }
 
-/* Dark sidebar labels brighter */
+
 body.dark-mode .sidebar-brand span,
 body.dark-mode .sidebar-header,
 body.dark-mode .sidebar-toggle,
@@ -9526,10 +9443,7 @@ body.dark-sidebar .nav-section {
   color: #94a3b8;
 }
 
-/* ---- Comment composer: ensure emoji/attach icons + textarea are visible ----
-   .composer-btn uses <Icon> with currentColor, which fell back to the UA
-   button color (dark) and disappeared on the dark background. Force explicit
-   colors so the icons, input and borders are always readable. ---- */
+
 .composer-btn {
   color: #374151;
 }
@@ -9551,7 +9465,7 @@ body.dark-mode .composer-btn:hover {
 body.dark-mode .composer-textarea::placeholder {
   color: #94a3b8;
 }
-/* Custom-category abstract input: keep text readable in both themes */
+
 .custom-category-abstract input {
   color: #1a1a2e !important;
   background: #ffffff !important;
@@ -9576,40 +9490,35 @@ body.dark-mode .custom-category-abstract input::placeholder {
   color: #94a3b8 !important;
 }
 
-/* --------------------------------------------------------------------------
-   DASHBOARD TEXT VISIBILITY (bright + dark) — visual only, no layout change.
-   Fixes: dark text stuck on dark gradient header in bright mode, hardcoded
-   inline grays (#6b7280/#4b5563/#1f2937) and white-tooltip/recharts fills that
-   disappear in dark mode. Uses color/background only.
-   -------------------------------------------------------------------------- */
-/* Page header: always readable in both themes */
+
+
 .page-header h1 { color: #111827; }
 .page-header p { color: #6b7280; }
 body.dark-mode .page-header h1 { color: #ffffff; }
 body.dark-mode .page-header p { color: #cbd5e1; }
 
-/* Stat cards: value + label readable on white (bright) and slate (dark) */
+
 .stat-content h3 { color: #111827; }
 .stat-content p { color: #6b7280; }
 body.dark-mode .stat-content h3 { color: #f1f5f9; }
 
-/* Chart legends / subtitles / empty states */
+
 .legend-label { color: #374151; }
 .chart-subtitle, .chart-empty { color: #6b7280; }
 body.dark-mode .legend-label { color: #e2e8f0; }
 body.dark-mode .chart-subtitle, body.dark-mode .chart-empty { color: #94a3b8; }
 
-/* Recharts: axis ticks + center total inherit card color in both themes */
+
 .chart-card .recharts-cartesian-axis-tick text { fill: #6b7280; font-weight: 600; }
 .chart-card .recharts-text, .chart-card text[fill="currentColor"] { fill: #111827; }
 body.dark-mode .chart-card .recharts-cartesian-axis-tick text { fill: #cbd5e1; }
 body.dark-mode .chart-card .recharts-text,
 body.dark-mode .chart-card text[fill="currentColor"] { fill: #f1f5f9; }
-/* Keep grid/axis strokes subtle but visible in both themes */
+
 .chart-card .recharts-cartesian-grid line { stroke: #eef2f7; }
 body.dark-mode .chart-card .recharts-cartesian-grid line { stroke: rgba(148,163,184,0.18); }
 
-/* Recharts default tooltip (white box) stays readable in dark mode */
+
 body.dark-mode .recharts-default-tooltip {
   background: #1e293b !important;
   border-color: #334155 !important;
@@ -9618,19 +9527,19 @@ body.dark-mode .recharts-default-tooltip {
 body.dark-mode .recharts-default-tooltip .recharts-tooltip-label { color: #f1f5f9 !important; }
 body.dark-mode .recharts-default-tooltip .recharts-tooltip-item { color: #cbd5e1 !important; }
 
-/* Overview legend totals row (inline color:#1f2937) visible in dark mode */
+
 body.dark-mode .overview-chart + div span:last-child,
 body.dark-mode .chart-card .overview-chart ~ div span[style] { color: #f1f5f9 !important; }
 body.dark-mode .chart-card .overview-chart ~ div span { color: #cbd5e1 !important; }
 
-/* Sort headers / table text */
+
 .data-table th, .data-table td { color: inherit; }
 body.dark-mode .data-table td { color: #e2e8f0; }
 body.dark-mode .sortable-th:hover { color: #e2e8f0; }
 
 
 
-/* === RHMS Comment Section Redesign (UI only) === */
+
 .chat-card {
   background: linear-gradient(160deg, #0A1F44 0%, #1D4ED8 100%);
   border: none;
@@ -9709,7 +9618,7 @@ body.dark-mode .sortable-th:hover { color: #e2e8f0; }
   .chat-search input { width: 100%; }
 }
 
-/* ========== GLOBAL THEME SAFETY NET ========== */
+
 body { color: #1a1a2e; }
 body.dark-mode { color: #e2e8f0; }
 body.dark-mode h1, body.dark-mode h2, body.dark-mode h3,

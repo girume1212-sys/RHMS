@@ -14,7 +14,7 @@ async function seed() {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // Ensure base groups/users/categories/priorities/statuses exist (idempotent)
+    
     const groups = [
       ['1','Client','Client group','#10B981'],
       ['2','Escalation Team','Escalation and support team','#3B82F6'],
@@ -45,10 +45,10 @@ async function seed() {
     const sts = [['1','New','#3B82F6'],['2','Assigned','#8B5CF6'],['3','In Progress','#F59E0B'],['4','Waiting for Client','#F97316'],['5','Resolved','#10B981'],['6','Closed','#6B7280']];
     for (const s of sts) await q(client,'INSERT INTO statuses (id,name,color) VALUES ($1,$2,$3) ON CONFLICT (id) DO NOTHING',s);
 
-    // Generate 128 requests
+    
     let inserted = 0;
     for (let i = 1; i <= 128; i++) {
-      const num = String(129 - i).padStart(3,'0'); // REQ-2024-00001..00128
+      const num = String(129 - i).padStart(3,'0'); 
       const id = 'REQ-2024-' + num;
       const clientId = clients[i % clients.length];
       const catId = cats[i % cats.length][0];
@@ -65,17 +65,17 @@ async function seed() {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'[]',$9,$10) ON CONFLICT (id) DO NOTHING`,
         [id,subject,desc,clientId,catId,priId,stId,assigned,createdAt,updatedAt]);
       if (r.rowCount) inserted++;
-      // comments for some
+      
       if (i % 3 === 0) {
         const cid = 'c_' + id;
         await q(client, 'INSERT INTO comments (id,request_id,user_id,content,created_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING',
           [cid, id, assigned || clientId, 'Development comment for ' + id, updatedAt]);
       }
-      // activity log
+      
       const aid = 'a_' + id;
       await q(client, 'INSERT INTO activity_log (id,type,request_id,user_id,message,created_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING',
         [aid, 'created', id, clientId, 'New request created', createdAt]);
-      // notification for client
+      
       const nid = 'n_' + id;
       await q(client, 'INSERT INTO notifications (id,user_id,message,type,is_read,created_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING',
         [nid, clientId, 'Your request ' + id + ' was created', 'info', false, createdAt]);

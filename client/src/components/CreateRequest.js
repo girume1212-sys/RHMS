@@ -118,7 +118,7 @@ export default function CreateRequest() {
       addToast(t('common.fillRequiredFields'), 'error');
       return;
     }
-    // Blocked users fill the form normally; creation is refused at submit.
+    
     if (isBlockedUser) {
       showBlockedError();
       return;
@@ -138,8 +138,8 @@ export default function CreateRequest() {
       showStatusToast(t('common.newRequestCreated', { subject: form.subject }), 'request_created');
       navigate(`${basePath}/requests`);
     } catch (err) {
-      // Backend also refuses blocked users (403); surface the same status message
-      // (covers sessions blocked after login). api.js translates the server text.
+      
+      
       const blockedByServer = err.message === t('common.accountBlocked') || /blocked/i.test(err.message || '');
       if (blockedByServer) {
         showBlockedError();

@@ -1,10 +1,10 @@
-// RHMS mailer — single place for outgoing SMTP email (Nodemailer).
-// Configuration comes only from environment variables (server/.env); no
-// credentials are hard-coded. When SMTP is not configured, isSmtpConfigured()
-// returns false and callers fall back to the existing in-app + console channel.
+
+
+
+
 const nodemailer = require('nodemailer');
 
-// Fail fast instead of hanging for minutes on an unreachable SMTP host.
+
 const SMTP_TIMEOUT_MS = Math.max(
   1000,
   parseInt(process.env.SMTP_TIMEOUT_MS || '20000', 10) || 20000
@@ -30,8 +30,8 @@ function isSmtpConfigured() {
 }
 
 function settingsKey(s) {
-  // Hash the password so a changed app-password busts the cached transporter
-  // (length alone is not enough) without keeping the secret in memory as-is.
+  
+  
   const crypto = require('crypto');
   const passHash = crypto.createHash('sha256').update(String(s.pass || '')).digest('hex').slice(0, 16);
   return [s.host, s.port, s.secure, s.user, passHash].join('|');
@@ -42,7 +42,7 @@ function getTransporter() {
   const key = settingsKey(s);
   if (cachedTransporter && cachedKey === key) return cachedTransporter;
   if (cachedTransporter) {
-    try { cachedTransporter.close(); } catch (e) { /* ignore */ }
+    try { cachedTransporter.close(); } catch (e) {  }
   }
   cachedTransporter = nodemailer.createTransport({
     host: s.host,
@@ -83,7 +83,7 @@ async function verifySmtp() {
   }
 }
 
-// Classify nodemailer errors without leaking credentials/host details.
+
 function classifySmtpError(err) {
   if (err && err.message === 'SMTP_INVALID_DOMAIN') return err;
   const msg = String((err && err.message) || '');
@@ -98,8 +98,8 @@ function classifySmtpError(err) {
     e.cause = err;
     return e;
   }
-  // Recipient mailbox does not exist (Gmail 550 5.1.1 NoSuchUser). The sender
-  // config is fine — the destination address is wrong or misspelled.
+  
+  
   if (/5\.1\.1|nosuchuser|mailbox unavailable|recipient address rejected|user unknown|invalid recipient/i.test(msg)) {
     const e = new Error('SMTP_NO_SUCH_USER');
     e.cause = err;
@@ -110,9 +110,9 @@ function classifySmtpError(err) {
   return e;
 }
 
-// Domains that can never receive mail (RFC 2606 reserved names, local-only
-// names, and malformed hosts). Sending to them only produces a bounce in
-// the sender inbox, so refuse them locally before any SMTP traffic.
+
+
+
 function assertDeliverableRecipients(to) {
   const list = Array.isArray(to) ? to : String(to || '').split(',');
   for (const addr of list) {
@@ -140,7 +140,7 @@ async function sendMail({ to, subject, text, html, attachments }) {
     const info = await withTimeout(
       getTransporter().sendMail({
         from: `"Request Handling Management System" <${process.env.SMTP_FROM}>`,
-        // Reply-To matching From: consistent sender identity, no reply black hole.
+        
         replyTo: `"Request Handling Management System" <${process.env.SMTP_FROM}>`,
         to,
         subject,

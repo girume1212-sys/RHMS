@@ -99,7 +99,7 @@ async function seed() {
   try {
     await client.query('BEGIN');
 
-    // Groups
+    
     for (const g of groups) {
       await client.query(
         'INSERT INTO groups (id, name, description, color) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
@@ -108,7 +108,7 @@ async function seed() {
     }
     console.log(`Inserted ${groups.length} groups`);
 
-    // Users
+    
     for (const u of users) {
       await client.query(
         'INSERT INTO users (id, name, email, password, role, group_id, avatar, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING',
@@ -117,7 +117,7 @@ async function seed() {
     }
     console.log(`Inserted ${users.length} users`);
 
-    // Categories
+    
     for (const c of categories) {
       await client.query(
         'INSERT INTO categories (id, name, description, color) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
@@ -126,7 +126,7 @@ async function seed() {
     }
     console.log(`Inserted ${categories.length} categories`);
 
-    // Priorities
+    
     for (const p of priorities) {
       await client.query(
         'INSERT INTO priorities (id, name, color, level) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
@@ -135,7 +135,7 @@ async function seed() {
     }
     console.log(`Inserted ${priorities.length} priorities`);
 
-    // Statuses
+    
     for (const s of statuses) {
       await client.query(
         'INSERT INTO statuses (id, name, color) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
@@ -144,7 +144,7 @@ async function seed() {
     }
     console.log(`Inserted ${statuses.length} statuses`);
 
-    // Requests
+    
     for (const r of requests) {
       await client.query(
         'INSERT INTO requests (id, subject, description, client_id, category_id, priority_id, status_id, assigned_to, attachments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING',
@@ -153,7 +153,7 @@ async function seed() {
     }
     console.log(`Inserted ${requests.length} requests`);
 
-    // Comments
+    
     for (const c of comments) {
       await client.query(
         'INSERT INTO comments (id, request_id, user_id, content, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING',
@@ -162,7 +162,7 @@ async function seed() {
     }
     console.log(`Inserted ${comments.length} comments`);
 
-    // Activity Log
+    
     for (const a of activityLog) {
       await client.query(
         'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING',

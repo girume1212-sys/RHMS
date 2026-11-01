@@ -39,14 +39,14 @@ export default function Login() {
   }, [location.state]);
   const [resendSeconds, setResendSeconds] = useState(0);
 
-  // Countdown for resend-code button (UI only)
+  
   useEffect(() => {
     if (resendSeconds <= 0) return;
     const id = setTimeout(() => setResendSeconds((s) => s - 1), 1000);
     return () => clearTimeout(id);
   }, [resendSeconds]);
 
-  // Auto-dismiss the green success notice so it doesn't linger on screen.
+  
   useEffect(() => {
     if (!forgotMsg) return;
     const id = setTimeout(() => setForgotMsg(''), 5000);
@@ -62,7 +62,7 @@ export default function Login() {
     }
   }, []);
 
-  // Load Google Identity Services and initialize it once the client id is available.
+  
   useEffect(() => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
     if (!clientId) return;
@@ -129,8 +129,8 @@ export default function Login() {
     }
     setGoogleLoading(true);
     setError('');
-    // Prefer Google's real rendered button, which opens the account-chooser
-    // popup, instead of the One Tap prompt (which is frequently blocked).
+    
+    
     const container = document.getElementById('rhms-google-btn');
     const renderedBtn = container ? container.querySelector('div[role="button"]') : null;
     if (renderedBtn) {
@@ -138,7 +138,7 @@ export default function Login() {
         renderedBtn.click();
         return;
       } catch (e) {
-        // fall through to prompt
+        
       }
     }
     try {
@@ -216,10 +216,10 @@ export default function Login() {
     setErrors({ forgotEmail: '', otp: '', newPassword: '', confirmPassword: '' });
   };
 
-  // Step 1: check the email against the users database and send a 6-digit OTP.
+  
   const handleSendOtp = async (e, isResend = false) => {
     if (e) e.preventDefault();
-    if (forgotLoading) return; // prevent duplicate/hanging requests from the same click
+    if (forgotLoading) return; 
     const targetEmail = forgotEmail;
     const err = validateField('forgotEmail', targetEmail);
     if (err) return;
@@ -228,8 +228,8 @@ export default function Login() {
     setForgotMsg('');
     try {
       const data = await api.post('/api/auth/forgot-password-otp', { email: targetEmail });
-      // Cooldown responses (resent:false) mean nothing new was mailed — don't
-      // claim success, just run the countdown until resend is allowed again.
+      
+      
       if (data.resent === false) {
         setForgotMsg('');
       } else {
@@ -246,8 +246,8 @@ export default function Login() {
     }
   };
 
-  // Step 2: verify the OTP and its expiration.
-  // --- OTP 6-box UI handlers (UI only, otp string state unchanged) ---
+  
+  
   const handleOtpChange = (index, value) => {
     const clean = value.replace(/\D/g, '');
     const digits = otp.padEnd(6, ' ').split('').slice(0, 6);
@@ -257,7 +257,7 @@ export default function Login() {
       setErrors(prev => ({ ...prev, otp: '' }));
       return;
     }
-    // If user typed/pasted multiple digits into one box, spread them forward
+    
     const chars = clean.slice(0, 6 - index).split('');
     chars.forEach((ch, k) => { digits[index + k] = ch; });
     setOtp(digits.join('').replace(/ /g, '').slice(0, 6));
@@ -308,8 +308,8 @@ export default function Login() {
     try {
       const data = await api.post('/api/auth/verify-otp', { email: forgotEmail, otp: code });
       if (data.valid) {
-        // Verified: the 60-second window is over — stop the countdown for good.
-        // The password step has no timer; the user may take as long as needed.
+        
+        
         setResendSeconds(0);
         setForgotStep('password');
         setForgotMsg('');
@@ -328,9 +328,9 @@ export default function Login() {
     }
   };
 
-  // Step 3: validate with the existing password rules and reset.
-  // Minimum length is enforced by the backend (system_settings.passwordLength);
-  // backend errors are shown as-is so they never disagree with the UI.
+  
+  
+  
   const handleResetPassword = async (e) => {
     e.preventDefault();
     if (!newPassword) {
@@ -346,16 +346,16 @@ export default function Login() {
     setForgotError('');
     try {
       await api.post('/api/auth/reset-password-otp', { email: forgotEmail, otp: otp.trim(), password: newPassword });
-      // Password saved: close the reset flow and land on the Login page with
-      // a success message. The user signs in with the new password.
+      
+      
       const resetEmail = forgotEmail;
       closeForgot();
       setUsernameOrEmail(resetEmail);
       setNotice(t('common.passwordResetSuccess'));
     } catch (err) {
       const msg = err.message || '';
-      // The 60s OTP window can lapse while the user types the new password.
-      // Send them back to the code step with a resend available, not a dead end.
+      
+      
       if (msg.includes('expired')) {
         setOtp('');
         setNewPassword('');
@@ -624,8 +624,7 @@ export default function Login() {
                 </button>
               </div>
             )}
-            {/* 'done' is unreachable: successful resets close the modal and
-                surface the success notice on the Login page itself. */}
+            {}
           </div>
         </div>
       )}

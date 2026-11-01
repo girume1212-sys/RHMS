@@ -20,15 +20,7 @@ function toBlob(canvas, type = 'image/png') {
   });
 }
 
-/**
- * Detects the bounding box of the logo content (pixels that differ from the
- * surrounding background) and crops the image to that content, trimming the
- * unnecessary background area. Falls back to the original file when no
- * meaningful background crop is found.
- *
- * @param {File|Blob} file
- * @returns {Promise<Blob>} cropped image blob (PNG), or the original file
- */
+
 export async function cropLogoImage(file) {
   const img = await loadImage(file);
   const srcW = img.naturalWidth;

@@ -1,7 +1,7 @@
--- ============================================================================
--- RHMS Activity Log Enhancement Migration
--- Adds comprehensive tracking columns to activity_log table
--- ============================================================================
+
+
+
+
 
 ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS entity_type VARCHAR(50);
 ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS entity_id VARCHAR(50);

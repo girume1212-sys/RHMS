@@ -1,8 +1,8 @@
-// Real week-over-week helpers shared by every dashboard stat card.
-//
-// The dashboard cards compare the current 7-day window against the 7 days
-// before it, and both sides always come from stored request history, so the
-// figures update as soon as new data is written.
+
+
+
+
+
 
 export function getLastWeekWindow(now = new Date()) {
   const end = new Date(now);
@@ -12,9 +12,9 @@ export function getLastWeekWindow(now = new Date()) {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
-// Returns a signed percentage rounded to one decimal. A previous-week baseline
-// of zero has no meaningful percentage, so 0 is returned instead of an
-// invented jump.
+
+
+
 export function weekOverWeekPercent(current, previous) {
   const currentCount = Number(current) || 0;
   const previousCount = Number(previous) || 0;

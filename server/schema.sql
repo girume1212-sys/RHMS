@@ -5,15 +5,15 @@ CREATE DATABASE rhms;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- ============================================================================
--- COMPLETE RHMS SCHEMA BASELINE
--- Mirrors the production database (tables, columns, constraints, indexes).
--- IDs are server-generated VARCHAR(50); timestamps are timezone-aware.
--- ============================================================================
 
--- ----------------------------------------------------------------------------
--- Core reference tables (no dependencies)
--- ----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
 
 CREATE TABLE companies (
   id VARCHAR(50) PRIMARY KEY,
@@ -56,9 +56,9 @@ CREATE TABLE tags (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ----------------------------------------------------------------------------
--- Groups and users
--- ----------------------------------------------------------------------------
+
+
+
 
 CREATE TABLE groups (
   id VARCHAR(50) PRIMARY KEY,
@@ -117,9 +117,9 @@ CREATE TABLE login_audit (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ----------------------------------------------------------------------------
--- Requests and ticket workflow
--- ----------------------------------------------------------------------------
+
+
+
 
 CREATE TABLE requests (
   id VARCHAR(50) PRIMARY KEY,
@@ -207,9 +207,9 @@ CREATE TABLE feedback (
   UNIQUE(request_id, user_id)
 );
 
--- ----------------------------------------------------------------------------
--- Knowledge base, announcements, templates, SLA
--- ----------------------------------------------------------------------------
+
+
+
 
 CREATE TABLE knowledge_base (
   id VARCHAR(50) PRIMARY KEY,
@@ -273,9 +273,9 @@ CREATE TABLE sla_tracking (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ----------------------------------------------------------------------------
--- System settings
--- ----------------------------------------------------------------------------
+
+
+
 
 CREATE TABLE system_settings (
   id SERIAL PRIMARY KEY,
@@ -284,9 +284,9 @@ CREATE TABLE system_settings (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ----------------------------------------------------------------------------
--- Indexes
--- ----------------------------------------------------------------------------
+
+
+
 
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_user_groups_group_id ON user_groups(group_id);

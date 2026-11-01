@@ -22,7 +22,7 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState({ name: '', companyName: '', email: '', code: '' });
-  // Email-verification step (UI only): 'details' -> 'verify'. No account exists until verified.
+  
   const [step, setStep] = useState('details');
   const [code, setCode] = useState('');
   const [resendSeconds, setResendSeconds] = useState(0);
@@ -113,7 +113,7 @@ export default function Signup() {
         renderedBtn.click();
         return;
       } catch (e) {
-        // fall through
+        
       }
     }
     try {
@@ -139,7 +139,7 @@ export default function Signup() {
     return err;
   };
 
-  // Step 1: validate details + mail a verification code (creates no account).
+  
   const handleRequestCode = async (e) => {
     e.preventDefault();
     setError('');
@@ -166,7 +166,7 @@ export default function Signup() {
     } catch (err) {
       const msg = err.message || '';
       if (msg.toLowerCase().includes('already exists')) {
-        // Account already exists for this email: send the user to sign in.
+        
         navigate('/login', { state: { email } });
         return;
       }
@@ -237,8 +237,8 @@ export default function Signup() {
     codeRefs.current[focusIndex]?.focus();
   };
 
-  // Step 2: create the account with the code. /api/auth/signup verifies the
-  // code itself (same checks), so no separate pre-verification round-trip.
+  
+  
   const handleVerifyAndSignup = async (e) => {
     e.preventDefault();
     setError('');

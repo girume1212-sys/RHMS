@@ -178,7 +178,7 @@ export default function ClientProfile() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '24px', maxWidth: '900px' }}>
-        {/* Profile Card */}
+        {}
         <div style={{
           background: 'linear-gradient(145deg, #3B82F6, #2563EB, #1D4ED8)',
           borderRadius: '20px', padding: '32px', color: '#fff',
@@ -295,7 +295,7 @@ export default function ClientProfile() {
           </div>
         </div>
 
-        {/* Edit Form Card */}
+        {}
         <div className="account-details-card">
           <h3 style={{
             margin: '0 0 24px', fontSize: '18px', fontWeight: '600',
@@ -312,7 +312,7 @@ export default function ClientProfile() {
 
           {editing ? (
             <div className="account-edit-form" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              {/* Name Field */}
+              {}
               <div style={{ position: 'relative' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: '#2563EB', marginBottom: '6px' }}>
                   <span style={{
@@ -338,7 +338,7 @@ export default function ClientProfile() {
                 <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}><Icon name="user" size={14} /></span>
               </div>
 
-              {/* Email Field */}
+              {}
               <div style={{ position: 'relative' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: '#0284c7', marginBottom: '6px' }}>
                   <span style={{
@@ -364,7 +364,7 @@ export default function ClientProfile() {
                 <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}><Icon name="mail" size={14} /></span>
               </div>
 
-              {/* Company Field */}
+              {}
               <div style={{ position: 'relative' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: '#1e40af', marginBottom: '6px' }}>
                   <span style={{
@@ -390,7 +390,7 @@ export default function ClientProfile() {
                 <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}><Icon name="company" size={14} /></span>
               </div>
 
-              {/* Password Field */}
+              {}
               <div style={{ position: 'relative' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: '#3730a3', marginBottom: '6px' }}>
                   <span style={{
@@ -417,7 +417,7 @@ export default function ClientProfile() {
                 <span style={{ position: 'absolute', left: '14px', top: '38px', fontSize: '16px', pointerEvents: 'none' }}><Icon name="lock" size={14} /></span>
               </div>
 
-              {/* Confirm Password Field */}
+              {}
               {form.password && (
                 <div style={{ position: 'relative' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: '#1d4ed8', marginBottom: '6px' }}>
@@ -446,7 +446,7 @@ export default function ClientProfile() {
                 </div>
               )}
 
-              {/* Buttons */}
+              {}
               <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                 <button
                   onClick={handleCancel}

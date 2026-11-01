@@ -28,16 +28,16 @@ export default function ClientLayout() {
   const [refreshing, setRefreshing] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
-  // All persisted notification rows for this user (read + unread).
-  // Badges and panels derive from real DB is_read state; opening a panel
-  // never marks anything read — only clicking an item (or its Read control).
+  
+  
+  
   const [allNotifications, setAllNotifications] = useState([]);
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
   const eventSourceRef = useRef(null);
   const dismissedIds = useRef(new Set());
   const audioUnlocked = useRef(false);
 
-  // Unlock audio on first user interaction
+  
   useEffect(() => {
     const unlockAudio = () => {
       if (audioUnlocked.current) return;
@@ -79,7 +79,7 @@ export default function ClientLayout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Map persisted rows to panel items, preserving DB read state.
+  
   const mapNotifRows = useCallback((rows) => (rows || []).map(n => ({
     id: n.id,
     type: n.type,
@@ -95,9 +95,9 @@ export default function ClientLayout() {
       setAllNotifications(mapNotifRows(data.notifications));
     }).catch(() => {});
   }, [mapNotifRows]);
-  // Request lookup for the Critical-dot rule (Priority=Critical AND
-  // Status=New|Assigned). Scoped by the same /api/requests RBAC/group
-  // visibility — no group logic changed here.
+  
+  
+  
   const [critRequests, setCritRequests] = useState([]);
   const refreshCritRequests = useCallback(() => {
     api.get('/api/requests').then(data => {
@@ -105,20 +105,20 @@ export default function ClientLayout() {
     }).catch(() => {});
   }, []);
 
-  // Mark exactly one item read (persisted). Badge derives from state, so it
-  // decreases by exactly 1 per item.
+  
+  
   const markNotificationRead = useCallback((id) => {
     if (!id) return;
     setAllNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     api.put(`/api/notifications/${id}/read`).catch(() => refreshNotifications());
   }, [refreshNotifications]);
 
-  // Bell panel = non-comment notifications; message panel = comment ones.
+  
   const bellNotes = allNotifications.filter(n => n.type !== 'comment');
   const commentNotes = allNotifications.filter(n => n.type === 'comment');
   const unreadBell = bellNotes.filter(n => !n.is_read).length;
   const unreadMsgs = commentNotes.filter(n => !n.is_read).length;
-  // Panel filters: show only read or only unread items per panel.
+  
   const [notifFilter, setNotifFilter] = useState('unread');
   const [msgFilter, setMsgFilter] = useState('unread');
   const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.is_read);
@@ -143,7 +143,7 @@ export default function ClientLayout() {
     setBubbleNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
 
-  // Seed badges + panels from persisted DB read state (survives reloads).
+  
   useEffect(() => {
     if (!user) return;
     refreshNotifications();
@@ -153,7 +153,7 @@ export default function ClientLayout() {
     return () => window.removeEventListener('refresh-requests', h);
   }, [user, refreshNotifications, refreshCritRequests]);
 
-  // SSE real-time notifications
+  
   useEffect(() => {
     if (!user) return;
 
@@ -201,13 +201,13 @@ export default function ClientLayout() {
 
           const isOwnAction = notification.userId && String(notification.userId) === String(user.id);
 
-          // Rows are already persisted server-side per user: refetch real
-          // rows (with DB ids) so badges stay exact and read state is kept.
+          
+          
           if (!isOwnAction) {
             refreshNotifications();
           }
-          // Always refresh request states (even for own actions like
-          // claiming) so the Critical bell dot tracks Priority + Status.
+          
+          
           refreshCritRequests();
 
           if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
@@ -255,8 +255,8 @@ export default function ClientLayout() {
     };
   }, [user, playNotificationSound]);
 
-  // Load messages panel from persisted comment notifications (per-item
-  // read state). Polling refetches real DB rows — never auto-marks read.
+  
+  
   useEffect(() => {
     if (!user) return;
     refreshNotifications();
@@ -264,7 +264,7 @@ export default function ClientLayout() {
     return () => clearInterval(timer);
   }, [user, refreshNotifications]);
 
-  // Status toast listener
+  
   const [statusToast, setStatusToast] = useState(null);
   const statusToastTimeout = useRef(null);
 
@@ -290,7 +290,7 @@ export default function ClientLayout() {
     }, 700);
   };
 
-  // Opening a panel never marks anything read — only item clicks do.
+  
   const openNotifications = () => {    const next = !showNotifications;
     setShowNotifications(next);
     if (next) {
@@ -304,7 +304,7 @@ export default function ClientLayout() {
     setShowNotifications(false);
   };
 
-  // Explicit "mark all read" control (user-initiated, persisted).
+  
   const markAllRead = useCallback(() => {
     setAllNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     api.put('/api/notifications/read-all').catch(() => refreshNotifications());
@@ -382,7 +382,7 @@ export default function ClientLayout() {
         </div>
       </aside>
 
-      {/* Bubble Notifications */}
+      {}
       {bubbleNotifications.map((n) => (
         <div
           key={n.id}

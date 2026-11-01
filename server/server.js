@@ -49,7 +49,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS client_deleted BOOLEAN NOT NULL DEFAULT FALSE`);
     console.log('user_groups table and groups ready');
 
-    // Create request_groups junction table for group-based visibility
+    
     await pool.query(`
       CREATE TABLE IF NOT EXISTS request_groups (
         request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
@@ -60,7 +60,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_request_groups_request_id ON request_groups(request_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_request_groups_group_id ON request_groups(group_id)`);
 
-    // Backfill: populate request_groups for existing requests based on client's group memberships
+    
     await pool.query(`
       INSERT INTO request_groups (request_id, group_id)
       SELECT r.id, COALESCE(ug.group_id, u.group_id)
@@ -117,7 +117,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
       NO MAXVALUE
       CACHE 1
     `);
-    // Sync sequence to current max ID
+    
     await pool.query("SELECT setval('requests_id_seq', COALESCE((SELECT MAX(CAST(SPLIT_PART(id, '-', 3) AS INTEGER)) FROM requests WHERE id LIKE 'REQ-2024-%'), 128))");
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS category_id VARCHAR(50) REFERENCES categories(id) ON DELETE SET NULL`);
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS priority_id VARCHAR(50)`);
@@ -129,10 +129,10 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255) DEFAULT ''`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL`);
     console.log('company_name column ready');
-    // Ownership trail for account reclaim after admin deletion: stores the
-    // owner's verified email so a later verified re-registration with the same
-    // email can be re-linked to its previous requests/comments. Never exposed
-    // for auth; reclaim only touches orphaned rows (client_id/user_id IS NULL).
+    
+    
+    
+    
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS client_email VARCHAR(255) DEFAULT ''`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_client_email ON requests(client_email)`);
     await pool.query(`ALTER TABLE comments ADD COLUMN IF NOT EXISTS author_email VARCHAR(255) DEFAULT ''`);
@@ -198,8 +198,8 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
       INSERT INTO statuses (id, name, color, is_system, sort_order) VALUES ('8', 'Rejected', '#DC2626', TRUE, 8)
       ON CONFLICT (id) DO NOTHING
     `);
-    // Remove any duplicate Rejected status rows (keep the canonical id '8') that
-    // have no requests attached, so the dashboard never shows duplicate cards.
+    
+    
     await pool.query(`
       DELETE FROM statuses
       WHERE LOWER(name) = 'rejected' AND id <> '8'
@@ -219,7 +219,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     }
     console.log('statuses ready');
 
-    // --- New tables ---
+    
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS knowledge_base (
@@ -409,8 +409,8 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_otp_expires ON password_reset_otps(expires_at)`);
     console.log('password_reset_otps table ready');
 
-    // Registration email-verification codes. Separate from password-reset OTPs:
-    // no user row exists yet, so the code is keyed by (lowercased) email address.
+    
+    
     await pool.query(`
       CREATE TABLE IF NOT EXISTS email_verification_codes (
         id VARCHAR(50) PRIMARY KEY,
@@ -457,8 +457,8 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_request_watchers_user ON request_watchers(user_id)`);
     console.log('request_watchers table ready');
-    // Registry of admin-deleted accounts so login can report a clear message
-    // instead of a generic invalid-credentials error. Never blocks re-registration.
+    
+    
     await pool.query(`
       CREATE TABLE IF NOT EXISTS deleted_accounts (
         email VARCHAR(255) PRIMARY KEY,
@@ -467,7 +467,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_deleted_accounts_name ON deleted_accounts(name)`);
-    // Performance indexes for hot filters/joins (safe, IF NOT EXISTS)
+    
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_priority ON requests(priority_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_category ON requests(category_id)`);
@@ -489,16 +489,16 @@ const PORT = Number(process.env.PORT) || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'rhms-secret-key-2024';
 const googleClient = new OAuth2Client();
 
-// SSE clients for real-time notifications
-const sseClients = new Map(); // userId -> Set of response objects
+
+const sseClients = new Map(); 
 
 app.use(cors());
 app.use(express.json());
-// (request logging disabled for performance)
+
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, '../client/build')));
 
-// Public health check. Deliberately exposes no configuration or secrets.
+
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -542,8 +542,8 @@ const roleMiddleware = (...roles) => (req, res, next) => {
   next();
 };
 
-// Endpoints reachable while maintenance mode is on, so users can still
-// authenticate and admins can log in to turn maintenance mode off.
+
+
 const MAINTENANCE_ALLOWED_PATHS = new Set([
   '/auth/login', '/auth/signup', '/auth/logout', '/auth/me', '/auth/google',
   '/auth/forgot-password', '/auth/reset-password/validate', '/auth/reset-password',
@@ -561,13 +561,13 @@ async function maintenanceMiddleware(req, res, next) {
     if (token) {
       try {
         if (jwt.verify(token, JWT_SECRET).role === 'admin') return next();
-      } catch { /* fall through as unauthenticated */ }
+      } catch {  }
     }
     return res.status(503).json({ error: 'System is under maintenance. Please try again later.' });
   } catch { next(); }
 };
 
-// Persist a notification to the notifications table (best-effort, never throws)
+
 async function persistNotification(userId, message, data = {}) {
   try {
     await pool.query(
@@ -581,7 +581,7 @@ async function persistNotification(userId, message, data = {}) {
   }
 }
 
-// SSE notification helper (also persists to notifications table)
+
 function notifyAdmins(message, data = {}) {
   const payload = JSON.stringify({ message, data, timestamp: new Date().toISOString() });
   const actorId = data.userId ? String(data.userId) : null;
@@ -638,7 +638,7 @@ function notifyUser(userId, message, data = {}) {
   persistNotification(userId, message, data);
 }
 
-// Record an authentication or privileged action in login_audit (best-effort)
+
 async function auditLogin(action, userId, email, req) {
   try {
     await pool.query(
@@ -653,7 +653,7 @@ async function auditLogin(action, userId, email, req) {
   }
 }
 
-// Create a persisted session row (best-effort)
+
 async function persistSession(userId, token, req) {
   try {
     const expiresInMs = (() => {
@@ -675,9 +675,9 @@ async function persistSession(userId, token, req) {
   }
 }
 
-// Sync a user's existing requests to their group memberships so that requests
-// created before the user was assigned to a group become visible to that group.
-// Only requests without an explicit group assignment are managed here.
+
+
+
 async function syncUserRequestGroups(userId, groupIds) {
   if (!userId) return {};
   const groupList = Array.isArray(groupIds) ? groupIds.filter(Boolean) : [];
@@ -706,9 +706,9 @@ async function syncUserRequestGroups(userId, groupIds) {
   return added;
 }
 
-// Incrementally associate one group with a user's existing requests.
-// Returns the IDs of requests newly linked to the group (empty when the
-// user has no linkable requests or they were already linked).
+
+
+
 async function addUserRequestGroup(userId, groupId) {
   if (!userId || !groupId) return [];
   const result = await pool.query(
@@ -723,8 +723,8 @@ async function addUserRequestGroup(userId, groupId) {
   return result.rows.map((row) => row.request_id);
 }
 
-// Remove a group association from a user's existing requests (unless the
-// request was explicitly assigned to that group)
+
+
 async function removeUserRequestGroup(userId, groupId) {
   if (!userId || !groupId) return;
   await pool.query(
@@ -738,10 +738,10 @@ async function removeUserRequestGroup(userId, groupId) {
   );
 }
 
-// Verified-email check reusing the existing registration verification
-// system: an address counts as verified when a verification code was
-// consumed for it (used_at IS NOT NULL), which proves the mailbox received
-// RHMS mail at signup. No new table, column, or verification flow.
+
+
+
+
 async function isEmailVerified(email) {
   try {
     if (!email) return false;
@@ -750,7 +750,7 @@ async function isEmailVerified(email) {
       [String(email).trim()]
     );
     if (r.rows.length > 0) return true;
-    // Google sign-in users are already verified by Google.
+    
     const g = await pool.query("SELECT 1 FROM users WHERE LOWER(email) = LOWER($1) AND google_id IS NOT NULL LIMIT 1", [String(email).trim()]);
     return g.rows.length > 0;
   } catch (e) {
@@ -759,14 +759,14 @@ async function isEmailVerified(email) {
   }
 }
 
-// Single shared resolver for "who works a group-assigned request": members of
-// the group whose role is developer/support (the same roles the RHMS
-// dashboards grant request visibility to). Used by BOTH the in-app
-// notifyGroupMembers channel and the assignment email trigger, so email
-// recipients always follow the existing group-assignment method — never a
-// separate recipient system. Excludes read-only/unrelated users by role.
-// NOTE: email verification is NOT applied here — in-app notifications are
-// not email. The email triggers filter by isEmailVerified() themselves.
+
+
+
+
+
+
+
+
 async function getAssignmentGroupRecipients(groupId) {
   const membersResult = await pool.query(
     "SELECT u.id, u.name, u.email, u.role FROM user_groups ug JOIN users u ON u.id = ug.user_id WHERE ug.group_id = $1 AND u.role IN ('developer', 'support') AND u.email IS NOT NULL AND u.email <> '' AND COALESCE(u.approved, TRUE) = TRUE",
@@ -775,7 +775,7 @@ async function getAssignmentGroupRecipients(groupId) {
   return membersResult.rows;
 }
 
-// Notify developer/support members of a group so their dashboards update
+
 async function notifyGroupMembers(groupId, message, data = {}) {
   try {
     const groupResult = await pool.query('SELECT name FROM groups WHERE id = $1', [groupId]);
@@ -819,10 +819,10 @@ const mapRequest = (r) => ({
   updatedAt: r.updated_at
 });
 
-// Shared RHMS email logo block. The logo is ALWAYS rendered first, centered,
-// in its own full-width row: [LOGO] -> Welcome heading -> brand name ->
-// content. Uses the existing systemLogo setting with the existing CID
-// inline-image method so real clients render it without fetching a URL.
+
+
+
+
 async function getEmailLogoBlock(req) {
   const escapeHtml = (v) => String(v == null ? '' : v)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -849,9 +849,9 @@ async function getEmailLogoBlock(req) {
         logoUrl = logoPath;
       }
     }
-  } catch (e) { /* logo is decorative; never block the email */ }
-  // Profile-style: fixed square + 50% radius so Gmail renders a circle avatar,
-  // not a stretched rectangle. object-fit:cover keeps any logo aspect cropped.
+  } catch (e) {  }
+  
+  
   const imgStyle = 'display:block;margin:0 auto;width:120px;height:120px;min-width:120px;min-height:120px;max-width:120px;max-height:120px;border-radius:50%;border-radius:9999px;object-fit:cover;border:0;outline:none;text-decoration:none;';
   const logoBlock = logoAttachment
     ? `<div style="text-align:center;padding:0 0 12px 0;"><img src="cid:rhmslogo" alt="RHMS Logo" width="80" height="80" style="${imgStyle}" /></div>`
@@ -861,10 +861,10 @@ async function getEmailLogoBlock(req) {
   return { logoBlock, logoAttachment };
 }
 
-// Contact footer for RHMS notification emails. Reads the real contact details
-// from system_settings (companyName, systemEmail, phoneNumber) — nothing is
-// hard-coded. No website setting exists in the system, so no website line is
-// rendered. Black gradient background with light text for contrast.
+
+
+
+
 async function getEmailContactFooter() {
   const esc = (v) => String(v == null ? '' : v)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -879,7 +879,7 @@ async function getEmailContactFooter() {
       if (row.key === 'systemEmail' && row.value) supportEmail = row.value;
       if (row.key === 'phoneNumber' && row.value) phone = row.value;
     }
-  } catch (e) { /* fall back to defaults */ }
+  } catch (e) {  }
   const lines = [
     `<p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#ffffff;">Request Handling Management System (${esc(companyName)})</p>`,
   ];
@@ -897,24 +897,24 @@ async function getEmailContactFooter() {
   );
 }
 
-// ---- Automatic email notifications for the request workflow ----
-// Reuses the existing mailer.js Nodemailer/SMTP infrastructure exclusively.
-// All sends are fire-and-forget: email failure is logged and NEVER rolls back
-// or blocks the request operation. Emails are triggered only from backend API
-// logic (never the frontend), so re-renders/retries cannot duplicate them.
+
+
+
+
+
 const escapeEmailHtml = (v) => String(v == null ? '' : v)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-// Shared bright blue/black email theme: vivid blue gradient over black with
-// light, high-contrast text. bgcolor fallbacks match for clients that strip
-// CSS gradients.
+
+
+
 const EMAIL_CARD_STYLE = 'max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#0A1F44 55%,#1D4ED8 135%);background-color:#0A1F44;border-radius:12px;overflow:hidden;';
 const EMAIL_FOOTER_STYLE = 'background:linear-gradient(160deg,#000000 0%,#0A1F44 60%,#1E40AF 140%);background-color:#0A1F44;padding:20px 32px;text-align:center;';
 
-// Enriched request context for workflow emails: client profile + request
-// details, resolved from existing tables. Returns null when the request
-// cannot be found.
+
+
+
 async function getRequestEmailContext(requestId) {
   const r = await pool.query(
     `SELECT r.id, r.subject, r.description, r.client_id, r.client_email,
@@ -948,7 +948,7 @@ function formatEmailDateTime(v) {
   } catch { return String(v); }
 }
 
-// Renders one "Request Information" bullet row for the professional template.
+
 function workflowInfoRow(label, value) {
   return (
     `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;">` +
@@ -962,10 +962,10 @@ function workflowSectionTitle(title) {
   return `<p style="margin:0 0 10px;font-size:15px;font-weight:700;color:#93C5FD;letter-spacing:0.3px;">${escapeEmailHtml(title)}</p>`;
 }
 
-// Professional RHMS workflow email: greeting, optional status badge, Request
-// Information bullets, Request Details (title + description), optional
-// Resolution section, closing, View Request button, professional footer.
-// Responsive table-based HTML suitable for Gmail.
+
+
+
+
 async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, statusBadge, infoRows, detailsTitle, detailsBody, resolution, extraSection, closing, req, requestId }) {
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
@@ -1047,7 +1047,7 @@ function buildRequestWorkflowText({ title, greetingName, lead, groupLine, status
   );
 }
 
-// Single fire-and-forget sender for workflow emails. Never throws.
+
 function fireWorkflowEmail({ to, subject, tag, req, requestId, body }) {
   (async () => {
     try {
@@ -1066,33 +1066,33 @@ function fireWorkflowEmail({ to, subject, tag, req, requestId, body }) {
   })().catch((err) => console.error(`[WorkflowEmail:${tag}] unexpected error:`, (err && err.message) || err));
 }
 
-// Shared Request Information rows/text for assignment-style emails.
+
 function workflowCategoryOf(ctx) {
   return ctx.custom_category || ctx.category_name || 'N/A';
 }
 
-// Configured RHMS Admin email address (systemEmail setting), falling back to
-// the registered admin users when the setting is empty.
+
+
 async function getAdminEmailRecipients() {
   try {
     const r = await pool.query("SELECT value FROM system_settings WHERE key = 'systemEmail'");
     const configured = r.rows.length > 0 ? String(r.rows[0].value || '').trim() : '';
     if (configured) return [configured];
-  } catch (e) { /* fall through to admin users */ }
+  } catch (e) {  }
   try {
     const r = await pool.query("SELECT email FROM users WHERE role = 'admin' AND email IS NOT NULL AND email <> ''");
     return r.rows.map((row) => row.email).filter(Boolean);
   } catch (e) { return []; }
 }
 
-// 1b. Client submits a new request -> Developers AND Escalation Team in the
-// same group, each with their role-specific template. Follows the existing
-// group assignment: the request's groups come from the request_groups rows
-// written at creation from the client's group memberships, and recipients
-// are the developer/support members returned by
-// getAssignmentGroupRecipients (the same membership logic as
-// notifyGroupMembers and the dashboards). Members of other groups are never
-// emailed. The submitter is excluded so they never email themselves.
+
+
+
+
+
+
+
+
 async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
   try {
     const ctx = await getRequestEmailContext(requestId);
@@ -1120,12 +1120,12 @@ async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
   }
 }
 
-// Sends the new-request group email for ONE (request, group) pair to the
-// developer AND escalation-team members of that group, each with their
-// role-specific template (verified emails only, submitter excluded).
-// Shared by the creation trigger and the member-add sync path so both follow
-// identical recipient rules. Returns the emailed member|group keys. Never
-// throws.
+
+
+
+
+
+
 async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, submitterId, req, alreadyEmailed = new Set()) {
   const emailedKeys = [];
   try {
@@ -1190,12 +1190,12 @@ async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, s
   return emailedKeys;
 }
 
-// Emails a group's developers and escalation members about requests that
-// became visible to the group because a member was added (user update or
-// member-add endpoint). Only newly linked, still-open requests are emailed:
-// closed/rejected/resolved ones would be noise, and already-linked requests
-// were emailed when they were first associated. Fire-and-forget; never
-// throws.
+
+
+
+
+
+
 async function emailGroupDevelopersForSyncedRequests(requestIds, groupId, req) {
   try {
     if (!Array.isArray(requestIds) || requestIds.length === 0) return;
@@ -1215,9 +1215,9 @@ async function emailGroupDevelopersForSyncedRequests(requestIds, groupId, req) {
   }
 }
 
-// 5. Client submits feedback -> ALL Admin users.
-// Professional email notifying admins of new feedback on a request.
-// Fire-and-forget; never blocks the feedback submission.
+
+
+
 async function emailAdminOnFeedback(requestId, rating, comment, req) {
   try {
     const ctx = await getRequestEmailContext(requestId);
@@ -1270,11 +1270,11 @@ async function emailAdminOnFeedback(requestId, rating, comment, req) {
   }
 }
 
-// 1. Client submits a new request -> ALL Admin users.
-// Every registered admin-role user receives a personalized notification at
-// their registered, verified email (falls back to the configured systemEmail
-// only when no admin account exists). Group names come from the request's
-// request_groups rows — never hard-coded.
+
+
+
+
+
 async function emailAdminOnNewRequest(requestId, req) {
   try {
     const ctx = await getRequestEmailContext(requestId);
@@ -1337,10 +1337,10 @@ async function emailAdminOnNewRequest(requestId, req) {
   }
 }
 
-// 2. Admin assigns request -> assigned Developer's email.
-// Only developer/support assignees are emailed: those are the roles the RHMS
-// dashboards grant worker visibility to, so clients, unrelated staff and
-// read-only users never receive assignment details.
+
+
+
+
 async function emailDeveloperOnAssignment(requestId, assigneeId, assignerName, req) {
   try {
     const ctx = await getRequestEmailContext(requestId);
@@ -1389,12 +1389,12 @@ async function emailDeveloperOnAssignment(requestId, assigneeId, assignerName, r
   }
 }
 
-// 3. Admin assigns/escalates request -> Escalation Team member emails.
-// Recipients come from getAssignmentGroupRecipients (shared with the
-// existing notifyGroupMembers channel), so email always follows the same
-// group-assignment method and RBAC rules as RHMS itself. The directly
-// assigned user is excluded to prevent duplicate assignment emails — they
-// already receive the direct-assignment email.
+
+
+
+
+
+
 async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName, req, excludeUserId) {
   try {
     const ctx = await getRequestEmailContext(requestId);
@@ -1410,13 +1410,13 @@ async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName,
     }
     if (members.length === 0) { console.log('[WorkflowEmail:assign-team] skipped — no verified team member emails'); return; }
     const category = workflowCategoryOf(ctx);
-    // Group name comes from the RHMS database via the request context —
-    // never hard-coded. Submitted On is the request creation time.
+    
+    
     const groupName = ctx.group_name || 'N/A';
     const submittedOn = formatEmailDateTime(ctx.created_at);
-    // One personalized email per team member so the greeting names the
-    // correct recipient; sends run sequentially in the background and never
-    // block the assignment operation.
+    
+    
+    
     for (const m of members) {
       fireWorkflowEmail({
         to: m.email,
@@ -1450,9 +1450,9 @@ async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName,
   }
 }
 
-// Developer's escalation note: the most recent stored comment, falling back
-// to the latest activity entry. RHMS has no dedicated escalation-note
-// column, so existing data sources are reused.
+
+
+
 async function getEscalationNote(requestId) {
   try {
     const c = await pool.query(
@@ -1460,23 +1460,23 @@ async function getEscalationNote(requestId) {
       [requestId]
     );
     if (c.rows.length > 0 && c.rows[0].content) return String(c.rows[0].content);
-  } catch (e) { /* fall through */ }
+  } catch (e) {  }
   try {
     const a = await pool.query(
       'SELECT message FROM activity_log WHERE request_id = $1 ORDER BY created_at DESC LIMIT 1',
       [requestId]
     );
     if (a.rows.length > 0 && a.rows[0].message) return String(a.rows[0].message);
-  } catch (e) { /* fall through */ }
+  } catch (e) {  }
   return 'No escalation note was provided.';
 }
 
-// 3b. Developer escalates the request -> Escalation Team members in the same
-// group. Triggered by the status transition to Escalated (never by creation
-// or assignment), so the Escalation Team receives no earlier email.
-// Recipients are the support-role members of the request's request_groups
-// rows via getAssignmentGroupRecipients; the escalator is excluded so they
-// never email themselves.
+
+
+
+
+
+
 async function emailEscalationTeamOnEscalation(requestId, escalator, req, previousGroupId) {
   try {
     const ctx = await getRequestEmailContext(requestId);
@@ -1494,10 +1494,10 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
     const note = await getEscalationNote(requestId);
     const escalatorName = (escalator && escalator.name) || 'A developer';
     const escalatorId = escalator && escalator.id;
-    // Resolve previous (original) group name
+    
     let previousGroupName = 'N/A';
-    const prevId = previousGroupId || ctx.assigned_group; // fallback
-    // previousGroupId passed is original before escalation; prefer it
+    const prevId = previousGroupId || ctx.assigned_group; 
+    
     const effectivePrevId = previousGroupId || null;
     if (effectivePrevId) {
       const pg = await pool.query('SELECT name FROM groups WHERE id = $1', [effectivePrevId]);
@@ -1559,9 +1559,9 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
   }
 }
 
-// Latest stored resolution information for a request: the most recent
-// comment, falling back to the resolution activity entry. RHMS has no
-// dedicated resolution column, so existing data sources are reused.
+
+
+
 async function getResolutionDetails(requestId) {
   try {
     const c = await pool.query(
@@ -1569,18 +1569,18 @@ async function getResolutionDetails(requestId) {
       [requestId]
     );
     if (c.rows.length > 0 && c.rows[0].content) return String(c.rows[0].content);
-  } catch (e) { /* fall through */ }
+  } catch (e) {  }
   try {
     const a = await pool.query(
       "SELECT message FROM activity_log WHERE request_id = $1 AND type IN ('status_update','resolved','closed') ORDER BY created_at DESC LIMIT 1",
       [requestId]
     );
     if (a.rows.length > 0 && a.rows[0].message) return String(a.rows[0].message);
-  } catch (e) { /* fall through */ }
+  } catch (e) {  }
   return 'The request was reviewed and marked as Resolved by the RHMS Support Team.';
 }
 
-// 4. Request resolved -> original Client email.
+
 async function emailClientOnResolved(requestId, req) {
   try {
     const ctx = await getRequestEmailContext(requestId);
@@ -1622,9 +1622,9 @@ async function emailClientOnResolved(requestId, req) {
   }
 }
 
-// SSE endpoint for real-time notifications (token via query param for EventSource)
+
 app.get('/api/notifications/stream', async (req, res) => {
-  // Auth via query param since EventSource doesn't support headers
+  
   const token = req.query.token;
   if (!token) return res.status(401).json({ error: 'No token provided' });
   
@@ -1645,7 +1645,7 @@ app.get('/api/notifications/stream', async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
-  // Send initial connection message
+  
   res.write(`data: ${JSON.stringify({ message: 'Connected', timestamp: new Date().toISOString() })}\n\n`);
 
   const userId = req.user.id;
@@ -1654,7 +1654,7 @@ app.get('/api/notifications/stream', async (req, res) => {
   }
   sseClients.get(userId).add(res);
 
-  // Send initial unread count
+  
   pool.query('SELECT COUNT(*) FROM activity_log WHERE created_at > NOW() - INTERVAL \'24 hours\'')
     .then(result => {
       const count = parseInt(result.rows[0].count);
@@ -1662,7 +1662,7 @@ app.get('/api/notifications/stream', async (req, res) => {
     })
     .catch(() => {});
 
-  // Keep connection alive with heartbeat
+  
   const heartbeat = setInterval(() => {
     res.write(`:heartbeat\n\n`);
   }, 30000);
@@ -1679,7 +1679,7 @@ app.get('/api/notifications/stream', async (req, res) => {
   });
 });
 
-// Auth Routes
+
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { name, email, password, companyName, language } = req.body;
@@ -1699,8 +1699,8 @@ app.post('/api/auth/signup', async (req, res) => {
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email already exists' });
     }
-    // Email must have been verified via /api/auth/request-email-verification.
-    // No user row is created until the mailbox proves it can receive the code.
+    
+    
     if (!verificationCode) {
       return res.status(400).json({ error: 'Email verification is required. Please verify your email address first.' });
     }
@@ -1731,17 +1731,17 @@ app.post('/api/auth/signup', async (req, res) => {
       }
       throw err;
     }
-    // Consume the verification code (single-use).
+    
     await pool.query('UPDATE email_verification_codes SET used_at = NOW() WHERE id = $1', [check.id]);
-    // A fresh verified registration clears any prior deletion record for this
-    // email; the new row above is a brand-new account, never a restoration.
+    
+    
     try {
       await pool.query('DELETE FROM deleted_accounts WHERE email = LOWER($1)', [String(email).trim()]);
-    } catch (e) { /* best-effort */ }
-    // Re-associate this verified email's previous orphaned requests/comments
-    // (left behind by an admin deletion) with the newly created account.
-    // Only orphaned rows match, so another live account's data is untouched.
-    // IDs, dates, statuses, comments, attachments and assignments are preserved.
+    } catch (e) {  }
+    
+    
+    
+    
     try {
       const freshId = result.rows[0].id;
       const verifiedEmail = String(email).trim().toLowerCase();
@@ -1755,7 +1755,7 @@ app.post('/api/auth/signup', async (req, res) => {
       );
     } catch (e) { console.error('Failed to reclaim previous requests:', e.message); }
 
-    // Auto-assign to default group
+    
     const defGroup = await pool.query("SELECT value FROM system_settings WHERE key = 'defaultGroup'");
     const defaultGroupId = defGroup.rows.length > 0 ? defGroup.rows[0].value : '';
     if (defaultGroupId) {
@@ -1765,15 +1765,15 @@ app.post('/api/auth/signup', async (req, res) => {
     auditLogin('signup', id, email, req);
     await logAuthActivity('signup', { id, name, email }, req);
     notifyAdmins(`New user registered: ${name} (${email})`, { type: 'user_registered', userId: id, userName: name });
-    // Registration-success confirmation email. Sent ONLY after the account is
-    // created, using the existing Gmail SMTP service. Fire-and-forget so the
-    // signup response (and login navigation) never waits on SMTP delivery;
-    // a failure is logged and never rolls back or duplicates the registration.
+    
+    
+    
+    
     const newUser = result.rows[0];
-    // Respond immediately so clicking Register never waits on email
-    // composition or SMTP delivery; the confirmation email (same content,
-    // same recipients) is built and sent in the background. A failure is
-    // logged and never rolls back the registration.
+    
+    
+    
+    
     res.status(201).json({ message: 'Account created successfully', user: mapUser(result.rows[0]) });
     (async () => {
       const escapeHtml = (v) => String(v == null ? '' : v)
@@ -1858,9 +1858,9 @@ app.post('/api/auth/login', async (req, res) => {
           await logAuthActivity('account_blocked', user, req, { reason: 'too_many_failed_attempts' });
         }
       } else {
-        // The credential matches an admin-deleted account: report it clearly.
-        // Never recreate or restore the account here; a fresh verified
-        // registration is the only way back.
+        
+        
+        
         try {
           const gone = await pool.query(
             'SELECT email FROM deleted_accounts WHERE email = LOWER($1) OR (name IS NOT NULL AND LOWER(name) = LOWER($1)) LIMIT 1',
@@ -1870,7 +1870,7 @@ app.post('/api/auth/login', async (req, res) => {
             auditLogin('login_failed', null, credential, req);
             return res.status(410).json({ error: 'Your account no longer exists. Please register again to create a new account.' });
           }
-        } catch (e) { /* fall through to the generic error */ }
+        } catch (e) {  }
         auditLogin('login_failed', null, credential, req);
         await logAuthActivity('login_failed', null, req, { credential });
       }
@@ -1951,8 +1951,8 @@ app.post('/api/auth/google', async (req, res) => {
     const name = payload.name || email.split('@')[0];
     const picture = payload.picture || null;
 
-    // Look up an existing account by the verified Google subject first, then by
-    // the verified email. Never trust a client-supplied email without the token.
+    
+    
     let result = await pool.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
     let user;
     let isNewUser = false;
@@ -1963,8 +1963,8 @@ app.post('/api/auth/google', async (req, res) => {
       result = await pool.query('SELECT * FROM users WHERE LOWER(email) = $1', [email]);
       if (result.rows.length > 0) {
         user = result.rows[0];
-        // Secure, explicit linking: only link when no other Google subject is
-        // already attached, preventing account hijacking / unsafe auto-linking.
+        
+        
         if (user.google_id && user.google_id !== googleId) {
           return res.status(403).json({ error: 'This email is already linked to a different Google account' });
         }
@@ -1974,14 +1974,14 @@ app.post('/api/auth/google', async (req, res) => {
           if (!user.avatar && picture) user.avatar = picture;
         }
       } else {
-        // On the Login page we must NOT silently create an account. Only the
-        // Sign-Up flow (intent === 'signup') is allowed to provision a new
-        // client account via Google.
+        
+        
+        
         if (googleIntent !== 'signup') {
           return res.status(404).json({ error: 'No RHMS account found. Please sign up.' });
         }
-        // New accounts created through Google are always 'client' users.
-        // Privileged roles (admin/developer/escalation) can never be self-assigned.
+        
+        
         const id = uuidv4();
         result = await pool.query(
           `INSERT INTO users (id, name, email, password, role, avatar, google_id, approved, moderated)
@@ -2008,7 +2008,7 @@ app.post('/api/auth/google', async (req, res) => {
     await logAuthActivity(isNewUser ? 'google_signup' : 'google_login', user, req);
     persistSession(user.id, token, req);
 
-    // Google auth email notifications (fire-and-forget; never block/rollback auth).
+    
     (async () => {
       try {
         if (!mailer.isSmtpConfigured()) {
@@ -2110,10 +2110,10 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
-// Password reset: SHA-256 of the raw token is stored; the raw token travels in the link.
+
 const hashResetToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
 
-// Request a password reset link for an account. Generic response prevents user enumeration.
+
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
@@ -2126,7 +2126,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       const rawToken = crypto.randomBytes(32).toString('hex');
       const tokenHash = hashResetToken(rawToken);
 
-      // Invalidate any previously issued, unused tokens for this user.
+      
       await pool.query("UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL", [user.id]);
 
       const ttlResult = await pool.query("SELECT value FROM system_settings WHERE key = 'passwordResetTokenTtl'");
@@ -2143,8 +2143,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       auditLogin('password_reset_requested', user.id, user.email, req);
       await logAuthActivity('password_reset_requested', user, req, { email });
 
-      // No mailer is configured; surface the reset link on the server console and
-      // as an in-app notification so the flow is usable on this local deployment.
+      
+      
       const resetUrl = `${req.protocol}://${req.get('host')}/reset-password?token=${rawToken}`;
       console.log(`[PasswordReset] Reset link for ${user.email}: ${resetUrl}`);
       notifyUser(user.id, `Password reset requested. Use this link within ${ttlMinutes} minutes: ${resetUrl}`,
@@ -2158,7 +2158,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   }
 });
 
-// Validate a reset token without consuming it.
+
 app.get('/api/auth/reset-password/validate', async (req, res) => {
   try {
     const rawToken = req.query.token || '';
@@ -2180,7 +2180,7 @@ app.get('/api/auth/reset-password/validate', async (req, res) => {
   }
 });
 
-// Consume a valid reset token and set a new password.
+
 app.post('/api/auth/reset-password', async (req, res) => {
   try {
     const rawToken = (req.body.token || '').trim();
@@ -2207,7 +2207,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     await pool.query('UPDATE users SET password = $1, login_attempts = 0 WHERE id = $2', [hashedPassword, row.user_id]);
     await pool.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1', [row.token_id]);
-    // Revoke all existing sessions for the user so the new password takes effect.
+    
     await pool.query('UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL', [row.user_id]);
 
     const userResult = await pool.query('SELECT id, email FROM users WHERE id = $1', [row.user_id]);
@@ -2221,19 +2221,19 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
-// ---- Forgot-password via 6-digit email OTP ----
-// No SMTP transporter is configured in this deployment; the existing RHMS email
-// configuration is the `systemEmail` system setting. The OTP is delivered from
-// that sender identity through the existing in-app notification channel
-// (notifyUser/persistNotification) and surfaced on the server console, exactly
-// like the existing reset-link flow. If an SMTP transporter is added later,
-// sendPasswordResetOtpEmail is the single place to route through it.
+
+
+
+
+
+
+
 async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req) {
   let fromAddress = 'support@rhms.com';
   try {
     const r = await pool.query("SELECT value FROM system_settings WHERE key = 'systemEmail'");
     if (r.rows.length > 0 && r.rows[0].value) fromAddress = r.rows[0].value;
-  } catch (e) { /* fall back to default sender */ }
+  } catch (e) {  }
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
   const subject = 'RHMS Password Reset Verification Code';
@@ -2269,7 +2269,7 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
     `</table></td></tr></table></body></html>`;
   if (mailer.isSmtpConfigured()) {
     try {
-      // Fast-fail when the SMTP server is unreachable instead of hanging.
+      
       await mailer.verifySmtp();
     } catch (err) {
       const kind = (err && err.message) || '';
@@ -2285,7 +2285,7 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
     } catch (err) {
       const kind = (err && err.message) || '';
       console.error('[PasswordResetOTP] SMTP send failed:', kind);
-      // Propagate a classified kind so the endpoint can return a clear message.
+      
       if (['SMTP_TIMEOUT', 'SMTP_AUTH', 'SMTP_UNAVAILABLE', 'SMTP_NO_SUCH_USER'].includes(kind)) throw err;
       throw new Error('SMTP_UNAVAILABLE');
     }
@@ -2298,14 +2298,14 @@ async function sendPasswordResetOtpEmail(toEmail, userName, otp, ttlSeconds, req
       notifyUser(u.rows[0].id, `Your password reset code is ${otp}. It expires in ${ttlSeconds} seconds.`,
         { type: 'password_reset_otp', title: 'Password Reset Code' });
     }
-  } catch (e) { /* notification is best-effort */ }
+  } catch (e) {  }
   return { channel: 'in-app' };
 }
 
 const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
 
-// Lightweight in-memory rate limiting for the OTP endpoints (per key).
-// Limits: OTP sends 5/hour + 2-minute resend cooldown; verifications 10/hour.
+
+
 const otpRateState = new Map();
 function otpRateLimit(key, maxHits, windowMs) {
   const now = Date.now();
@@ -2316,7 +2316,7 @@ function otpRateLimit(key, maxHits, windowMs) {
   }
   entry.hits += 1;
   if (entry.hits > maxHits) return false;
-  // Opportunistic cleanup so the map cannot grow without bound.
+  
   if (otpRateState.size > 5000) {
     for (const [k, v] of otpRateState) {
       if (now - v.start > windowMs) otpRateState.delete(k);
@@ -2344,9 +2344,9 @@ async function findValidOtp(userId, otp) {
   return { ok: true, id: row.id };
 }
 
-// Step 1: verify the account is registered and verified, generate a secure
-// 6-digit OTP, store only its hash with expiry, and send it. Distinct errors
-// tell the user whether the account is missing or verification is incomplete.
+
+
+
 app.post('/api/auth/forgot-password-otp', async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
@@ -2362,23 +2362,23 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
       return res.status(429).json({ error: 'Too many reset requests for this email. Please try again later.' });
     }
 
-    // Account must be registered AND verified before any reset OTP is issued.
-    // No user row is created until signup email verification completes, so a
-    // missing row means never registered — unless verification was started
-    // but never finished (codes exist, none consumed).
+    
+    
+    
+    
     const userResult = await pool.query('SELECT id, name, email, approved FROM users WHERE LOWER(email) = $1', [email]);
     if (userResult.rows.length === 0) {
-      // Generic response to prevent account enumeration.
+      
       return res.json({ message: 'If an account exists for this email, a verification code will be sent.' });
     }
     const otpUser = userResult.rows[0];
-    // Blocked / never-approved accounts are not eligible for password reset.
+    
     if (otpUser.approved === false) {
       return res.status(400).json({ error: 'Account is not registered or email verification is incomplete.' });
     }
     {
       const user = otpUser;
-      // Resend cooldown (matches the 60s frontend countdown): do not spam.
+      
       const recent = await pool.query(
         `SELECT created_at FROM password_reset_otps
          WHERE user_id = $1 AND used_at IS NULL AND created_at > NOW() - INTERVAL '60 seconds'
@@ -2389,7 +2389,7 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
         const retryAfter = Math.max(1, 60 - Math.floor((Date.now() - new Date(recent.rows[0].created_at).getTime()) / 1000));
         return res.json({ message: 'If an account exists with this email, a verification code has been sent.', resent: false, retryAfter });
       }
-      // Single-use protection: invalidate previously issued, unused OTPs.
+      
       await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [user.id]);
       const otp = String(crypto.randomInt(100000, 1000000));
       const expiresAt = new Date(Date.now() + OTP_TTL_SECONDS * 1000);
@@ -2401,14 +2401,14 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
       );
       auditLogin('password_reset_otp_requested', user.id, user.email, req);
       await logAuthActivity('password_reset_requested', user, req, { email, channel: 'otp' });
-      // Respond immediately so the UI never waits on slow SMTP; the email
-      // is delivered in the background. If delivery fails, the OTP is
-      // invalidated (same as before) so a retry issues a fresh code.
+      
+      
+      
       try {
         await sendPasswordResetOtpEmail(user.email, user.name, otp, OTP_TTL_SECONDS, req);
       } catch (err) {
         console.error('[ForgotOTP] SMTP send failed for', user.email, ':', (err && err.message) || err);
-        try { await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE id = $1', [otpId]); } catch (e) { /* ignore */ }
+        try { await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE id = $1', [otpId]); } catch (e) {  }
         const kind = (err && err.message) || '';
         if (kind === 'SMTP_NO_SUCH_USER' || kind === 'SMTP_INVALID_DOMAIN') return res.status(400).json({ error: 'That email address does not exist or cannot receive mail. Please check the address and try again.' });
         if (kind === 'SMTP_AUTH' || kind === 'SMTP_UNAVAILABLE' || kind === 'SMTP_TIMEOUT') return res.status(503).json({ error: 'Email service is temporarily unavailable. Please try again later.' });
@@ -2423,7 +2423,7 @@ app.post('/api/auth/forgot-password-otp', async (req, res) => {
   }
 });
 
-// Step 2: verify the OTP and expiry without consuming it.
+
 app.post('/api/auth/verify-otp', async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
@@ -2435,7 +2435,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     }
     const userResult = await pool.query('SELECT id, approved FROM users WHERE LOWER(email) = $1', [email]);
     if (userResult.rows.length === 0) return res.json({ valid: false });
-    // No OTPs are issued to unregistered/unverified accounts; nothing to verify.
+    
     if (userResult.rows[0].approved === false) return res.json({ valid: false });
     const check = await findValidOtp(userResult.rows[0].id, otp);
     if (!check.ok) {
@@ -2444,10 +2444,10 @@ app.post('/api/auth/verify-otp', async (req, res) => {
       }
       return res.json({ valid: false, reason: check.reason === 'mismatch' ? 'mismatch' : check.reason });
     }
-    // The code was entered within its 60-second window. From here the user
-    // may take as long as needed on the password step: lift the countdown by
-    // extending this (already-verified) OTP, still single-use and consumed at
-    // reset. Unverified codes keep the exact 60-second expiry.
+    
+    
+    
+    
     await pool.query("UPDATE password_reset_otps SET expires_at = NOW() + INTERVAL '30 minutes' WHERE id = $1", [check.id]);
     res.json({ valid: true });
   } catch (err) {
@@ -2456,7 +2456,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
   }
 });
 
-// Step 3: consume a valid OTP and set the new password (existing password rules).
+
 app.post('/api/auth/reset-password-otp', async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
@@ -2486,9 +2486,9 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
     }
     const hashedPassword = await bcrypt.hash(password, 10);
     await pool.query('UPDATE users SET password = $1, login_attempts = 0 WHERE id = $2', [hashedPassword, userId]);
-    // Invalidate the OTP after successful reset (single-use).
+    
     await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE id = $1', [check.id]);
-    // Revoke existing sessions so the new password takes effect everywhere.
+    
     await pool.query('UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
     auditLogin('password_reset_success', userId, userResult.rows[0].email, req);
     await logAuthActivity('password_reset_completed', { id: userId, email: userResult.rows[0].email }, req, { channel: 'otp' });
@@ -2499,12 +2499,12 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
   }
 });
 
-// ---- Registration email verification (separate from password-reset OTPs) ----
-// A user row is NOT created until the mailbox is proven reachable: a code is
-// mailed to the entered address and signup requires that code. The endpoint
-// responds immediately (background SMTP delivery) so Register stays fast; a
-// background delivery failure only discards the unsent code, never an
-// account, and the retry sends fresh.
+
+
+
+
+
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_VERIFY_TTL_SECONDS = OTP_TTL_SECONDS;
 const EMAIL_VERIFY_MAX_ATTEMPTS = 5;
@@ -2560,13 +2560,13 @@ async function sendRegistrationVerificationEmail(toEmail, userName, code, req) {
   if (!mailer.isSmtpConfigured()) {
     throw new Error('SMTP_NOT_CONFIGURED');
   }
-  // NOTE: no explicit verifySmtp() here — on slow networks verify (~8s) +
-  // send (~15s) together exceed the route budget. sendMail() below opens the
-  // connection itself and its classified error is sufficient.
+  
+  
+  
   await mailer.sendMail({ to: toEmail, subject, text, html, ...(logoAttachment ? { attachments: [logoAttachment] } : {}) });
 }
 
-// Step 1: validate details and mail a verification code. Creates NO user row.
+
 app.post('/api/auth/request-email-verification', async (req, res) => {
   try {
     const name = (req.body.name || '').trim();
@@ -2613,19 +2613,19 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, NOW())`,
       [codeId, email, hashOtp(code), expiresAt, ip]
     );
-    // Fail fast (no network I/O) when SMTP is not configured at all.
+    
     if (!mailer.isSmtpConfigured()) {
-      try { await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]); } catch (e) { /* ignore */ }
+      try { await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]); } catch (e) {  }
       return res.status(503).json({ error: 'Email service is not configured. Please contact the administrator.' });
     }
-    // Deliver the OTP before reporting success so we never claim a code was
-    // sent when delivery actually failed. A failure removes the unsent code
-    // and returns a clear error so the user can retry.
+    
+    
+    
     try {
       await sendRegistrationVerificationEmail(email, name, code, req);
     } catch (err) {
       console.error('[EmailVerify] SMTP send failed for', email, ':', (err && err.message) || err);
-      try { await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]); } catch (e) { /* ignore */ }
+      try { await pool.query('DELETE FROM email_verification_codes WHERE id = $1', [codeId]); } catch (e) {  }
       const kind = (err && err.message) || '';
       if (kind === 'SMTP_NO_SUCH_USER' || kind === 'SMTP_INVALID_DOMAIN') return res.status(400).json({ error: 'That email address does not exist or cannot receive mail. Please check the address and try again.' });
       if (kind === 'SMTP_AUTH' || kind === 'SMTP_UNAVAILABLE' || kind === 'SMTP_TIMEOUT') return res.status(503).json({ error: 'Email service is temporarily unavailable. Please try again later.' });
@@ -2639,7 +2639,7 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
   }
 });
 
-// Step 2: check the code without consuming it.
+
 app.post('/api/auth/verify-email-code', async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
@@ -2666,7 +2666,7 @@ app.post('/api/auth/verify-email-code', async (req, res) => {
   }
 });
 
-// Users Routes
+
 app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(`
@@ -2781,13 +2781,13 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
           await pool.query('INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, gid]);
         }
       }
-      // Sync request_groups for user's existing requests (only if not explicitly group-assigned)
+      
       const addedGroups = await syncUserRequestGroups(req.params.id, groupIds);
       for (const gid of Object.keys(addedGroups)) {
         const count = addedGroups[gid].length;
         notifyGroupMembers(gid, `${count} new request${count > 1 ? 's' : ''} available for your group`, { groupId: gid });
-        // Email the group's developers about the newly visible requests
-        // (fire-and-forget; never blocks the user update).
+        
+        
         emailGroupDevelopersForSyncedRequests(addedGroups[gid], gid, req);
       }
     } catch (e) { console.log('user_groups save error:', e.message); }
@@ -2820,9 +2820,9 @@ app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req
     if (existing.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const doomed = existing.rows[0];
     const doomedEmail = String(doomed.email || '').trim().toLowerCase();
-    // Preserve the ownership trail BEFORE nulling FKs so a later verified
-    // re-registration with the same email can reclaim its own history.
-    // Historical rows (requests/comments/attachments/activity) are never deleted.
+    
+    
+    
     try {
       if (doomedEmail) {
         await pool.query(
@@ -2843,16 +2843,16 @@ app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req
     await pool.query('UPDATE activity_log SET user_id = NULL WHERE user_id = $1', [req.params.id]);
     await pool.query('UPDATE feedback SET user_id = NULL WHERE user_id = $1', [req.params.id]);
     await pool.query('DELETE FROM user_groups WHERE user_id = $1', [req.params.id]);
-    // Invalidate all sessions/tokens for the deleted user (rows cascade on user
-    // delete, but revoke first so currently-valid JWTs are marked revoked).
+    
+    
     try {
       await pool.query('UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL', [req.params.id]);
       await pool.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [req.params.id]);
       await pool.query('UPDATE password_reset_otps SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [req.params.id]);
     } catch (e) { console.error('Failed to revoke deleted-user sessions:', e.message); }
     await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
-    // Remember the deleted credentials so a later sign-in attempt reports that
-    // the account no longer exists. Never blocks a fresh verified registration.
+    
+    
     try {
       await pool.query(
         `INSERT INTO deleted_accounts (email, name) VALUES ($1, $2)
@@ -2897,7 +2897,7 @@ app.patch('/api/users/:id/approve', authMiddleware, roleMiddleware('admin'), asy
   }
 });
 
-// Profile update endpoint (any authenticated user can update their own profile)
+
 app.put('/api/profile', authMiddleware, upload.single('avatar'), async (req, res) => {
   try {
     const { name, email, password, companyName, language } = req.body;
@@ -2951,8 +2951,8 @@ app.put('/api/profile', authMiddleware, upload.single('avatar'), async (req, res
     res.json(user);
   } catch (err) {
     console.error(err);
-    // Email address is UNIQUE: saving a profile with an email that belongs
-    // to another account must report a clear message, not a generic 500.
+    
+    
     if (err && err.code === '23505') {
       return res.status(400).json({ error: 'This email address is already registered to another account.' });
     }
@@ -2960,7 +2960,7 @@ app.put('/api/profile', authMiddleware, upload.single('avatar'), async (req, res
   }
 });
 
-// Categories Routes
+
 app.get('/api/categories', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM categories ORDER BY name');
@@ -3012,7 +3012,7 @@ app.delete('/api/categories/:id', authMiddleware, roleMiddleware('admin'), async
   }
 });
 
-// Priorities Routes
+
 app.get('/api/priorities', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM priorities ORDER BY level');
@@ -3037,7 +3037,7 @@ app.post('/api/priorities', authMiddleware, roleMiddleware('admin'), async (req,
   }
 });
 
-// Statuses Routes
+
 app.get('/api/statuses', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(`SELECT * FROM statuses WHERE LOWER(name) <> 'reopened' ORDER BY sort_order, id`);
@@ -3170,7 +3170,7 @@ app.patch('/api/statuses/reorder', authMiddleware, async (req, res) => {
   }
 });
 
-// Requests Routes
+
 app.get('/api/requests', authMiddleware, async (req, res) => {
   try {
     let query = `
@@ -3240,8 +3240,8 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       params.push(`%${search.toLowerCase()}%`);
       paramIndex++;
     }
-    // Optional created_at window, used by dashboards to compare a status count
-    // against the same scope one week earlier.
+    
+    
     if (startDate) {
       query += ` AND r.created_at >= $${paramIndex++}`;
       params.push(startDate);
@@ -3284,8 +3284,8 @@ groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.grou
       });
     }
 
-    // Attach comments to each request so the client's messages panel can surface
-    // recent comments without issuing a separate request per item.
+    
+    
     try {
       const reqIds = result.rows.map(r => r.id);
       if (reqIds.length > 0) {
@@ -3322,7 +3322,7 @@ groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.grou
   }
 });
 
-// Global search endpoint: server-side filtering, RBAC-scoped, paginated
+
 app.get('/api/search', authMiddleware, async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
@@ -3339,7 +3339,7 @@ app.get('/api/search', authMiddleware, async (req, res) => {
       return res.json({ q, page, limit, type, results });
     }
 
-    // --- Requests: visible per role (admin: all, client: own, dev/support: assigned or group-based) ---
+    
     if (type === 'all' || type === 'requests') {
       let visibility = '1=1';
       const visParams = [];
@@ -3397,7 +3397,7 @@ app.get('/api/search', authMiddleware, async (req, res) => {
       results.requests = { total: countResult.rows[0].total, items: itemsResult.rows };
     }
 
-    // --- Users: admin only ---
+    
     if ((type === 'all' || type === 'users') && role === 'admin') {
       const countResult = await pool.query(
         `SELECT COUNT(*)::int AS total FROM users u
@@ -3414,7 +3414,7 @@ app.get('/api/search', authMiddleware, async (req, res) => {
       results.users = { total: countResult.rows[0].total, items: itemsResult.rows };
     }
 
-    // --- Groups: admin only ---
+    
     if ((type === 'all' || type === 'groups') && role === 'admin') {
       const countResult = await pool.query(
         `SELECT COUNT(*)::int AS total FROM groups g
@@ -3542,8 +3542,8 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
 
 app.post('/api/requests', authMiddleware, async (req, res) => {
   try {
-    // Blocked users (approved = false) cannot submit new requests. Admins are
-    // exempt so they can still create requests on behalf of clients.
+    
+    
     if (req.user.role !== 'admin' && !req.user.approved) {
       return res.status(403).json({ error: 'Your account is blocked. You cannot submit requests.' });
     }
@@ -3551,8 +3551,8 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     if (!subject || !subject.trim() || !description || !description.trim() || !categoryId) {
       return res.status(400).json({ error: 'Please fill all required fields' });
     }
-    // Map the "Other Categories" pseudo-option to the real "Other" category (id 8)
-    // so the FK stays valid while preserving existing categories/workflow.
+    
+    
     let effectiveCategoryId = categoryId;
     if (categoryId === 'other-categories') effectiveCategoryId = '8';
     const customCategoryValue = (effectiveCategoryId === '8' && customCategory && String(customCategory).trim())
@@ -3563,7 +3563,7 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     const id = `REQ-2024-${String(nextNum).padStart(5, '0')}`;
     const clientId = req.user.role === 'client' ? req.user.id : req.body.clientId;
     const now = new Date().toISOString();
-    // Record the owner's verified email for future reclaim after deletion.
+    
     let clientEmail = '';
     try {
       if (req.user.role === 'client') {
@@ -3572,7 +3572,7 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
         const ownerRow = await pool.query('SELECT email FROM users WHERE id = $1', [clientId]);
         if (ownerRow.rows.length > 0) clientEmail = ownerRow.rows[0].email || '';
       }
-    } catch (e) { /* best-effort */ }
+    } catch (e) {  }
 
     const defResult = await pool.query("SELECT value FROM system_settings WHERE key IN ('defaultStatus', 'defaultPriority')");
     const defMap = {};
@@ -3591,22 +3591,22 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     );
     await logRequestActivity('created', { id, subject }, req.user, req);
 
-    // Store client's groups for group-based visibility
+    
     const clientGroups = await pool.query('SELECT group_id FROM user_groups WHERE user_id = $1', [clientId]);
     if (clientGroups.rows.length > 0) {
       const groupValues = clientGroups.rows.map(r => `('${id}', '${r.group_id}')`).join(',');
       await pool.query(`INSERT INTO request_groups (request_id, group_id) VALUES ${groupValues} ON CONFLICT DO NOTHING`);
     }
 
-    // Real-time notification
+    
     notifyAdmins('New request created', { type: 'request_created', requestId: id, subject, userId: req.user.id, userName: req.user.name });
-    // Automatic email to the configured Admin address (fire-and-forget;
-    // never blocks or rolls back request creation on SMTP failure).
+    
+    
     emailAdminOnNewRequest(id, req);
-    // Automatic email to the Developer/Escalation Team members of the
-    // group(s) the new request belongs to (fire-and-forget).
-    // Auto-assign request to the client's company's designated (default/primary)
-    // support group, if configured. Uses actual company IDs, not name matching.
+    
+    
+    
+    
     try {
       const clientRow = await pool.query('SELECT company_id, company_name FROM users WHERE id = $1', [clientId]);
       let companyId = clientRow.rows[0]?.company_id || null;
@@ -3641,9 +3641,9 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
   }
 });
 
-// True when the request's current Closed/Rejected state was set by a Client
-// (derived from the activity log, no schema change). Used to make
-// client-closed requests read-only for Admin/Developer/Escalation staff.
+
+
+
 async function closedByClient(requestId) {
   const closer = await pool.query(
     `SELECT u.role FROM activity_log a JOIN users u ON u.id = a.user_id
@@ -3663,15 +3663,15 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
     const existing = await pool.query('SELECT * FROM requests WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
 
-    // A Resolved request Closed/Rejected by the Client is read-only for staff:
-    // Admin, Developer and Escalation Team can view it but must not change it.
+    
+    
     if ((statusId || assignedTo !== undefined || assignedGroup !== undefined) && req.user.role !== 'client' &&
         (existing.rows[0].status_id === '6' || existing.rows[0].status_id === '8') &&
         await closedByClient(req.params.id)) {
       return res.status(403).json({ error: 'This request was closed by the client and is read-only.' });
     }
 
-    // Check group-based access for non-admin users
+    
     if (req.user.role !== 'admin') {
       if (req.user.role === 'client' && existing.rows[0].client_id !== req.user.id) {
         return res.status(403).json({ error: 'Access denied' });
@@ -3679,16 +3679,16 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       if (req.user.role !== 'client') {
         const isAssignedToUser = existing.rows[0].assigned_to === req.user.id;
         const isUnassigned = existing.rows[0].assigned_to === null;
-        // Developers can only modify requests assigned to them personally
+        
         if (req.user.role === 'developer' && !isAssignedToUser) {
           return res.status(403).json({ error: 'Access denied - you can only modify requests assigned to you' });
         }
-        // Support/escalation members assigned to a request have full permission to
-        // modify it. Otherwise they can modify any escalated request; New requests
-        // they are not assigned to stay read-only.
+        
+        
+        
         if (req.user.role === 'support') {
           if (isAssignedToUser) {
-            // assigned escalation member: full permission
+            
           } else if (existing.rows[0].status_id === '1') {
             return res.status(403).json({ error: 'Access denied - new requests cannot be modified by the escalation team' });
           } else if (existing.rows[0].status_id !== '9') {
@@ -3698,7 +3698,7 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
           if (!isAssignedToUser && !isUnassigned) {
             return res.status(403).json({ error: 'Access denied - request assigned to another user' });
           }
-          // For unassigned requests, verify group access
+          
           if (isUnassigned) {
           const groupAccess = await pool.query(
             'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
@@ -3712,7 +3712,7 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       }
     }
 
-    // Check allowReopen setting
+    
     if (statusId) {
       const reopenResult = await pool.query("SELECT value FROM system_settings WHERE key = 'allowReopen'");
       const allowReopen = reopenResult.rows.length > 0 ? reopenResult.rows[0].value === 'true' : true;
@@ -3722,11 +3722,11 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
           return res.status(403).json({ error: 'Reopening requests is not allowed. Contact an administrator.' });
         }
       }
-      // Clients can only close or reject a resolved request
+      
       if (req.user.role === 'client' && (statusId === '6' || statusId === '8') && existing.rows[0].status_id !== '5') {
         return res.status(400).json({ error: 'You can only close or reject a request that is in Resolved status.' });
       }
-      // Developers must claim and assign a new request to themselves before changing its status
+      
       if (req.user.role === 'developer' && existing.rows[0].status_id === '1' && statusId) {
         return res.status(403).json({ error: 'You must claim and assign this request to yourself before changing its status' });
       }
@@ -3755,16 +3755,16 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       [subject, description, categoryId, priorityId, newStatusId, newAssignedTo, JSON.stringify(newAttachments), now, req.params.id, assignedGroup || null]
     );
 
-    // Sync request_groups when assignedGroup changes
+    
     const groupChanged = assignedGroup && assignedGroup !== existing.rows[0].assigned_group;
     if (assignedGroup) {
       await pool.query('DELETE FROM request_groups WHERE request_id = $1', [req.params.id]);
       await pool.query('INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, assignedGroup]);
     }
-    // Automatic email to the Escalation Team members of the newly assigned
-    // group only (fire-and-forget; respects existing group/RBAC membership).
-    // The direct assignee is excluded from the group mail to prevent a
-    // duplicate assignment email.
+    
+    
+    
+    
     if (groupChanged) {
       emailEscalationTeamOnAssignment(req.params.id, assignedGroup, req.user.name, req, newAssignedTo);
     }
@@ -3798,15 +3798,15 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       if (clientId && clientId !== req.user.id && notifSettings.notifyClientStatusChange !== false) {
         notifyUser(clientId, `Your request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
       }
-      // Automatic email to the original Client when the request becomes
-      // Resolved (fire-and-forget; the status update already succeeded).
+      
+      
       if (statusId === '5' || statusName === 'Resolved') {
         emailClientOnResolved(req.params.id, req);
       }
-      // Automatic email to the Escalation Team members of the same group
-      // when the request becomes Escalated (fire-and-forget). This is the
-      // only point at which the Escalation Team is emailed for an
-      // escalation-driven flow.
+      
+      
+      
+      
       if (statusId === '9' || statusName === 'Escalated') {
         emailEscalationTeamOnEscalation(req.params.id, { id: req.user.id, name: req.user.name }, req, existing.rows[0].assigned_group);
       }
@@ -3828,7 +3828,7 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       if (clientId && clientId !== req.user.id) {
         notifyUser(clientId, `Your request #${req.params.id} has been assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
       }
-      // Automatic email to the assigned Developer (fire-and-forget).
+      
       emailDeveloperOnAssignment(req.params.id, assignedTo, req.user.name, req);
     }
 
@@ -3864,7 +3864,7 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Clients cannot claim requests' });
     }
 
-    // A request Closed/Rejected by the Client cannot be claimed by staff.
+    
     if ((existing.rows[0].status_id === '6' || existing.rows[0].status_id === '8') &&
         await closedByClient(requestId)) {
       return res.status(403).json({ error: 'This request was closed by the client and is read-only.' });
@@ -3949,7 +3949,7 @@ app.delete('/api/requests/:id', authMiddleware, async (req, res) => {
     await pool.query('DELETE FROM feedback WHERE request_id = $1', [req.params.id]);
     await pool.query('DELETE FROM requests WHERE id = $1', [req.params.id]);
     await logRequestActivity('deleted', { id: req.params.id }, req.user, req);
-    // Real-time notification
+    
     notifyAdmins(`Request #${req.params.id} deleted`, { type: 'request_deleted', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     res.json({ message: 'Request deleted' });
   } catch (err) {
@@ -3958,18 +3958,18 @@ app.delete('/api/requests/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// Comments Routes
+
 app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
   try {
     const existing = await pool.query('SELECT id, client_id, assigned_to, status_id FROM requests WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
 
-    // Support and developer can only comment on their own assigned requests
+    
     if ((req.user.role === 'support' || req.user.role === 'developer') && existing.rows[0].assigned_to !== req.user.id) {
       return res.status(403).json({ error: 'Access denied - you can only modify requests assigned to you' });
     }
 
-    // Check group access for non-admin, non-client, non-assignee users
+    
     const isEscalated = existing.rows[0].status_id === '9';
     if (req.user.role !== 'admin' && req.user.role !== 'client' && existing.rows[0].client_id !== req.user.id && existing.rows[0].assigned_to !== req.user.id) {
       if (!(req.user.role === 'support' && isEscalated)) {
@@ -3998,15 +3998,15 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
     );
     await logRequestActivity('comment_added', { id: req.params.id }, req.user, req, { commentId: id });
 
-    // Real-time notification
+    
     const clientId = existing.rows[0].client_id;
     const assignedTo = existing.rows[0].assigned_to;
     notifyAdmins(`New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
-    // Notify the client (if comment is not from the client)
+    
     if (clientId && clientId !== req.user.id) {
       notifyUser(clientId, `New comment on your request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     }
-    // Notify the assigned developer/support (if comment is not from them)
+    
     if (assignedTo && assignedTo !== req.user.id) {
       notifyUser(assignedTo, `New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     }
@@ -4018,7 +4018,7 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
   }
 });
 
-// Feedback Routes
+
 app.get('/api/requests/:id/feedback', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
@@ -4045,7 +4045,7 @@ app.post('/api/requests/:id/feedback', authMiddleware, async (req, res) => {
     await logRequestActivity('feedback_submitted', { id: req.params.id }, req.user, req, { rating, comment });
     const reqResult = await pool.query('SELECT subject FROM requests WHERE id = $1', [req.params.id]);
     notifyAdmins(`New feedback on Request #${req.params.id} by ${req.user.name}`, { type: 'feedback', requestId: req.params.id, userId: req.user.id, userName: req.user.name, subject: reqResult.rows[0]?.subject });
-    // Automatic email to ALL admin users (fire-and-forget; never blocks feedback).
+    
     emailAdminOnFeedback(req.params.id, rating, comment, req);
     res.status(201).json({ rating, comment });
   } catch (err) {
@@ -4083,7 +4083,7 @@ app.delete('/api/feedback/:id', authMiddleware, roleMiddleware('admin'), async (
   }
 });
 
-// Upload Route
+
 app.post('/api/upload', authMiddleware, async (req, res, next) => {
   try {
     const sizeResult = await pool.query("SELECT value FROM system_settings WHERE key = 'maxUploadSize'");
@@ -4104,16 +4104,16 @@ app.post('/api/upload', authMiddleware, async (req, res, next) => {
   }
 });
 
-// Dashboard Stats
-// Render an ISO 'YYYY-MM-DD' day as a short axis label without timezone drift
+
+
 const formatDayLabel = (isoDate) => {
   const [y, m, d] = String(isoDate).split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-// Builds the WHERE fragment that limits requests to what the signed-in user is
-// allowed to see. Kept at module scope so the stats endpoint and the trends
-// endpoint can never drift apart on permissions.
+
+
+
 const buildRequestScopeWhere = (req, startIndex = 1) => {
   let clause = 'WHERE 1=1';
   const clauseParams = [];
@@ -4140,9 +4140,9 @@ const buildRequestScopeWhere = (req, startIndex = 1) => {
   return { clause, params: clauseParams };
 };
 
-// Real week-over-week counts taken from stored request history: the current
-// 7-day window versus the 7 days before it. A previous-week baseline of zero
-// yields 0% rather than an invented jump.
+
+
+
 const getWeeklyStatusCounts = async (scope, now = new Date()) => {
   const currentStart = new Date(now);
   currentStart.setDate(currentStart.getDate() - 7);
@@ -4176,8 +4176,8 @@ const weeklyChangePercent = (currentCount, previousCount) => {
   return Number((((Number(currentCount) || 0) - previousCount) / previousCount * 100).toFixed(1));
 };
 
-// Lightweight per-status week-over-week series for the role dashboards that
-// build their own stat cards from the requests list.
+
+
 app.get('/api/dashboard/trends', authMiddleware, async (req, res) => {
   try {
     const scope = buildRequestScopeWhere(req, 1);
@@ -4287,11 +4287,11 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     );
     const byCompany = companyCounts.rows.map(r => ({ ...r, count: parseInt(r.count) }));
 
-    // Daily created/resolved/closed series across the requested window.
-    // `?days=all` stretches the window back to the oldest request so the whole
-    // history is charted; a numeric value plots that many days ending today.
-    // Either way a single statement fills every day in the range, so days without
-    // activity render as 0 instead of collapsing the x-axis spacing.
+    
+    
+    
+    
+    
     const daysParam = params.length + 1;
     const requestedDays = String(req.query.days ?? '30').toLowerCase();
     const todayResult = await pool.query('SELECT CURRENT_DATE::text AS today');
@@ -4400,7 +4400,7 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
   }
 });
 
-// Performance by Company and Developer
+
 app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
@@ -4483,8 +4483,8 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
       }
       devMap[row.developer_name][row.day] = { created: parseInt(row.created), resolved: parseInt(row.resolved) };
     });
-    // Ensure every developer/support user in the users table appears in the
-    // performance graph, even if they have no assigned requests in range.
+    
+    
     const allDevUsers = await pool.query(`SELECT name FROM users WHERE role IN ('developer', 'support') ORDER BY name`);
     allDevUsers.rows.forEach(row => {
       if (row.name && !devMap[row.name]) devMap[row.name] = {};
@@ -4529,37 +4529,37 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
   }
 });
 
-// Escalation Performance
-// Read-only aggregate of how escalated requests were handled. An "escalated
-// request" is any request that entered the 'Escalated' status at some point:
-// the transition is recorded in activity_log as a 'status_update' whose message
-// ends in "to Escalated" (a request can leave that status and be resolved, so the
-// current status alone is not enough to identify escalations). Requests that sit
-// in the 'Escalated' status without a matching log row (e.g. seeded/imported data)
-// are folded in as a fallback.
-// 'Resolved' and 'Closed' count as resolved; every other status is still pending.
-// There is no resolved_at column on requests, so average resolution time is
-// measured from the first escalation to the request's last update, which is when
-// a status change to Resolved/Closed writes updated_at.
-// The same response also carries two additive breakdowns over read-only data:
-//  - `team`: the same escalations grouped by the Support/Escalation member the
-//    request is assigned to, using the identical escalations CTE, 'Resolved' /
-//    'Closed' rule and range filter as the aggregate, so member rows sum exactly
-//    to the aggregate totals.
-//  - `developers`: per-developer assigned/resolved work and resolution time,
-//    restricted to the developer and support roles.
-// A missing or non-numeric `days` means "all time".
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res) => {
   try {
     const parsedDays = parseInt(req.query.days, 10);
     const days = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : null;
 
-    // Per-developer workload, taken from the same request/assignee/status joins
-    // the rest of the performance endpoint uses. Restricted to the developer
-    // role only, so Developer Performance stays separate from the Escalation
-    // (Support) Team performance computed below: a resolved request counts
-    // toward the performance of the team its assignee belongs to. Grouping by
-    // user id (not just name) keeps same-named users from being merged.
+    
+    
+    
+    
+    
+    
     const devResult = await pool.query(`
       SELECT
         u.id AS id,
@@ -4638,11 +4638,11 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
       ? null
       : Math.round(parseFloat(row.avg_resolution_hours) * 100) / 100;
 
-    // Per-team-member breakdown of escalations handled by the Escalation
-    // (Support) team only: same escalations CTE / range filter as the aggregate
-    // above, but restricted to assignees with users.role = 'support', using
-    // their existing users.name. Developers, other roles and unassigned
-    // requests are excluded here by design.
+    
+    
+    
+    
+    
     const teamResult = await pool.query(`
       WITH escalations AS (
         SELECT al.request_id, MIN(al.created_at) AS escalated_at
@@ -4723,7 +4723,7 @@ app.get('/api/dashboard/escalation-performance', authMiddleware, async (req, res
   }
 });
 
-// Activity Log
+
 app.get('/api/activity', authMiddleware, async (req, res) => {
   try {
     const { type, entityType, severity, userId, requestId, search, startDate, endDate, page = 1, limit = 50 } = req.query;
@@ -4841,7 +4841,7 @@ app.get('/api/activity', authMiddleware, async (req, res) => {
   }
 });
 
-// Activity log for a specific request
+
 app.delete('/api/requests/:id/activity', authMiddleware, async (req, res) => {
   try {
     if (req.user.role === 'client') {
@@ -4909,7 +4909,7 @@ app.get('/api/requests/:id/activity', authMiddleware, async (req, res) => {
   }
 });
 
-// Reports
+
 app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
   try {
     const totalResult = await pool.query('SELECT COUNT(*) FROM requests');
@@ -4985,7 +4985,7 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
   }
 });
 
-// Roles
+
 app.get('/api/roles', authMiddleware, roleMiddleware('admin'), (req, res) => {
   res.json([
     { id: 'admin', name: 'Administrator', permissions: ['all'] },
@@ -4995,7 +4995,7 @@ app.get('/api/roles', authMiddleware, roleMiddleware('admin'), (req, res) => {
   ]);
 });
 
-// Groups Routes
+
 app.get('/api/groups', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(`
@@ -5062,7 +5062,7 @@ app.delete('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (re
   }
 });
 
-// Group Members Routes
+
 app.get('/api/groups/:id/members', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(`
@@ -5087,13 +5087,13 @@ app.post('/api/groups/:id/members', authMiddleware, roleMiddleware('admin'), asy
       [user_id, req.params.id]
     );
     await logGroupActivity('member_added', { id: req.params.id }, req.user, req, { memberId: user_id });
-    // Associate the user's previously submitted requests with this group so
-    // they become visible to the group's developers/escalation members
+    
+    
     const syncedIds = await addUserRequestGroup(user_id, req.params.id);
     if (syncedIds.length > 0) {
       notifyGroupMembers(req.params.id, `${syncedIds.length} new request${syncedIds.length > 1 ? 's' : ''} available for your group`);
-      // Email the group's developers about the newly visible requests
-      // (fire-and-forget; never blocks the member add).
+      
+      
       emailGroupDevelopersForSyncedRequests(syncedIds, req.params.id, req);
     }
     res.status(201).json({ message: 'Member added' });
@@ -5109,7 +5109,7 @@ app.delete('/api/groups/:id/members/:userId', authMiddleware, roleMiddleware('ad
       [req.params.userId, req.params.id]
     );
     await logGroupActivity('member_removed', { id: req.params.id }, req.user, req, { memberId: req.params.userId });
-    // Remove the group association from the user's requests unless explicitly assigned
+    
     await removeUserRequestGroup(req.params.userId, req.params.id);
     res.json({ message: 'Member removed' });
   } catch (err) {
@@ -5117,7 +5117,7 @@ app.delete('/api/groups/:id/members/:userId', authMiddleware, roleMiddleware('ad
   }
 });
 
-// Companies Routes
+
 app.get('/api/companies', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM companies ORDER BY name');
@@ -5172,7 +5172,7 @@ app.delete('/api/companies/:id', authMiddleware, roleMiddleware('admin'), async 
   }
 });
 
-// Database Tables
+
 app.get('/api/db-tables', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const tablesResult = await pool.query(`
@@ -5208,7 +5208,7 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
   }
 });
 
-// System Settings - create table if not exists
+
 (async () => {
   try {
     await pool.query(`
@@ -5398,7 +5398,7 @@ app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (
 
 
 
-// Logo upload
+
 app.post('/api/settings/logo', authMiddleware, roleMiddleware('admin'), upload.single('logo'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -5427,12 +5427,12 @@ app.delete('/api/settings/logo', authMiddleware, roleMiddleware('admin'), async 
   }
 });
 
-// ============================================================================
-// Announcements, Knowledge Base, Tags, Templates, SLA, Watchers, Attachments,
-// Notifications, Sessions, and Login Audit CRUD endpoints
-// ============================================================================
 
-// --- Announcements ---
+
+
+
+
+
 app.get('/api/announcements', authMiddleware, async (req, res) => {
   try {
     const isAdmin = req.user.role === 'admin';
@@ -5498,7 +5498,7 @@ app.delete('/api/announcements/:id', authMiddleware, roleMiddleware('admin'), as
   }
 });
 
-// --- Knowledge Base ---
+
 app.get('/api/knowledge-base', authMiddleware, async (req, res) => {
   try {
     const { search, categoryId } = req.query;
@@ -5589,7 +5589,7 @@ app.delete('/api/knowledge-base/:id', authMiddleware, roleMiddleware('admin'), a
   }
 });
 
-// --- Tags ---
+
 app.get('/api/tags', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM tags ORDER BY name');
@@ -5648,7 +5648,7 @@ app.delete('/api/tags/:id', authMiddleware, roleMiddleware('admin'), async (req,
   }
 });
 
-// --- Templates ---
+
 app.get('/api/templates', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
@@ -5720,7 +5720,7 @@ app.delete('/api/templates/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// --- SLA Policies ---
+
 app.get('/api/sla/policies', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
@@ -5786,7 +5786,7 @@ app.delete('/api/sla/policies/:id', authMiddleware, roleMiddleware('admin'), asy
   }
 });
 
-// --- SLA Tracking ---
+
 app.get('/api/sla/tracking', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(
@@ -5863,7 +5863,7 @@ app.delete('/api/sla/tracking/:id', authMiddleware, roleMiddleware('admin', 'sup
   }
 });
 
-// --- Request Watchers ---
+
 app.get('/api/requests/:id/watchers', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
@@ -5912,7 +5912,7 @@ app.delete('/api/requests/:id/watchers/:userId', authMiddleware, async (req, res
   }
 });
 
-// --- Attachments ---
+
 app.get('/api/attachments', authMiddleware, roleMiddleware('admin', 'support', 'developer', 'client'), async (req, res) => {
   try {
     const { request_id } = req.query;
@@ -5962,7 +5962,7 @@ app.delete('/api/attachments/:id', authMiddleware, roleMiddleware('admin'), asyn
   }
 });
 
-// --- Notifications (persisted, per-user) ---
+
 app.get('/api/notifications', authMiddleware, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
@@ -6037,7 +6037,7 @@ app.delete('/api/notifications/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// --- Comment Read Tracking (persisted, per-user) ---
+
 app.get('/api/comments/read-status', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
@@ -6067,7 +6067,7 @@ app.put('/api/comments/read', authMiddleware, async (req, res) => {
   }
 });
 
-// --- Sessions ---
+
 app.get('/api/sessions', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const result = await pool.query(
@@ -6098,7 +6098,7 @@ app.delete('/api/sessions/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// --- Login Audit ---
+
 app.get('/api/login-audit', authMiddleware, roleMiddleware('admin', 'support'), async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
@@ -6131,7 +6131,7 @@ app.delete('/api/login-audit/:id', authMiddleware, roleMiddleware('admin'), asyn
   }
 });
 
-// Error handler for multer/file upload errors
+
 app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON in request body' });
   if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'File too large. Max 10MB.' });
@@ -6156,17 +6156,17 @@ const server = app.listen(PORT, () => {
   if (!mailer.isSmtpConfigured()) {
     console.warn('[PasswordResetOTP] WARNING: SMTP is not configured (see server/.env.example). OTP emails will use the in-app fallback until SMTP_HOST/SMTP_USER/SMTP_PASS are set.');
   }
-  // First auto-escalation sweep shortly after startup, then every minute.
+  
   setTimeout(() => runAutoEscalation().catch(err => console.error('[AutoEscalation] sweep failed:', err.message)), 15000);
   setInterval(() => runAutoEscalation().catch(err => console.error('[AutoEscalation] sweep failed:', err.message)), 60 * 1000);
 });
 
-// ---- Auto Escalation ----
-// When enabled, requests assigned to a Developer that are not resolved within
-// the configured time are moved to Escalated (same end state as manual
-// escalation: status change only, assignment preserved for the Escalation
-// Team workflow). DB-driven (assignment timestamp from the activity log, with
-// updated_at fallback) so the timer survives refreshes, logins and restarts.
+
+
+
+
+
+
 async function runAutoEscalation() {
   const settingsRows = await pool.query(
     "SELECT key, value FROM system_settings WHERE key IN ('escalationEnabled', 'autoEscalationMinutes')"
@@ -6203,8 +6203,8 @@ async function runAutoEscalation() {
 
   for (const req of candidates.rows) {
     try {
-      // Individual assignment: exact DB timestamp of the latest assignment.
-      // Group assignment: exact DB timestamp of the latest group assignment.
+      
+      
       const isGroup = !req.assigned_to && !!req.assigned_group;
       const assignedRows = await pool.query(
         `SELECT created_at FROM activity_log WHERE request_id = $1 AND type = $2
@@ -6216,11 +6216,11 @@ async function runAutoEscalation() {
         : new Date(req.updated_at).getTime();
       if (!Number.isFinite(assignedAt) || now - assignedAt < minutes * 60 * 1000) continue;
 
-      // Re-check status inside the loop so a concurrent resolve wins.
+      
       const fresh = await pool.query('SELECT status_id, assigned_to, assigned_group FROM requests WHERE id = $1', [req.id]);
       if (fresh.rows.length === 0 || fresh.rows[0].status_id !== req.status_id) continue;
       if (terminalIds.includes(fresh.rows[0].status_id)) continue;
-      // Skip if the assignment changed since the candidate was selected.
+      
       if ((fresh.rows[0].assigned_to || null) !== (req.assigned_to || null)) continue;
       if ((fresh.rows[0].assigned_group || null) !== (req.assigned_group || null)) continue;
 
@@ -6245,7 +6245,7 @@ async function runAutoEscalation() {
         notifyUser(req.assigned_to, `Request #${req.id} was automatically escalated because it was not completed within ${minutes} minutes`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
       }
       if (isGroup && req.assigned_group) {
-        // Notify the developers of the assigned group (existing group system).
+        
         const members = await pool.query(
           `SELECT u.id FROM users u JOIN user_groups ug ON ug.user_id = u.id
            WHERE ug.group_id = $1 AND u.role = 'developer'`,

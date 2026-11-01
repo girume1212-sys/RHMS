@@ -1,7 +1,7 @@
 import React from 'react';
 
 const ICONS = {
-  // --- Dashboard stat cards ---
+  
   total: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="12 2 2 7 12 12 22 7 12 2" />
@@ -63,7 +63,7 @@ const ICONS = {
       <path d="m9 9 6 6" />
     </svg>
   ),
-  // --- Sidebar navigation ---
+  
   home: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -149,7 +149,7 @@ const ICONS = {
       <circle cx="12" cy="7" r="4" />
     </svg>
   ),
-  // --- Top bar ---
+  
   menu: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="4" x2="20" y1="6" y2="6" />
@@ -222,7 +222,7 @@ const ICONS = {
       <line x1="14" x2="14" y1="11" y2="17" />
     </svg>
   ),
-  // --- Misc / form / entity icons ---
+  
   plus: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M5 12h14" />

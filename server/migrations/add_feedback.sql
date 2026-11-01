@@ -1,4 +1,4 @@
--- Migration: Add feedback table
+
 CREATE TABLE IF NOT EXISTS feedback (
   id VARCHAR(50) PRIMARY KEY,
   request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS feedback (
 CREATE INDEX IF NOT EXISTS idx_feedback_request_id ON feedback(request_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_user_id ON feedback(user_id);
 
--- Add some sample feedback for resolved requests (only if referenced users exist)
+
 INSERT INTO feedback (id, request_id, user_id, rating, comment, created_at)
 SELECT 'FB-001', 'REQ-2024-00122', '5', 5, 'Great work! The payroll issue was resolved quickly.', '2024-05-18T10:00:00.000Z'
 WHERE EXISTS (SELECT 1 FROM users WHERE id = '5')

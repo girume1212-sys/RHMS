@@ -1,22 +1,22 @@
--- ============================================================================
--- RHMS Schema Completion Migration
--- Adds the missing tables, columns, indexes, foreign keys and constraints that
--- make the Support Request & Issue Tracking System complete, scalable and
--- production-ready. Idempotent - safe to run multiple times.
--- ============================================================================
+
+
+
+
+
+
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- ---------------------------------------------------------------------------
--- 1) MISSING COLUMNS (from prior migrations that were partially applied)
--- ---------------------------------------------------------------------------
 
--- Group leaders: supports the group-assignment workflow (group_leader flag).
+
+
+
+
 ALTER TABLE user_groups ADD COLUMN IF NOT EXISTS group_leader BOOLEAN DEFAULT false;
 
--- ---------------------------------------------------------------------------
--- 2) MISSING INDEXES ON EXISTING TABLES
--- ---------------------------------------------------------------------------
+
+
+
 
 CREATE INDEX IF NOT EXISTS idx_requests_assigned_group ON requests(assigned_group);
 CREATE INDEX IF NOT EXISTS idx_requests_created_at ON requests(created_at DESC);
@@ -37,11 +37,11 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_user_groups_group_id ON user_groups(group_id);
 CREATE INDEX IF NOT EXISTS idx_request_tags_tag_id ON request_tags(tag_id);
 
--- ---------------------------------------------------------------------------
--- 3) NEW TABLES
--- ---------------------------------------------------------------------------
 
--- Per-user persisted notifications (bell icon, unread badge, mark-all-read).
+
+
+
+
 CREATE TABLE IF NOT EXISTS notifications (
   id         VARCHAR(50) PRIMARY KEY,
   user_id    VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -59,7 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id,
 CREATE INDEX IF NOT EXISTS idx_notifications_request_id ON notifications(request_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
 
--- Auth sessions: supports remember-me, refresh tokens, logout-all, revocation.
+
 CREATE TABLE IF NOT EXISTS sessions (
   id                 VARCHAR(50) PRIMARY KEY,
   user_id            VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -77,7 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 
--- Security audit trail for authentication and privileged actions.
+
 CREATE TABLE IF NOT EXISTS login_audit (
   id         VARCHAR(50) PRIMARY KEY,
   user_id    VARCHAR(50) REFERENCES users(id) ON DELETE SET NULL,
@@ -94,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_login_audit_email ON login_audit(email);
 CREATE INDEX IF NOT EXISTS idx_login_audit_created ON login_audit(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_login_audit_action ON login_audit(action);
 
--- Per-request SLA state, complementing the sla_policies table.
+
 CREATE TABLE IF NOT EXISTS sla_tracking (
   id                  VARCHAR(50) PRIMARY KEY,
   request_id          VARCHAR(50) NOT NULL UNIQUE REFERENCES requests(id) ON DELETE CASCADE,
@@ -113,7 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_sla_tracking_policy ON sla_tracking(sla_policy_id
 CREATE INDEX IF NOT EXISTS idx_sla_tracking_due ON sla_tracking(response_due_at, resolution_due_at);
 CREATE INDEX IF NOT EXISTS idx_sla_tracking_breached ON sla_tracking(response_breached, resolution_breached);
 
--- Request watchers / followers: users subscribed to updates on a request.
+
 CREATE TABLE IF NOT EXISTS request_watchers (
   request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
   user_id    VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
@@ -123,11 +123,11 @@ CREATE TABLE IF NOT EXISTS request_watchers (
 
 CREATE INDEX IF NOT EXISTS idx_request_watchers_user ON request_watchers(user_id);
 
--- ---------------------------------------------------------------------------
--- 4) REQUEST ACTIVITY INTEGRITY
---    activity_log.request_id is nullable today; backfill-safe FK with
---    ON DELETE SET NULL keeps history while requests are removed.
--- ---------------------------------------------------------------------------
+
+
+
+
+
 DO $$
 BEGIN
   IF NOT EXISTS (

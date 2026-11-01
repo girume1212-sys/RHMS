@@ -126,7 +126,7 @@ export default function Users() {
   });
 
   const totalPages = Math.ceil(filteredUsers.length / perPage);
-  // Keep current page valid when page size / filters change.
+  
   useEffect(() => {
     if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
     else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);
@@ -215,7 +215,7 @@ export default function Users() {
     try {
       await api.patch(`/api/users/${id}/approve`, { approved });
       loadUsers();
-      // Keep the open User Profile Details in sync immediately (same DB-backed flag).
+      
       setViewingUser((prev) => (prev && prev.id === id ? { ...prev, approved } : prev));
       addToast(approved ? t('common.userUnblocked', { name }) : t('common.userBlocked', { name }));
       showStatusToast(approved ? t('common.userUnblockedShort', { name }) : t('common.userBlockedShort', { name }), 'status');

@@ -92,7 +92,7 @@ export default function Settings() {
   };
 
   const [form, setForm] = useState({ ...initialForm });
-  // Display unit for the auto-escalation duration (stored in settings as minutes).
+  
   const [escUnit, setEscUnit] = useState('minutes');
 
   const addToast = useCallback((message, type = 'success') => {
@@ -349,7 +349,7 @@ export default function Settings() {
       </div>
 
       <div className="settings-page">
-        {/* General */}
+        {}
         <div className="settings-card">
           <h3>{t('settings.general')}</h3>
           <div className="settings-field">
@@ -460,7 +460,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Request Settings */}
+        {}
         <div className="settings-card">
           <h3>{t('settings.requestSettings')}</h3>
           <div className="settings-field">
@@ -516,7 +516,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Create Request Feature Toggle */}
+        {}
         <div className="settings-card">
           <h3>Create Request</h3>
           <div className="toggle-row-settings">
@@ -531,7 +531,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Status Management */}
+        {}
         <div className="settings-card">
           <div
             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', padding: '4px 0' }}
@@ -656,7 +656,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Notification Settings */}
+        {}
         <div className="settings-card">
           <h3>{t('settings.notifications')}</h3>
           <div className="toggle-row-settings">
@@ -731,7 +731,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Auto Escalation */}
+        {}
         <div className="settings-card">
           <h3>{t('settings.autoEscalation')}</h3>
           <div className="toggle-row-settings">
@@ -765,7 +765,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Working Hours */}
+        {}
         <div className="settings-card">
           <h3>{t('settings.workingHours')}</h3>
           <div className="settings-field">
@@ -797,7 +797,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Security Settings */}
+        {}
         <div className="settings-card">
           <h3>{t('settings.security')}</h3>
           <div className="settings-field">
@@ -846,7 +846,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Appearance */}
+        {}
         <div className="settings-card">
           <h3>{t('settings.appearance')}</h3>
           <div className="settings-field">
@@ -870,7 +870,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Assignment Settings */}
+        {}
         <div className="settings-card">
           <h3>{t('settings.assignmentSettings')}</h3>
           <div className="settings-field">
@@ -892,7 +892,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Backup & Maintenance */}
+        {}
         <div className="settings-card">
           <h3>{t('settings.backupMaintenance')}</h3>
           <div className="toggle-row-settings">

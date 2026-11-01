@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 
-// Renders nothing. Watches every `.table-footer` on the page, finds the
-// horizontal scroll container its table lives in, and toggles
-// `data-hscroll="true"` on the footer while that container actually
-// overflows. CSS shows a small ↔ indicator pill in the footer only then,
-// so users can discover horizontal scrolling without anything covering
-// table content. Visual-only: no data, pagination, sorting, filtering,
-// API, or permission behavior is touched.
+
+
+
+
+
+
+
 
 function isHScroller(el) {
   if (!el || el.nodeType !== 1) return false;
@@ -25,8 +25,8 @@ function findScrollContainer(footer) {
   });
   for (const el of cards) {
     if (!isHScroller(el)) continue;
-    // Viewport-style nesting (e.g. DatabaseTables max-height div scrolls
-    // instead of the card itself): prefer the inner scroller that overflows.
+    
+    
     let inner = null;
     el.querySelectorAll('div').forEach((d) => {
       if (!inner && isHScroller(d) && d.scrollWidth > d.clientWidth + 4) inner = d;
@@ -34,10 +34,10 @@ function findScrollContainer(footer) {
     if (inner) return inner;
     return el;
   }
-  // Direct parent is itself the scroller (footer nested inside the
-  // scroll wrapper, e.g. Settings status table).
+  
+  
   if (isHScroller(parent)) return parent;
-  // Fallback: previous siblings with inline-style scroll wrappers.
+  
   let sib = footer.previousElementSibling;
   while (sib) {
     if (isHScroller(sib)) return sib;

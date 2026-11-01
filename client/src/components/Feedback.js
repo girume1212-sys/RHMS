@@ -124,7 +124,7 @@ export default function Feedback() {
   });
 
   const totalPages = Math.ceil(filtered.length / perPage);
-  // Keep current page valid when page size / filters change.
+  
   useEffect(() => {
     if (typeof totalPages === 'number' && totalPages > 0 && page > totalPages) setPage(totalPages);
     else if (typeof totalPages === 'number' && totalPages === 0 && page !== 1) setPage(1);
@@ -220,7 +220,7 @@ export default function Feedback() {
               ];
               const counts = cats.map(c => ({ ...c, count: periodFeedback.filter(f => satisfactionFor(f.rating).key === c.key).length }));
               const total = periodFeedback.length || 1;
-              // Build time-series buckets for the chart (7 days / 7 weeks / 12 months).
+              
               const emptyBucket = (label) => ({ label, ...Object.fromEntries(cats.map(c => [c.key, 0])) });
               let buckets = [];
               if (period === 'daily') {
@@ -245,7 +245,7 @@ export default function Feedback() {
                   const monday = new Date(d); monday.setDate(d.getDate() + diff); monday.setHours(0,0,0,0);
                   weeks.push(monday);
                 }
-                // dedupe by monday
+                
                 const seen = new Set();
                 const uniqueWeeks = weeks.filter(w => { const k = w.toISOString().slice(0,10); if (seen.has(k)) return false; seen.add(k); return true; });
                 const map = {};
