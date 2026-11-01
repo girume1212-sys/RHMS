@@ -5821,11 +5821,11 @@ body.dark-mode .user-dropdown {
 }
 
 
-.notification-bubble:nth-child(1) { top: 20px; right: 20px; }
-.notification-bubble:nth-child(2) { top: 90px; right: 20px; }
-.notification-bubble:nth-child(3) { top: 160px; right: 20px; }
-.notification-bubble:nth-child(4) { top: 230px; right: 20px; }
-.notification-bubble:nth-child(5) { top: 300px; right: 20px; }
+.notification-bubble:nth-child(1) { top: 72px; right: 20px; }
+.notification-bubble:nth-child(2) { top: 142px; right: 20px; }
+.notification-bubble:nth-child(3) { top: 212px; right: 20px; }
+.notification-bubble:nth-child(4) { top: 282px; right: 20px; }
+.notification-bubble:nth-child(5) { top: 352px; right: 20px; }
 
 .bubble-pill {
   display: flex;

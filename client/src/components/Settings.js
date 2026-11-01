@@ -53,6 +53,8 @@ export default function Settings() {
     address: '',
     timeZone: 'Africa/Addis_Ababa',
     language: 'en',
+    defaultDashboard: 'home',
+    dateTimeFormat: 'MM/DD/YYYY HH:mm',
     defaultStatus: '',
     defaultPriority: '',
     autoRequestId: true,
@@ -175,6 +177,8 @@ export default function Settings() {
         address: form.address,
         timeZone: form.timeZone,
         language: form.language,
+        defaultDashboard: form.defaultDashboard,
+        dateTimeFormat: form.dateTimeFormat,
         defaultStatus: String(form.defaultStatus || ''),
         defaultPriority: String(form.defaultPriority || ''),
         autoRequestId: String(form.autoRequestId),
@@ -396,7 +400,23 @@ export default function Settings() {
                 <option key={l.code} value={l.code}>{l.name}</option>
               ))}
             </select>
+          </div>          <div className="settings-field">
+            <label>Default dashboard landing page</label>
+            <select value={form.defaultDashboard} onChange={e => handleChange('defaultDashboard', e.target.value)}>
+              <option value="home">Home</option>
+              <option value="requests">Requests</option>
+              <option value="dashboard">Dashboard</option>
+            </select>
           </div>
+          <div className="settings-field">
+            <label>Date and time format</label>
+            <select value={form.dateTimeFormat} onChange={e => handleChange('dateTimeFormat', e.target.value)}>
+              <option value="MM/DD/YYYY HH:mm">MM/DD/YYYY HH:mm</option>
+              <option value="DD/MM/YYYY HH:mm">DD/MM/YYYY HH:mm</option>
+              <option value="YYYY-MM-DD HH:mm">YYYY-MM-DD HH:mm</option>
+            </select>
+          </div>
+
           <div className="settings-field">
             <label>{t('settings.systemLogo')}</label>
             <div className="logo-upload-area">

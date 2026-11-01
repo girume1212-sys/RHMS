@@ -53,7 +53,7 @@ export default function Signup() {
           } catch (err) {
             const msg = err.message || '';
             if (msg.includes('already exists')) {
-              setError('An RHMS account already exists for this Google account. Please sign in to your existing account.');
+              setError('An account with this email address already exists. Please sign in to your account.');
             } else if (msg.includes('blocked')) setError('Your account is blocked. Please contact the administrator.');
             else setError(msg || t('common.googleSignInFailed'));
           } finally {
@@ -166,8 +166,9 @@ export default function Signup() {
     } catch (err) {
       const msg = err.message || '';
       if (msg.toLowerCase().includes('already exists')) {
-        
-        navigate('/login', { state: { email } });
+        setError('An account with this email address already exists. Please sign in to your account.');
+        setPassword('');
+        setConfirmPassword('');
         return;
       }
       setError(msg);
@@ -253,7 +254,8 @@ export default function Signup() {
       navigate('/login');
     } catch (err) {
       const msg = err.message || '';
-      if (msg.includes('expired')) setError(t('common.otpExpired'));
+      if (msg.toLowerCase().includes('already exists')) setError('An account with this email address already exists. Please sign in to your account.');
+      else if (msg.includes('expired')) setError(t('common.otpExpired'));
       else if (msg.includes('Too many incorrect attempts')) setError(t('common.otpLocked'));
       else if (msg.includes('verification failed')) setError(t('common.invalidOtp'));
       else setError(msg);

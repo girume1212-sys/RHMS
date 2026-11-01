@@ -35,6 +35,7 @@ export default function ClientLayout() {
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
   const eventSourceRef = useRef(null);
   const dismissedIds = useRef(new Set());
+  const processedIds = useRef(new Set());
   const audioUnlocked = useRef(false);
 
   
@@ -179,15 +180,22 @@ export default function ClientLayout() {
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
+
           if (data.type === 'init') {
             return;
           }
 
           if (data.message === 'Connected') return;
 
+          const notificationId = data.data?.notificationId || data.id || null;
+          const bubbleId = notificationId || `${Date.now()}-${Math.random()}`;
+
+          if (processedIds.current.has(bubbleId)) return;
+          processedIds.current.add(bubbleId);
+
           const notification = {
-            id: Date.now(),
+            id: bubbleId,
+            notificationId,
             type: data.data?.type || 'default',
             message: data.message,
             requestId: data.data?.requestId,
@@ -201,18 +209,14 @@ export default function ClientLayout() {
 
           const isOwnAction = notification.userId && String(notification.userId) === String(user.id);
 
-          
-          
-          if (!isOwnAction) {
-            refreshNotifications();
-          }
-          
-          
+          if (isOwnAction) return;
+
+          refreshNotifications();
           refreshCritRequests();
 
-          if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
+          if (!dismissedIds.current.has(notification.id)) {
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
-            setTimeout(() => removeBubble(notification.id), 2000);
+            setTimeout(() => removeBubble(notification.id), 5000);
           }
 
           if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
@@ -383,11 +387,12 @@ export default function ClientLayout() {
       </aside>
 
       {}
-      {bubbleNotifications.map((n) => (
+      {bubbleNotifications.map((n, i) => (
         <div
           key={n.id}
           className={`notification-bubble bubble-type-${n.type || getNotificationType(n.message)} bubble-incoming`}
-          onClick={() => { if (n.requestId) navigate(`/client/requests/${n.requestId}`); removeBubble(n.id); }}
+          style={{ top: `${72 + i * 70}px`, right: '20px' }}
+          onClick={() => { if (n.notificationId) markNotificationRead(n.notificationId); if (n.requestId) navigate(`/client/requests/${n.requestId}`); removeBubble(n.id); }}
         >
           <div className="bubble-pill">
             <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>

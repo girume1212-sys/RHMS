@@ -33,6 +33,7 @@ export default function Layout() {
   const [allNotifications, setAllNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const dismissedIds = useRef(new Set());
+  const processedIds = useRef(new Set());
   const eventSourceRef = useRef(null);
   const audioUnlocked = useRef(false);
   const notificationAudio = useRef(null);
@@ -234,15 +235,23 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
+
           if (data.type === 'init') {
             return;
           }
 
           if (data.message === 'Connected') return;
 
+          const notificationId = data.data?.notificationId || data.id || null;
+          const bubbleId = notificationId || `${Date.now()}-${Math.random()}`;
+
+          // Dedup: skip already processed events
+          if (processedIds.current.has(bubbleId)) return;
+          processedIds.current.add(bubbleId);
+
           const notification = {
-            id: Date.now(),
+            id: bubbleId,
+            notificationId,
             type: data.data?.type || 'default',
             message: data.message,
             requestId: data.data?.requestId,
@@ -256,13 +265,14 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
 
           const isOwnAction = notification.userId && String(notification.userId) === String(user.id);
 
-          if (!isOwnAction) {
-            refreshNotifications();
-          }
+          // Never show toast or refresh for own actions
+          if (isOwnAction) return;
 
-          if (!dismissedIds.current.has(notification.id) && notification.userId !== user.id) {
+          refreshNotifications();
+
+          if (!dismissedIds.current.has(notification.id)) {
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
-            setTimeout(() => removeBubble(notification.id), 2000);
+            setTimeout(() => removeBubble(notification.id), 5000);
           }
 
           if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
@@ -420,7 +430,8 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
         <div
           key={n.id}
           className={`notification-bubble bubble-type-${n.type || getNotificationType(n.message)} bubble-incoming`}
-          onClick={() => { if (n.requestId) navigate(`/requests/${n.requestId}`); removeBubble(n.id); }}
+          style={{ top: `${72 + i * 70}px`, right: '20px' }}
+          onClick={() => { if (n.notificationId) markNotificationRead(n.notificationId); if (n.requestId) navigate(`/requests/${n.requestId}`); removeBubble(n.id); }}
         >
           <div className="bubble-pill">
             <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>

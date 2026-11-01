@@ -35,6 +35,18 @@ const PERF_TONES = {
 };
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#F97316', '#10B981', '#6B7280', '#EF4444'];
+const STATUS_COLORS = {
+  closed: '#6B7280',
+  escalated: '#EF4444',
+  resolved: '#10B981',
+  'in progress': '#F97316',
+  new: '#3B82F6',
+  assigned: '#8B5CF6',
+  unassigned: '#D1D5DB',
+  'waiting for client': '#FACC15',
+  rejected: '#991B1B'
+};
+const statusColor = (name) => STATUS_COLORS[String(name || '').trim().toLowerCase()] || '#6B7280';
 
 function StatCard({ icon, value, label, share, color, onClick, shareLabel }) {
   const shareNum = parseFloat(share) || 0;
@@ -597,10 +609,10 @@ export default function Dashboard() {
         const totalCards = statusCards.length + 1;
         const perRow = Math.ceil(totalCards / 2);
         const row1 = [<StatCard key="total" icon={<Icon name="total" />} value={stats.total} label={t('common.totalRequests')} share={shareOfTotalPercent(stats.total, stats.total)} shareLabel={shareLabel} color="#FACC15" onClick={() => navigate('/requests')} />, ...statusCards.slice(0, perRow - 1).map(s => (
-          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={t(`status.${s.name}`, { defaultValue: s.name })} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
+          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={t(`status.${s.name}`, { defaultValue: s.name })} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={statusColor(s.name)} onClick={() => navigate(`/requests?status=${s.id}`)} />
         ))];
         const row2 = statusCards.slice(perRow - 1).map(s => (
-          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={t(`status.${s.name}`, { defaultValue: s.name })} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={s.color || '#6B7280'} onClick={() => navigate(`/requests?status=${s.id}`)} />
+          <StatCard key={s.id} icon={<Icon name={getStatusIcon(s.name)} />} value={s.count} label={t(`status.${s.name}`, { defaultValue: s.name })} share={shareOfTotalPercent(s.count, stats.total)} shareLabel={shareLabel} color={statusColor(s.name)} onClick={() => navigate(`/requests?status=${s.id}`)} />
         ));
         return (
           <>
@@ -623,7 +635,7 @@ export default function Dashboard() {
                 <PieChart>
                   <Pie data={stats.byStatus.filter(s => s.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
                     {stats.byStatus.filter(s => s.count > 0).map((entry, i) => (
-                      <Cell key={entry.id || entry.name} fill={COLORS[i % COLORS.length]} />
+                      <Cell key={entry.id || entry.name} fill={statusColor(entry.name)} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(value, name) => [value, transSeeded(String(name), 'status', t)]} />
@@ -639,7 +651,7 @@ export default function Dashboard() {
             <div className="chart-legend">
               {stats.byStatus.filter(s => s.count > 0).map((s, i) => (
                 <div key={s.id} className="legend-item">
-                  <span className="legend-dot" style={{ background: COLORS[i % COLORS.length] }}></span>
+                  <span className="legend-dot" style={{ background: statusColor(s.name) }}></span>
                   <span className="legend-label">{transSeeded(s.name, 'status', t)}</span>
                   <span className="legend-value">{s.count} ({s.percentage}%)</span>
                 </div>

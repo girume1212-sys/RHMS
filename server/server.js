@@ -569,64 +569,77 @@ async function maintenanceMiddleware(req, res, next) {
 
 
 async function persistNotification(userId, message, data = {}) {
+  const id = uuidv4();
   try {
     await pool.query(
       `INSERT INTO notifications (id, user_id, type, title, message, request_id, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-      [uuidv4(), userId, data.type || 'info', data.title || null,
+      [id, userId, data.type || 'info', data.title || null,
         message || '', (data.requestId && String(data.requestId).match(/^REQ-\d+/)) ? data.requestId : null]
     );
+    return id;
   } catch (err) {
     console.error('Failed to persist notification:', err.message);
+    return null;
   }
 }
 
-
-function notifyAdmins(message, data = {}) {
-  const payload = JSON.stringify({ message, data, timestamp: new Date().toISOString() });
+async function notifyAdmins(message, data = {}) {
   const actorId = data.userId ? String(data.userId) : null;
-  for (const [userId, clients] of sseClients) {
-    if (actorId && String(userId) === actorId) continue;
-    for (const client of clients) {
-      try {
-        client.write(`data: ${payload}\n\n`);
-      } catch (e) {
-        clients.delete(client);
+  // Identify recipients on the backend and exclude the actor
+  let recipients = [];
+  try {
+    const r = await pool.query('SELECT id FROM users WHERE role = $1 OR role = $2 OR role = $3', ['admin', 'support', 'developer']);
+    recipients = r.rows.map(row => row.id).filter(id => !actorId || String(id) !== actorId);
+  } catch (e) { recipients = []; }
+
+  for (const userId of recipients) {
+    const nid = await persistNotification(userId, message, data);
+    const payload = JSON.stringify({ message, data: { ...data, notificationId: nid }, timestamp: new Date().toISOString() });
+    const clients = sseClients.get(userId);
+    if (clients) {
+      for (const client of clients) {
+        try {
+          client.write(`data: ${payload}\n\n`);
+        } catch (e) {
+          clients.delete(client);
+        }
       }
     }
   }
-  persistNotification('all-admins', message, data);
-  pool.query('SELECT id FROM users WHERE role = $1 OR role = $2 OR role = $3', ['admin', 'support', 'developer'])
-    .then(r => r.rows.forEach(row => {
-      if (!actorId || String(row.id) !== actorId) persistNotification(row.id, message, data);
-    }))
-    .catch(() => {});
 }
 
-function notifyAll(message, data = {}) {
-  const payload = JSON.stringify({ message, data, timestamp: new Date().toISOString() });
+async function notifyAll(message, data = {}) {
   const actorId = data.userId ? String(data.userId) : null;
-  for (const [userId, clients] of sseClients) {
-    if (actorId && String(userId) === actorId) continue;
-    for (const client of clients) {
-      try {
-        client.write(`data: ${payload}\n\n`);
-      } catch (e) {
-        clients.delete(client);
+  let recipients = [];
+  try {
+    const r = await pool.query('SELECT id FROM users');
+    recipients = r.rows.map(row => row.id).filter(id => !actorId || String(id) !== actorId);
+  } catch (e) { recipients = []; }
+
+  for (const userId of recipients) {
+    const nid = await persistNotification(userId, message, data);
+    const payload = JSON.stringify({ message, data: { ...data, notificationId: nid }, timestamp: new Date().toISOString() });
+    const clients = sseClients.get(userId);
+    if (clients) {
+      for (const client of clients) {
+        try {
+          client.write(`data: ${payload}\n\n`);
+        } catch (e) {
+          clients.delete(client);
+        }
       }
     }
   }
-  pool.query('SELECT id FROM users')
-    .then(r => r.rows.forEach(row => {
-      if (!actorId || String(row.id) !== actorId) persistNotification(row.id, message, data);
-    }))
-    .catch(() => {});
 }
 
-function notifyUser(userId, message, data = {}) {
+async function notifyUser(userId, message, data = {}) {
+  // Never notify the actor for their own action
+  if (userId && data.userId && String(userId) === String(data.userId)) return;
+  const nid = await persistNotification(userId, message, data);
   const clients = sseClients.get(userId);
   if (clients) {
-    const payload = JSON.stringify({ message, data, timestamp: new Date().toISOString() });
+    const payload = JSON.stringify({ message, data: { ...data, notificationId: nid }, timestamp: new Date().toISOString() });
     for (const client of clients) {
       try {
         client.write(`data: ${payload}\n\n`);
@@ -635,7 +648,6 @@ function notifyUser(userId, message, data = {}) {
       }
     }
   }
-  persistNotification(userId, message, data);
 }
 
 
@@ -1682,7 +1694,8 @@ app.get('/api/notifications/stream', async (req, res) => {
 
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { name, email, password, companyName, language } = req.body;
+    const { name, password, companyName, language } = req.body;
+    const email = (req.body.email || '').trim().toLowerCase();
     const verificationCode = (req.body.code || req.body.verificationCode || '').trim();
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
@@ -1695,9 +1708,9 @@ app.post('/api/auth/signup', async (req, res) => {
     if (password.length < minLength) {
       return res.status(400).json({ error: `Password must be at least ${minLength} characters` });
     }
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const existing = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
     if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'Email already exists' });
+      return res.status(409).json({ error: 'An account with this email address already exists. Please sign in to your account.' });
     }
     
     
@@ -1727,7 +1740,7 @@ app.post('/api/auth/signup', async (req, res) => {
       );
     } catch (err) {
       if (err.code === '23505') {
-        return res.status(400).json({ error: 'Email already exists' });
+        return res.status(409).json({ error: 'An account with this email address already exists. Please sign in to your account.' });
       }
       throw err;
     }
@@ -1847,7 +1860,14 @@ app.post('/api/auth/login', async (req, res) => {
     const attemptResult = await pool.query("SELECT value FROM system_settings WHERE key = 'maxLoginAttempts'");
     const maxAttempts = attemptResult.rows.length > 0 ? parseInt(attemptResult.rows[0].value) || 5 : 5;
 
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    const passwordMatches = user ? await bcrypt.compare(password, user.password) : false;
+    if (!user || !passwordMatches) {
+      if (user && user.google_id) {
+        const isDefaultGooglePassword = await bcrypt.compare(user.google_id, user.password || '');
+        if (isDefaultGooglePassword) {
+          return res.status(401).json({ error: 'No password is set for this account. Use Forgot Password to create one, or sign in with Google.' });
+        }
+      }
       if (user) {
         const currentAttempts = (user.login_attempts || 0) + 1;
         await pool.query('UPDATE users SET login_attempts = $1 WHERE id = $2', [currentAttempts, user.id]);
@@ -1994,7 +2014,7 @@ app.post('/api/auth/google', async (req, res) => {
     }
 
     if (googleIntent === 'signup' && !isNewUser) {
-      return res.status(409).json({ error: 'An account with this email already exists. Please log in.' });
+      return res.status(409).json({ error: 'An account with this email address already exists. Please sign in to your account.' });
     }
 
     if (user.approved === false) {
@@ -2585,7 +2605,7 @@ app.post('/api/auth/request-email-verification', async (req, res) => {
     }
     const existing = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
     if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'Email already exists' });
+      return res.status(409).json({ error: 'An account with this email address already exists. Please sign in to your account.' });
     }
     const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
     if (!otpRateLimit(`emailverify:${ip}`, 20, 60 * 60 * 1000)) {
@@ -2713,7 +2733,7 @@ app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res)
     const { name, email, password, role, groupIds, companyName, language } = req.body;
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'Email already exists' });
+      return res.status(409).json({ error: 'An account with this email address already exists. Please sign in to your account.' });
     }
     const id = uuidv4();
     const hashedPassword = await bcrypt.hash(password, 10);
