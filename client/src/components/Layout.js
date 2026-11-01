@@ -248,6 +248,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log('[RHMS-TOAST-FRONTEND] SSE message:', data);
 
           if (data.type === 'init') {
             return;
@@ -284,6 +285,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
           refreshNotifications();
 
           if (!dismissedIds.current.has(notification.id)) {
+            console.log('[RHMS-TOAST-RENDER] adding bubble', notification.id);
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
             setTimeout(() => removeBubble(notification.id), 5000);
           }

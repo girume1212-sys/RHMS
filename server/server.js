@@ -640,13 +640,16 @@ async function notifyUser(userId, message, data = {}) {
   if (userId && data.userId && String(userId) === String(data.userId)) return;
   const nid = await persistNotification(userId, message, data);
   const clients = sseClients.get(userId);
+  console.log('[RHMS-TOAST-SOCKET] broadcast to', userId, 'clients:', clients ? clients.size : 0, 'type:', data?.type);
   if (clients) {
     const payload = JSON.stringify({ message, data: { ...data, notificationId: nid }, timestamp: new Date().toISOString() });
     for (const client of clients) {
       try {
         client.write(`data: ${payload}\n\n`);
+        console.log('[RHMS-TOAST-SOCKET] write success to', userId);
       } catch (e) {
         clients.delete(client);
+        console.log('[RHMS-TOAST-SOCKET] write failed', e.message);
       }
     }
   }
@@ -4022,13 +4025,16 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
     
     const clientId = existing.rows[0].client_id;
     const assignedTo = existing.rows[0].assigned_to;
+    console.log('[RHMS-TOAST-BACKEND] comment created on', req.params.id, 'by', req.user.id);
     notifyAdmins(`New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     
     if (clientId && clientId !== req.user.id) {
+      console.log('[RHMS-TOAST-BACKEND] notify client', clientId);
       notifyUser(clientId, `New comment on your request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     }
     
     if (assignedTo && assignedTo !== req.user.id) {
+      console.log('[RHMS-TOAST-BACKEND] notify assignee', assignedTo);
       notifyUser(assignedTo, `New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     }
 

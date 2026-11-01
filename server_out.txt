@@ -33,3 +33,9 @@ password_reset_otps table ready
 email_verification_codes table ready
 sla_tracking table ready
 request_watchers table ready
+[WorkflowEmail:group-new] sent to girumyb024@gmail.com (messageId: <8ee7939f-a46c-70da-8e74-f2ebff37b8fd@gmail.com>)
+[WorkflowEmail:new-request] sent to girume1212@gmail.com (messageId: <0d634729-16cd-d270-a2b5-8d5a590cbe17@gmail.com>)
+[WorkflowEmail:group-new] sent to ggyb9456@gmail.com (messageId: <f023bdc3-5cb8-dfc3-3a97-49748396aee0@gmail.com>)
+[RHMS-TOAST-BACKEND] comment created on REQ-2024-00161 by 8f504d5e-2b21-4edf-a5e5-c3e476a87632
+[RHMS-TOAST-BACKEND] notify client 229f06d2-11cf-4ef1-a54b-76f001f246bf
+[RHMS-TOAST-SOCKET] broadcast to 229f06d2-11cf-4ef1-a54b-76f001f246bf clients: 0 type: comment
