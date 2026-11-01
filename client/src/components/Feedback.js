@@ -368,8 +368,8 @@ export default function Feedback() {
                             { key: 'veryDissatisfied', dark: '#B91C1C', light: '#FCA5A5' },
                           ].map(g => (
                             <linearGradient key={g.key} id={`grad-${g.key}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor={g.dark} stopOpacity={0.45} />
-                              <stop offset="100%" stopColor={g.light} stopOpacity={0.03} />
+                              <stop offset="0%" stopColor={g.dark} stopOpacity={0.7} />
+                              <stop offset="100%" stopColor={g.light} stopOpacity={0.15} />
                             </linearGradient>
                           ))}
                         </defs>
@@ -388,7 +388,7 @@ export default function Feedback() {
                         <YAxis allowDecimals={false} domain={[0, 'auto']} width={50} label={{ value: 'Number of Clients', angle: -90, position: 'insideLeft', fill: '#6b7280', style: { textAnchor: 'middle' } }} />
                         <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', color: '#f8fafc', borderRadius: '8px' }} />
                         {cats.map(c => (
-                          <Area key={c.key} type="monotone" dataKey={c.key} name={c.label} stroke={c.color} strokeWidth={2} fill={`url(#grad-${c.key})`} dot={{ r: 3, fill: c.color }} />
+                          <Area key={c.key} type="monotone" dataKey={c.key} name={c.label} stroke={c.color} strokeWidth={2} fill={`url(#grad-${c.key})`} fillOpacity={1} dot={{ r: 3, fill: c.color }} />
                         ))}
                       </AreaChart>
                     </ResponsiveContainer>
