@@ -5829,15 +5829,22 @@ body.dark-mode .user-dropdown {
 
 .bubble-pill {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  background: white;
-  border-radius: 50px;
-  padding: 10px 16px 10px 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
-  max-width: 320px;
-  min-width: 200px;
+  align-items: flex-start;
+  gap: 12px;
+  background: #f0fdf4;
+  border-left: 4px solid #22c55e;
+  border-radius: 16px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  max-width: 360px;
+  min-width: 240px;
   position: relative;
+  animation: bubbleSlideIn 0.35s ease;
+}
+
+@keyframes bubbleSlideIn {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .bubble-pill-icon {

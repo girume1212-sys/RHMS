@@ -1,0 +1,24 @@
+
+> rhms-client@1.0.0 start
+> react-scripts start
+
+Attempting to bind to HOST environment variable: localhost
+If this was unintentional, check that you haven't mistakenly set it in your shell.
+Learn more here: https://cra.link/advanced-config
+
+[HPM] Proxy created: /  -> http://localhost:5000
+Starting the development server...
+
+Compiled successfully!
+
+You can now view rhms-client in the browser.
+
+  http://localhost:3000
+
+Note that the development build is not optimized.
+To create a production build, use npm run build.
+
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m

@@ -576,7 +576,7 @@ async function persistNotification(userId, message, data = {}) {
       `INSERT INTO notifications (id, user_id, type, title, message, request_id, actor_id, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
       [id, userId, data.type || 'info', data.title || null,
-        message || '', (data.requestId && String(data.requestId).match(/^REQ-\d+/)) ? data.requestId : null,
+        message || '', (data.requestId && String(data.requestId).match(/^REQ-/)) ? data.requestId : null,
         data.userId ? String(data.userId) : null]
     );
     return id;

@@ -8,6 +8,7 @@ import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
 import { showStatusToast } from '../notify';
 import Icon from './Icon';
+import Toast from './Toast';
 import { SIDEBAR_MENUS, useTrackPrevMenu } from '../utils/sidebarNav';
 import { isCriticalUnworked } from '../utils/criticalIndicator';
 
@@ -28,12 +29,19 @@ export default function Layout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
+  const [toasts, setToasts] = useState([]);
   
   
   
   const [allNotifications, setAllNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const dismissedIds = useRef(new Set());
+  const addToast = useCallback((message, type = 'info') => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
+  const removeToast = useCallback((id) => setToasts(prev => prev.filter(t => t.id !== id)), []);
   const processedIds = useRef(new Set());
   const seenIds = useRef(new Set());
   const initialSeenLoaded = useRef(false);
@@ -333,17 +341,17 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
         if (cancelled) return;
         const rows = data.notifications || [];
         if (!initialSeenLoaded.current) {
-          rows.forEach(r => seenIds.current.add(r.id));
+          rows.forEach(r => processedIds.current.add(r.id));
           initialSeenLoaded.current = true;
           return;
         }
         rows.forEach(r => {
-          if (seenIds.current.has(r.id)) return;
-          seenIds.current.add(r.id);
-          setDebugCount(c => c + 1);
+          if (processedIds.current.has(r.id)) return;
+          processedIds.current.add(r.id);
           const actorId = r.actor_id || null;
           if (actorId && String(actorId) === String(user.id)) return;
           showStatusToast(r.message || 'New notification', 'info');
+          addToast(r.message || 'New notification', 'info');
           const notif = {
             id: r.id,
             notificationId: r.id,
@@ -473,7 +481,6 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
           )}
         </div>
       </aside>
-      <div style={{ position: 'fixed', bottom: '10px', right: '10px', background: 'red', color: 'white', padding: '4px 8px', zIndex: 9999 }}>POLLING ACTIVE: {debugCount}</div>
       {bubbleNotifications.map((n, i) => (
         <div
           key={n.id}
@@ -494,6 +501,11 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
           </div>
         </div>
       ))}
+      <div className="toast-container">
+        {toasts.map(t => (
+          <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)} />
+        ))}
+      </div>
       {statusToast && (
         <div className={`status-toast status-toast-${statusToast.type}`}>
           <span className="status-toast-icon">{statusToast.type === 'success' ? '✓' : statusToast.type === 'error' ? '✕' : 'ℹ'}</span>
