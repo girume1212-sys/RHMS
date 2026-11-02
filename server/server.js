@@ -3860,7 +3860,7 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       const clientId = existing.rows[0].client_id;
       notifyAdmins(`Request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
       if (clientId && clientId !== req.user.id && notifSettings.notifyClientStatusChange !== false) {
-        notifyUser(clientId, `Your request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
+        await notifyUser(clientId, `Your request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
       }
       
       
@@ -3887,10 +3887,10 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       const clientId = existing.rows[0].client_id;
       notifyAdmins(`Request #${req.params.id} assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
       if (notifSettings.notifyDeveloperAssignment !== false) {
-        notifyUser(assignedTo, `You have been assigned to Request #${req.params.id}`, { type: 'assigned', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
+        await notifyUser(assignedTo, `You have been assigned to Request #${req.params.id}`, { type: 'assigned', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
       }
       if (clientId && clientId !== req.user.id) {
-        notifyUser(clientId, `Your request #${req.params.id} has been assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
+        await notifyUser(clientId, `Your request #${req.params.id} has been assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
       }
       
       emailDeveloperOnAssignment(req.params.id, assignedTo, req.user.name, req);
@@ -3977,7 +3977,7 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
 
     const clientId = existing.rows[0].client_id;
     if (clientId && clientId !== req.user.id && notifSettings.notifyClientStatusChange !== false) {
-      notifyUser(clientId, `Your request #${requestId} has been claimed and is being worked on`, { type: 'claimed', requestId, userId: req.user.id, userName: req.user.name });
+      await notifyUser(clientId, `Your request #${requestId} has been claimed and is being worked on`, { type: 'claimed', requestId, userId: req.user.id, userName: req.user.name });
     }
 
     const statusResult = await pool.query('SELECT name FROM statuses WHERE id = $1', [assignedStatus]);
@@ -4065,17 +4065,17 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
     
     const clientId = existing.rows[0].client_id;
     const assignedTo = existing.rows[0].assigned_to;
-    console.log('[RHMS-TOAST-BACKEND] comment created on', req.params.id, 'by', req.user.id);
-    notifyAdmins(`New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
+    console.log('[RHMS-TOAST-BACKEND] comment created on', req.params.id, 'by', req.user.id, 'clientId=', existing.rows[0].client_id, 'assignedTo=', existing.rows[0].assigned_to);
+    await notifyAdmins(`New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     
     if (clientId && clientId !== req.user.id) {
       console.log('[RHMS-TOAST-BACKEND] notify client', clientId);
-      notifyUser(clientId, `New comment on your request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
+      await notifyUser(clientId, `New comment on your request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     }
     
     if (assignedTo && assignedTo !== req.user.id) {
       console.log('[RHMS-TOAST-BACKEND] notify assignee', assignedTo);
-      notifyUser(assignedTo, `New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
+      await notifyUser(assignedTo, `New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
     }
 
     res.status(201).json({ id, requestId: req.params.id, userId: req.user.id, content, createdAt: now, user: mapUser(req.user) });
@@ -6080,7 +6080,7 @@ app.post('/api/notifications', authMiddleware, roleMiddleware('admin', 'support'
       [id, user_id, type || 'info', title || null, message, request_id || null]
     );
     await logActivity({ type: 'notification_sent', message: `Notification sent: ${title || message}`, userId: req.user.id, entityType: 'notification', entityId: id, requestId: request_id || null, req });
-    notifyUser(user_id, message, { type: type || 'info', title, requestId: request_id });
+    await notifyUser(user_id, message, { type: type || 'info', title, requestId: request_id, userId: req.user.id, userName: req.user.name });
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
