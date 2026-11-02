@@ -67,9 +67,57 @@ export function translateNotification(message, data, t) {
   return message;
 }
 
-export function translateActivityMessage(message, type, t) {
+const SETTING_LABELS = {
+  systemName: 'System Name', companyName: 'Company Name', systemEmail: 'System Email', requestPrefix: 'Request Prefix',
+  phoneNumber: 'Phone Number', address: 'Address', timeZone: 'Time Zone', language: 'Language',
+  defaultDashboard: 'Default Dashboard', dateTimeFormat: 'Date/Time Format', defaultStatus: 'Default Status',
+  defaultPriority: 'Default Priority', autoRequestId: 'Auto Request ID', maxFileSize: 'Max File Size',
+  allowedFileTypes: 'Allowed File Types', allowReopen: 'Allow Reopen', emailNotifications: 'Email Notifications',
+  inAppNotifications: 'In-App Notifications', notifyClientStatusChange: 'Client Status Change Notifications',
+  notifyDeveloperAssignment: 'Developer Assignment Notifications', autoAssign: 'Auto Assign', soundAlerts: 'Sound Alerts',
+  desktopNotifications: 'Desktop Notifications', passwordLength: 'Password Length', passwordExpiry: 'Password Expiry',
+  sessionTimeout: 'Session Timeout', maxLoginAttempts: 'Max Login Attempts', twoFactorAuth: 'Two-Factor Authentication',
+  theme: 'System Theme', accentColor: 'Accent Color', sidebarStyle: 'Sidebar Style', assignmentMode: 'Assignment Mode',
+  defaultGroup: 'Default Group', maintenanceMode: 'Maintenance Mode', responseHours: 'Response Hours (SLA)',
+  resolutionHours: 'Resolution Hours (SLA)', escalationEnabled: 'Escalation Enabled',
+  autoEscalationMinutes: 'Auto-Escalation Minutes', workStart: 'Work Start Time', workEnd: 'Work End Time',
+  weekendDays: 'Weekend Days', holidaysEnabled: 'Holidays Enabled', autoBackup: 'Auto Backup',
+  backupFrequency: 'Backup Frequency', createRequestEnabled: 'Create Request Enabled',
+  clientApprovalRequired: 'Client Account Approval',
+};
+
+function prettifySettingKey(key) {
+  return String(key || '').replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim();
+}
+
+function describeSettingChangeFrontend(key) {
+  const label = SETTING_LABELS[key] || prettifySettingKey(key);
+  return `Admin updated ${label}.`;
+}
+
+export function translateActivityMessage(message, type, t, details = null) {
+  if (typeof details === 'string') {
+    try { details = JSON.parse(details); } catch { details = null; }
+  }
   if (!message) return '';
 
+  if (type === 'settings_updated') {
+    const descriptions = details?.descriptions;
+    if (Array.isArray(descriptions) && descriptions.length) {
+      return descriptions.join(' ');
+    }
+    const changes = details?.changes;
+    const changeDetails = details?.changeDetails;
+    if (Array.isArray(changes) && changes.length && typeof changes[0] === 'string' && !/^\\d+$/.test(changes[0]) && Array.isArray(changeDetails) && changeDetails.length) {
+      return changes.map(describeSettingChangeFrontend).join(' ');
+    }
+    if (/^Settings updated: \\s*\\d/.test(message)) {
+      return 'Settings updated.';
+    }
+    if (Array.isArray(changes) && changes.length) {
+      return 'Settings updated.';
+    }
+  }
   if (message.startsWith('Changed status from ')) {
     const match = message.match(/Changed status from (.+) to (.+)/i);
     if (match) {

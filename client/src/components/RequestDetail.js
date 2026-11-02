@@ -1388,7 +1388,7 @@ export default function RequestDetail() {
                               <span className="timeline-icon" style={{ color: getActivityColor(activity.type) }}>
                                 {getActivityIcon(activity.type) && <Icon name={getActivityIcon(activity.type)} size={16} />}
                               </span>
-                              <span className="timeline-message">{translateActivityMessage(activity.message, activity.type, t)}</span>
+                              <span className="timeline-message">{translateActivityMessage(activity.message, activity.type, t, activity.details)}</span>
                             </div>
                             <div className="timeline-meta">
                               <span className="timeline-user">{activity.user?.name || t('role.system')}</span>

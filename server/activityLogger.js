@@ -191,18 +191,106 @@ async function logCompanyActivity(action, company, performedBy, req, details = {
 }
 
 
+const SETTING_LABELS = {
+  systemName: 'System Name',
+  companyName: 'Company Name',
+  systemEmail: 'System Email',
+  requestPrefix: 'Request Prefix',
+  phoneNumber: 'Phone Number',
+  address: 'Address',
+  timeZone: 'Time Zone',
+  language: 'Language',
+  defaultDashboard: 'Default Dashboard',
+  dateTimeFormat: 'Date/Time Format',
+  defaultStatus: 'Default Status',
+  defaultPriority: 'Default Priority',
+  autoRequestId: 'Auto Request ID',
+  maxFileSize: 'Max File Size',
+  allowedFileTypes: 'Allowed File Types',
+  allowReopen: 'Allow Reopen',
+  emailNotifications: 'Email Notifications',
+  inAppNotifications: 'In-App Notifications',
+  notifyClientStatusChange: 'Client Status Change Notifications',
+  notifyDeveloperAssignment: 'Developer Assignment Notifications',
+  autoAssign: 'Auto Assign',
+  soundAlerts: 'Sound Alerts',
+  desktopNotifications: 'Desktop Notifications',
+  passwordLength: 'Password Length',
+  passwordExpiry: 'Password Expiry',
+  sessionTimeout: 'Session Timeout',
+  maxLoginAttempts: 'Max Login Attempts',
+  twoFactorAuth: 'Two-Factor Authentication',
+  theme: 'System Theme',
+  accentColor: 'Accent Color',
+  sidebarStyle: 'Sidebar Style',
+  assignmentMode: 'Assignment Mode',
+  defaultGroup: 'Default Group',
+  maintenanceMode: 'Maintenance Mode',
+  responseHours: 'Response Hours (SLA)',
+  resolutionHours: 'Resolution Hours (SLA)',
+  escalationEnabled: 'Escalation Enabled',
+  autoEscalationMinutes: 'Auto-Escalation Minutes',
+  workStart: 'Work Start Time',
+  workEnd: 'Work End Time',
+  weekendDays: 'Weekend Days',
+  holidaysEnabled: 'Holidays Enabled',
+  autoBackup: 'Auto Backup',
+  backupFrequency: 'Backup Frequency',
+  createRequestEnabled: 'Create Request Enabled',
+  clientApprovalRequired: 'Client Account Approval',
+};
+
+function prettifySettingKey(key) {
+  return String(key || '')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (c) => c.toUpperCase())
+    .trim();
+}
+
+function isBooleanSettingValue(value) {
+  return value === 'true' || value === 'false';
+}
+
+function describeSettingChange(key, oldValue, newValue) {
+  const label = SETTING_LABELS[key] || prettifySettingKey(key);
+  const bool = isBooleanSettingValue(oldValue) || isBooleanSettingValue(newValue);
+  if (bool) {
+    return `Admin ${newValue === 'true' ? 'enabled' : 'disabled'} ${label}.`;
+  }
+  if (key === 'theme') return 'Admin changed the system theme.';
+  if (key === 'accentColor') return 'Admin changed the accent color.';
+  if (key === 'sidebarStyle') return 'Admin changed the sidebar style.';
+  return `Admin updated ${label}.`;
+}
+
 async function logSettingsActivity(action, performedBy, req, details = {}) {
-  const messages = {
-    settings_updated: `Settings updated: ${Object.keys(details.changes || {}).join(', ')}`,
-    settings_reset: 'Settings reset to defaults',
-    logo_uploaded: 'System logo uploaded',
-    logo_removed: 'System logo removed',
-    maintenance_mode_changed: `Maintenance mode ${details.enabled ? 'enabled' : 'disabled'}`,
-  };
+  let message;
+  if (action === 'settings_updated') {
+    const changes = Array.isArray(details.changes) ? details.changes : [];
+    const detailMap = {};
+    if (Array.isArray(details.changeDetails)) {
+      details.changeDetails.forEach((d) => {
+        if (d && d.key) detailMap[d.key] = d;
+      });
+    }
+    const descriptions = Array.isArray(details.descriptions) && details.descriptions.length
+      ? details.descriptions
+      : changes.map((key) => describeSettingChange(key, detailMap[key]?.oldValue, detailMap[key]?.newValue));
+    if (!Array.isArray(details.descriptions)) details.descriptions = descriptions;
+    message = descriptions.length ? descriptions.join(' ') : 'Settings updated.';
+  } else {
+    const messages = {
+      settings_reset: 'Settings reset to defaults',
+      logo_uploaded: 'System logo uploaded',
+      logo_removed: 'System logo removed',
+      maintenance_mode_changed: `Maintenance mode ${details.enabled ? 'enabled' : 'disabled'}`,
+    };
+    message = messages[action] || `Settings action: ${action}`;
+  }
 
   await logActivity({
     type: action,
-    message: messages[action] || `Settings action: ${action}`,
+    message,
     userId: performedBy?.id || null,
     entityType: 'settings',
     details,

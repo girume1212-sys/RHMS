@@ -145,6 +145,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     console.log('approved column ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS moderated BOOLEAN DEFAULT true`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS client_approved BOOLEAN DEFAULT true`);
+    await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS actor_id VARCHAR(50)`);
     console.log('moderated column ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255)`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL`);
@@ -2912,6 +2913,9 @@ app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req
 app.patch('/api/users/:id/approve', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const { approved } = req.body;
+    const target = await pool.query('SELECT role FROM users WHERE id = $1', [req.params.id]);
+    if (target.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (target.rows[0].role !== 'client') return res.status(403).json({ error: 'Blocking is only allowed for client users.' });
     const result = await pool.query('UPDATE users SET approved = $1, moderated = $1 WHERE id = $2 RETURNING *', [approved, req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const user = mapUser(result.rows[0]);
@@ -5383,15 +5387,33 @@ app.get('/api/settings', authMiddleware, roleMiddleware('admin'), async (req, re
 
 app.put('/api/settings', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const updates = req.body;
+    const updates = req.body || {};
+    const keys = Object.keys(updates);
+    const oldResult = keys.length
+      ? await pool.query('SELECT key, value FROM system_settings WHERE key = ANY($1)', [keys])
+      : { rows: [] };
+    const oldMap = Object.fromEntries(oldResult.rows.map((r) => [r.key, r.value]));
+
+    const changedKeys = [];
+    const changeDetails = [];
     for (const [key, value] of Object.entries(updates)) {
       const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      const oldValue = Object.prototype.hasOwnProperty.call(oldMap, key) ? oldMap[key] : null;
       await pool.query(
         'INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
         [key, stringValue]
       );
+      if (oldValue !== stringValue) {
+        changedKeys.push(key);
+        changeDetails.push({ key, oldValue, newValue: stringValue });
+      }
     }
-    await logSettingsActivity('settings_updated', req.user, req, { changes: Object.keys(updates) });
+    if (changedKeys.length > 0) {
+      await logSettingsActivity('settings_updated', req.user, req, {
+        changes: changedKeys,
+        changeDetails,
+      });
+    }
     res.json({ message: 'Settings updated successfully' });
   } catch (err) {
     console.error('Update settings error:', err);

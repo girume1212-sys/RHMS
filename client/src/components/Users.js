@@ -358,7 +358,7 @@ export default function Users() {
                             <div className="user-avatar-sm" style={{ background: getRoleColor(u.role), overflow: 'hidden' }}>
                               {getAvatarUrl(u.avatar) ? <img src={getAvatarUrl(u.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (u.name || 'U').charAt(0)}
                             </div>
-                            {u.approved === false && u.role !== 'admin' && (
+                            {u.approved === false && u.role === 'client' && (
                               <div style={{ position: 'absolute', bottom: -4, right: -4, width: 22, height: 22, borderRadius: '50%', background: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #1a1a2e' }}>
                                 <Icon name="lock" size={12} />
                               </div>
@@ -384,7 +384,7 @@ export default function Users() {
                     <td>{new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td>
                         <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
-                        {u.id !== currentUser?.id && (
+                        {u.id !== currentUser?.id && u.role === 'client' && (
                           u.approved ? (
                             <button className="action-btn-text block" onClick={() => handleApprove(u.id, u.name, false)}>{t('common.blockUser')}</button>
                           ) : (

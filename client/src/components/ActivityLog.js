@@ -131,7 +131,7 @@ export default function ActivityLog() {
                   </div>
                   <div className="timeline-content">
                     <div className="timeline-header">
-                      <span className="timeline-action">{translateActivityMessage(a.message, a.type, t)}</span>
+                      <span className="timeline-action">{translateActivityMessage(a.message, a.type, t, a.details)}</span>
                       {a.requestId && <span className="timeline-request">#{a.requestId}</span>}
                     </div>
                     <div className="timeline-meta">
