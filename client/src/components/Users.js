@@ -41,6 +41,8 @@ export default function Users() {
   const groupDropdownRef = useRef(null);
   const [sort, setSort] = useState({ key: '', dir: 'asc' });
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [clientApprovalTarget, setClientApprovalTarget] = useState(null);
+  const [clientApprovalRequired, setClientApprovalRequired] = useState(false);
   const [viewingUser, setViewingUser] = useState(null);
 
   const addToast = useCallback((message, type = 'success') => {
@@ -56,6 +58,16 @@ export default function Users() {
     loadUsers();
     api.get('/api/groups').then(setGroups).catch(() => {});
     api.get('/api/companies').then(setCompanies).catch(() => {});
+    const refreshSettings = () => {
+      api.get('/api/settings').then((s) => {
+        if (s && typeof s.clientApprovalRequired !== 'undefined') {
+          setClientApprovalRequired(s.clientApprovalRequired === true || s.clientApprovalRequired === 'true');
+        }
+      }).catch(() => {});
+    };
+    refreshSettings();
+    window.addEventListener('refresh-settings', refreshSettings);
+    return () => window.removeEventListener('refresh-settings', refreshSettings);
   }, []);
 
   useEffect(() => {
@@ -225,6 +237,23 @@ export default function Users() {
     }
   };
 
+  const handleClientApproval = async (u, approved) => {
+    try {
+      await api.patch(`/api/users/${u.id}/client-approval`, { approved });
+      loadUsers();
+      addToast(approved ? 'Client approved' : 'Client approval revoked');
+    } catch (err) {
+      addToast('Failed: ' + err.message, 'error');
+    }
+  };
+
+  const confirmClientApproval = async () => {
+    if (!clientApprovalTarget) return;
+    const { user: u, approved } = clientApprovalTarget;
+    setClientApprovalTarget(null);
+    await handleClientApproval(u, approved);
+  };
+
   const getRoleColor = (role) => {
     const colors = { admin: '#EF4444', support: '#3B82F6', developer: '#8B5CF6', client: '#10B981' };
     return colors[role] || '#6B7280';
@@ -357,9 +386,16 @@ export default function Users() {
                         <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                         {u.id !== currentUser?.id && (
                           u.approved ? (
-                            <button className="action-btn-text delete" onClick={() => handleApprove(u.id, u.name, false)}>{t('common.blockUser')}</button>
+                            <button className="action-btn-text block" onClick={() => handleApprove(u.id, u.name, false)}>{t('common.blockUser')}</button>
                           ) : (
-                            <button className="action-btn-text edit" onClick={() => handleApprove(u.id, u.name, true)}>{t('common.unblockUser')}</button>
+                            <button className="action-btn-text blocked" onClick={() => handleApprove(u.id, u.name, true)}>{t('common.blocked')}</button>
+                          )
+                        )}
+                        {u.role === 'client' && clientApprovalRequired && (
+                          u.clientApproved === false ? (
+                            <button className="action-btn-text edit" onClick={() => setClientApprovalTarget({ user: u, approved: true })}>Approve</button>
+                          ) : (
+                            <button className="action-btn-text approved" onClick={() => setClientApprovalTarget({ user: u, approved: false })}>Approved</button>
                           )
                         )}
                         <button className="action-btn-text edit" onClick={() => openEdit(u)}>{t('common.edit')}</button>
@@ -404,6 +440,22 @@ export default function Users() {
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
               <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
               <button onClick={() => handleDelete(deleteTarget.id, deleteTarget.name)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.delete')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {clientApprovalTarget && (
+        <div className="modal-overlay" onClick={() => setClientApprovalTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>
+              {clientApprovalTarget.approved ? 'Are you sure you want to approve this user?' : 'Are you sure you want to unapprove this user?'}
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setClientApprovalTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={confirmClientApproval} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: clientApprovalTarget.approved ? 'none' : '1px solid #93C5FD', background: clientApprovalTarget.approved ? '#10B981' : '#BFDBFE', color: clientApprovalTarget.approved ? '#fff' : '#1D4ED8', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                {clientApprovalTarget.approved ? 'Approve' : 'Unapprove'}
+              </button>
             </div>
           </div>
         </div>

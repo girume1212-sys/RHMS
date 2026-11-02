@@ -287,7 +287,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
           if (!dismissedIds.current.has(notification.id)) {
             console.log('[RHMS-TOAST-RENDER] adding bubble', notification.id);
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
-            setTimeout(() => removeBubble(notification.id), 5000);
+            setTimeout(() => removeBubble(notification.id), 2000);
           }
 
           if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
@@ -365,7 +365,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
           };
           if (!dismissedIds.current.has(notif.id)) {
             setBubbleNotifications(prev => [notif, ...prev].slice(0, 5));
-            setTimeout(() => removeBubble(notif.id), 5000);
+            setTimeout(() => removeBubble(notif.id), 2000);
           }
           refreshNotifications();
         });

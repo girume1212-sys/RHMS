@@ -228,7 +228,7 @@ export default function ClientLayout() {
 
           if (!dismissedIds.current.has(notification.id)) {
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
-            setTimeout(() => removeBubble(notification.id), 5000);
+            setTimeout(() => removeBubble(notification.id), 2000);
           }
 
           if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
@@ -311,7 +311,7 @@ export default function ClientLayout() {
           };
           if (!dismissedIds.current.has(notif.id)) {
             setBubbleNotifications(prev => [notif, ...prev].slice(0, 5));
-            setTimeout(() => removeBubble(notif.id), 5000);
+            setTimeout(() => removeBubble(notif.id), 2000);
           }
           refreshNotifications();
         });

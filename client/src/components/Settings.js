@@ -91,6 +91,7 @@ export default function Settings() {
     backupFrequency: 'weekly',
     systemLogo: '',
     createRequestEnabled: false,
+    clientApprovalRequired: false,
   };
 
   const [form, setForm] = useState({ ...initialForm });
@@ -134,7 +135,7 @@ export default function Settings() {
           'autoRequestId', 'allowReopen', 'emailNotifications', 'inAppNotifications',
           'notifyClientStatusChange', 'notifyDeveloperAssignment', 'autoAssign',
           'soundAlerts', 'desktopNotifications', 'twoFactorAuth', 'maintenanceMode',
-          'escalationEnabled', 'holidaysEnabled', 'autoBackup', 'createRequestEnabled'
+          'escalationEnabled', 'holidaysEnabled', 'autoBackup', 'createRequestEnabled', 'clientApprovalRequired'
         ];
         const numKeys = [
           'maxFileSize', 'passwordLength', 'passwordExpiry', 'sessionTimeout',
@@ -214,10 +215,12 @@ export default function Settings() {
         autoBackup: String(form.autoBackup),
         backupFrequency: form.backupFrequency,
         createRequestEnabled: String(form.createRequestEnabled),
+        clientApprovalRequired: String(form.clientApprovalRequired),
       });
       applyTheme(form.theme);
       if (form.language) changeLanguage(form.language);
-      addToast(t('settings.saved'));
+      window.dispatchEvent(new CustomEvent('refresh-settings'));
+addToast(t('settings.saved'));
       showStatusToast(t('settings.saved'), 'status');
     } catch (err) {
       addToast(t('settings.saveFailed') + ': ' + err.message, 'error');
@@ -353,7 +356,7 @@ export default function Settings() {
       </div>
 
       <div className="settings-page">
-        {}
+        
         <div className="settings-card">
           <h3>{t('settings.general')}</h3>
           <div className="settings-field">
@@ -480,7 +483,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {}
+        
         <div className="settings-card">
           <h3>{t('settings.requestSettings')}</h3>
           <div className="settings-field">
@@ -536,11 +539,21 @@ export default function Settings() {
           </div>
         </div>
 
-        {}
+        
         <div className="settings-card">
           <h3>Create Request</h3>
           <div className="toggle-row-settings">
             <div>
+              <span className="toggle-label">Client Account Approval</span>
+              <span className="toggle-sublabel">Require Admin approval before newly registered Client accounts can access RHMS</span>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={form.clientApprovalRequired} onChange={e => handleChange('clientApprovalRequired', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+          </div>
+          <div className="toggle-row-settings">
+            <div className="toggle-info">
               <span className="toggle-label">Enable Create Request</span>
               <span className="toggle-sublabel">Allow admins to create requests on behalf of clients</span>
             </div>
@@ -551,7 +564,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {}
+        
         <div className="settings-card">
           <div
             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', padding: '4px 0' }}
@@ -676,7 +689,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {}
+        
         <div className="settings-card">
           <h3>{t('settings.notifications')}</h3>
           <div className="toggle-row-settings">
@@ -751,7 +764,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {}
+        
         <div className="settings-card">
           <h3>{t('settings.autoEscalation')}</h3>
           <div className="toggle-row-settings">
@@ -785,7 +798,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {}
+        
         <div className="settings-card">
           <h3>{t('settings.workingHours')}</h3>
           <div className="settings-field">
@@ -817,7 +830,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {}
+        
         <div className="settings-card">
           <h3>{t('settings.security')}</h3>
           <div className="settings-field">
@@ -866,7 +879,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {}
+        
         <div className="settings-card">
           <h3>{t('settings.appearance')}</h3>
           <div className="settings-field">
@@ -890,7 +903,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {}
+        
         <div className="settings-card">
           <h3>{t('settings.assignmentSettings')}</h3>
           <div className="settings-field">
@@ -912,7 +925,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {}
+        
         <div className="settings-card">
           <h3>{t('settings.backupMaintenance')}</h3>
           <div className="toggle-row-settings">

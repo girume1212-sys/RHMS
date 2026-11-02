@@ -103,6 +103,16 @@ export default function CreateRequest() {
 
   const BLOCKED_SUBMIT_MSG = 'Your account is blocked.\nYou cannot submit or perform request-related actions. Please contact the administrator.';
   const isBlockedUser = user?.role !== 'admin' && user?.approved === false;
+  const [clientApprovalRequired, setClientApprovalRequired] = useState(true);
+  useEffect(() => {
+    api.get('/api/settings/public').then((s) => {
+      if (s && typeof s.clientApprovalRequired !== 'undefined') {
+        setClientApprovalRequired(s.clientApprovalRequired === true || s.clientApprovalRequired === 'true');
+      }
+    }).catch(() => {});
+  }, []);
+  const isUnapprovedClient = user?.role === 'client' && user?.clientApproved === false && clientApprovalRequired;
+  const APPROVAL_REQUIRED_MSG = 'Account Approval Required: Your account is awaiting administrator approval. You cannot submit support requests until your account is approved. Please contact the administrator for assistance.';
 
   const showBlockedError = () => {
     setBlockedError(true);
@@ -123,6 +133,12 @@ export default function CreateRequest() {
       showBlockedError();
       return;
     }
+    if (isUnapprovedClient) {
+      setBlockedError(true);
+      setError(APPROVAL_REQUIRED_MSG);
+      addToast(APPROVAL_REQUIRED_MSG, 'error');
+      return;
+    }
     setLoading(true);
     setBlockedError(false);
     setError('');
@@ -140,8 +156,13 @@ export default function CreateRequest() {
     } catch (err) {
       
       
+      const approvalRequired = /Account Approval Required/i.test(err.message || '');
       const blockedByServer = err.message === t('common.accountBlocked') || /blocked/i.test(err.message || '');
-      if (blockedByServer) {
+      if (approvalRequired) {
+        setBlockedError(true);
+        setError(APPROVAL_REQUIRED_MSG);
+        addToast(APPROVAL_REQUIRED_MSG, 'error');
+      } else if (blockedByServer) {
         showBlockedError();
       } else {
         setBlockedError(false);

@@ -144,6 +144,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS login_attempts INTEGER DEFAULT 0`);
     console.log('approved column ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS moderated BOOLEAN DEFAULT true`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS client_approved BOOLEAN DEFAULT true`);
     console.log('moderated column ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255)`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL`);
@@ -526,10 +527,16 @@ const authMiddleware = async (req, res, next) => {
   if (!token) return res.status(401).json({ error: 'No token provided' });
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const result = await pool.query('SELECT id, name, email, role, avatar, created_at, approved FROM users WHERE id = $1', [decoded.id]);
+    const result = await pool.query('SELECT id, name, email, role, avatar, created_at, approved, client_approved FROM users WHERE id = $1', [decoded.id]);
     if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid token' });
     req.user = result.rows[0];
+    if (req.user.client_approved === undefined) req.user.client_approved = true;
     if (req.user.approved === false) return res.status(403).json({ error: 'Your account is blocked. Please contact the administrator.' });
+    if (req.user.role === 'client' && req.user.client_approved === false) {
+      const _settingRes = await pool.query("SELECT value FROM system_settings WHERE key = 'clientApprovalRequired'");
+      const _required = _settingRes.rows.length === 0 || _settingRes.rows[0].value === 'true';
+      if (_required) return res.status(403).json({ error: 'Your account is pending admin approval. Please wait for an administrator to approve your account.' });
+    }
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid token' });
@@ -816,6 +823,7 @@ const mapUser = (u) => ({
   companyName: u.company_name || '',
   language: u.language || 'en',
   approved: u.approved || false,
+  clientApproved: u.client_approved !== false,
   selfRegistered: u.self_registered || false,
   moderated: u.moderated || false,
   createdAt: u.created_at
@@ -1739,8 +1747,8 @@ app.post('/api/auth/signup', async (req, res) => {
     let result;
     try {
       result = await pool.query(
-        'INSERT INTO users (id, name, email, password, role, company_name, language, approved, moderated) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, email, role, avatar, created_at, company_name, language, approved, moderated',
-        [id, name, email, hashedPassword, 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en', true, false]
+        'INSERT INTO users (id, name, email, password, role, company_name, language, approved, moderated, client_approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, name, email, role, avatar, created_at, company_name, language, approved, moderated, client_approved',
+        [id, name, email, hashedPassword, 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en', true, false, (await (async()=>{try{const r=await pool.query("SELECT value FROM system_settings WHERE key='clientApprovalRequired'"); return r.rows[0]?.value==='true'?false:true;}catch(e){return true;}})())]
       );
     } catch (err) {
       if (err.code === '23505') {
@@ -1905,6 +1913,15 @@ app.post('/api/auth/login', async (req, res) => {
       auditLogin('login_blocked', user.id, user.email, req);
       await logAuthActivity('login_blocked', user, req);
       return res.status(403).json({ error: 'Your account is blocked. Please contact the administrator.' });
+    }
+
+    if (user.role === 'client' && user.client_approved === false) {
+      const _sr = await pool.query("SELECT value FROM system_settings WHERE key = 'clientApprovalRequired'");
+      const _req = _sr.rows.length === 0 || _sr.rows[0].value === 'true';
+      if (_req) {
+        auditLogin('login_pending_approval', user.id, user.email, req);
+        return res.status(403).json({ error: 'Your account is pending admin approval. Please wait for an administrator to approve your account.' });
+      }
     }
 
     if (user.login_attempts >= maxAttempts) {
@@ -2694,7 +2711,7 @@ app.post('/api/auth/verify-email-code', async (req, res) => {
 app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support', 'developer'), async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.language, u.approved, u.moderated, u.created_at,
+      SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.language, u.approved, u.client_approved, u.moderated, u.created_at,
         EXISTS(SELECT 1 FROM login_audit la WHERE la.action = 'signup' AND la.email = u.email) AS self_registered
       FROM users u
       ORDER BY u.created_at DESC
@@ -3564,12 +3581,31 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
   }
 });
 
+
+app.patch('/api/users/:id/client-approval', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const { approved } = req.body;
+    const result = await pool.query('UPDATE users SET client_approved = $1 WHERE id = $2 AND role = $3 RETURNING *', [!!approved, req.params.id, 'client']);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    const user = mapUser(result.rows[0]);
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.post('/api/requests', authMiddleware, async (req, res) => {
   try {
     
     
     if (req.user.role !== 'admin' && !req.user.approved) {
       return res.status(403).json({ error: 'Your account is blocked. You cannot submit requests.' });
+    }
+    if (req.user.role === 'client' && req.user.client_approved === false) {
+      const _settingRes2 = await pool.query("SELECT value FROM system_settings WHERE key = 'clientApprovalRequired'");
+      const _required2 = _settingRes2.rows.length === 0 || _settingRes2.rows[0].value === 'true';
+      if (_required2) return res.status(403).json({ error: 'Account Approval Required: Your account is awaiting administrator approval. You cannot submit support requests until your account is approved. Please contact the administrator for assistance.' });
     }
     const { subject, description, categoryId, priorityId, attachments, customCategory } = req.body;
     if (!subject || !subject.trim() || !description || !description.trim() || !categoryId) {
@@ -5291,6 +5327,8 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
       { key: 'accentColor', value: '#00b4d8' },
       { key: 'sidebarStyle', value: 'comfortable' },
       { key: 'systemLogo', value: '' },
+      { key: 'clientApprovalRequired', value: 'false' },
+      { key: 'createRequestEnabled', value: 'false' },
     ];
     for (const s of defaultSettings) {
       await pool.query(
@@ -5306,7 +5344,7 @@ app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), as
 
 app.get('/api/settings/public', async (req, res) => {
   try {
-    const result = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('theme', 'language', 'systemName', 'maintenanceMode', 'companyName', 'systemLogo')");
+    const result = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('theme', 'language', 'systemName', 'maintenanceMode', 'companyName', 'systemLogo', 'clientApprovalRequired')");
     const settings = {};
     for (const row of result.rows) {
       if (row.value === 'true') settings[row.key] = true;
@@ -5408,6 +5446,7 @@ app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (
       { key: 'autoBackup', value: 'false' },
       { key: 'backupFrequency', value: 'weekly' },
       { key: 'systemLogo', value: '' },
+      { key: 'clientApprovalRequired', value: 'false' },
     ];
     for (const s of defaults) {
       await pool.query(
