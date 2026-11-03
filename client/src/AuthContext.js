@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('rhms_darkMode') === 'true');
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem('rhms_themeMode') || 'partial');
-  const [systemName, setSystemName] = useState('RHMS');
+  const [systemName, setSystemName] = useState('RHMS Support System');
   const [systemLogo, setSystemLogo] = useState('');
   const timeoutRef = useRef(null);
 
