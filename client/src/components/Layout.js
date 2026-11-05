@@ -6,7 +6,7 @@ import { api, API_BASE, isTokenExpired } from '../api';
 import GlobalSearch from './GlobalSearch';
 import LanguageSelector from './LanguageSelector';
 import { translateNotification } from '../i18n/translateServer';
-import { showStatusToast } from '../notify';
+
 import Icon from './Icon';
 import Toast from './Toast';
 import { SIDEBAR_MENUS, useTrackPrevMenu } from '../utils/sidebarNav';
@@ -287,7 +287,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
           if (!dismissedIds.current.has(notification.id)) {
             console.log('[RHMS-TOAST-RENDER] adding bubble', notification.id);
             setBubbleNotifications(prev => [notification, ...prev].slice(0, 5));
-            setTimeout(() => removeBubble(notification.id), 2000);
+            setTimeout(() => removeBubble(notification.id), 5000);
           }
 
           if (data.data?.type === 'claimed' && data.data?.assignee !== user.id) {
@@ -352,8 +352,6 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
           processedIds.current.add(r.id);
           const actorId = r.actor_id || null;
           if (actorId && String(actorId) === String(user.id)) return;
-          showStatusToast(r.message || 'New notification', 'info');
-          addToast(r.message || 'New notification', 'info');
           const notif = {
             id: r.id,
             notificationId: r.id,
@@ -361,11 +359,12 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
             message: r.message,
             requestId: r.request_id,
             userId: actorId,
+            userName: r.user_name || null,
             timestamp: r.created_at
           };
           if (!dismissedIds.current.has(notif.id)) {
             setBubbleNotifications(prev => [notif, ...prev].slice(0, 5));
-            setTimeout(() => removeBubble(notif.id), 2000);
+            setTimeout(() => removeBubble(notif.id), 5000);
           }
           refreshNotifications();
         });
@@ -497,6 +496,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
             </div>
             <div className="bubble-pill-body">
               <div className="bubble-pill-title">{n.requestId ? `${t('common.requestShort')} #${n.requestId}` : t('common.notification')}</div>
+              {n.userName && <div className="bubble-pill-sender">From: {n.userName}</div>}
               <div className="bubble-pill-text">{translateNotification(n.message, n, t)}</div>
               <div className="bubble-pill-time">{n.timestamp ? new Date(n.timestamp).toLocaleTimeString() : ''}</div>
             </div>

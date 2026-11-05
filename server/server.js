@@ -6055,7 +6055,7 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const result = await pool.query(
-      'SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2',
+      `SELECT n.*, a.name AS user_name FROM notifications n LEFT JOIN users a ON a.id::text = n.actor_id WHERE n.user_id = $1 ORDER BY n.created_at DESC LIMIT $2`,
       [req.user.id, limit]
     );
     const unread = await pool.query(
@@ -6328,9 +6328,9 @@ async function runAutoEscalation() {
       const adminMsg = isGroup
         ? `Request #${req.id} was automatically escalated (group ${req.group_name || 'assignment'} exceeded ${minutes} minutes)`
         : `Request #${req.id} was automatically escalated (${req.assignee_name || 'developer'} exceeded ${minutes} minutes)`;
-      notifyAdmins(adminMsg, { type: 'status_change', requestId: req.id, status: 'Escalated' });
+      notifyAdmins(adminMsg, { type: 'status_change', requestId: req.id, status: 'Escalated', userName: 'System' });
       if (req.assigned_to) {
-        notifyUser(req.assigned_to, `Request #${req.id} was automatically escalated because it was not completed within ${minutes} minutes`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
+        notifyUser(req.assigned_to, `Request #${req.id} was automatically escalated because it was not completed within ${minutes} minutes`, { type: 'status_change', requestId: req.id, status: 'Escalated', userName: 'System' });
       }
       if (isGroup && req.assigned_group) {
         
@@ -6340,11 +6340,11 @@ async function runAutoEscalation() {
           [req.assigned_group]
         );
         for (const m of members.rows) {
-          notifyUser(m.id, `Request #${req.id} assigned to your group was automatically escalated after ${minutes} minutes`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
+          notifyUser(m.id, `Request #${req.id} assigned to your group was automatically escalated after ${minutes} minutes`, { type: 'status_change', requestId: req.id, status: 'Escalated', userName: 'System' });
         }
       }
       if (req.client_id) {
-        notifyUser(req.client_id, `Your request #${req.id} status changed to Escalated`, { type: 'status_change', requestId: req.id, status: 'Escalated' });
+        notifyUser(req.client_id, `Your request #${req.id} status changed to Escalated`, { type: 'status_change', requestId: req.id, status: 'Escalated', userName: 'System' });
       }
       console.log(`[AutoEscalation] Request #${req.id} escalated after ${minutes} minutes (${isGroup ? 'group' : 'developer'} assignment).`);
     } catch (err) {
