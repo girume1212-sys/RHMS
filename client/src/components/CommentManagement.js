@@ -44,7 +44,12 @@ export default function CommentManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState(null); // { type: 'direct'|'group', id, title, subtitle, members }
+  const [selectedUser, setSelectedUser] = useState(null); // selected conversation/user in right panel
+  const [attachments, setAttachments] = useState([]);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [acceptType, setAcceptType] = useState('*/*');
+  const fileInputRef = useRef(null);
   const [messages, setMessages] = useState([]);
   const [msgLoading, setMsgLoading] = useState(false);
   const [text, setText] = useState('');
@@ -79,13 +84,17 @@ export default function CommentManagement() {
   const sections = buildSections(role, user, users, groups);
 
   const openConversation = useCallback(async (conv) => {
-    setSelected(conv);
+    setSelectedUser(conv);
+    setMessages([]);
+    setText('');
+    setAttachments([]);
     setMsgLoading(true);
     try {
       const data = await api.get(`/api/messages?conversationType=${conv.type}&conversationId=${encodeURIComponent(conv.id)}`);
       setMessages(Array.isArray(data) ? data : []);
       await api.put('/api/messages/read', { conversationType: conv.type, conversationId: conv.id });
       setUnreadMap((m) => ({ ...m, [conv.type + ':' + conv.id]: 0 }));
+      try { localStorage.setItem('rhms_selected_conv', JSON.stringify({ type: conv.type, id: conv.id })); } catch {}
     } catch (e) {
       setMessages([]);
     } finally {
@@ -99,33 +108,33 @@ export default function CommentManagement() {
 
   // polling for new messages
   useEffect(() => {
-    if (!selected) return;
+    if (!selectedUser) return;
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
-        const data = await api.get(`/api/messages?conversationType=${selected.type}&conversationId=${encodeURIComponent(selected.id)}`);
+        const data = await api.get(`/api/messages?conversationType=${selectedUser.type}&conversationId=${encodeURIComponent(selectedUser.id)}`);
         if (Array.isArray(data) && data.length !== messages.length) {
           setMessages(data);
-          await api.put('/api/messages/read', { conversationType: selected.type, conversationId: selected.id });
+          await api.put('/api/messages/read', { conversationType: selectedUser.type, conversationId: selectedUser.id });
         }
       } catch {}
     }, 5000);
     return () => clearInterval(pollRef.current);
-  }, [selected, messages.length]);
+  }, [selectedUser, messages.length]);
 
   const send = async () => {
-    if (!text.trim() || !selected) return;
+    if ((!text.trim() && attachments.length === 0) || !selectedUser) return;
     setSending(true);
     try {
       const created = await api.post('/api/messages', {
-        conversationType: selected.type,
-        conversationId: selected.id,
+        conversationType: selectedUser.type,
+        conversationId: selectedUser.id,
         content: text,
         attachments: [],
       });
       setMessages((prev) => [...prev, created]);
       setText('');
-      await api.put('/api/messages/read', { conversationType: selected.type, conversationId: selected.id });
+      await api.put('/api/messages/read', { conversationType: selectedUser.type, conversationId: selectedUser.id });
     } catch (e) {
       // ignore
     } finally {
@@ -154,6 +163,22 @@ export default function CommentManagement() {
     })();
     return () => { cancelled = true; };
   }, [sections.length, users.length]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (selectedUser) return;
+    const flat = sections.flatMap((s) => s.items || []);
+    if (!flat.length) return;
+    let target = flat[0];
+    try {
+      const saved = JSON.parse(localStorage.getItem('rhms_selected_conv') || 'null');
+      if (saved) {
+        const found = flat.find((it) => it.type === saved.type && String(it.id) === String(saved.id));
+        if (found) target = found;
+      }
+    } catch {}
+    openConversation(target);
+  }, [loading, sections.length, selectedUser]);
 
   if (loading) {
     return <div className="page-container"><div className="loading-screen"><div className="spinner"></div></div></div>;
@@ -188,29 +213,49 @@ export default function CommentManagement() {
           <div className="cm-list">
             {filteredSections.length === 0 && <div className="cm-empty">No conversations</div>}
             {filteredSections.map((section) => (
-              <SidebarSection key={section.key} section={section} selected={selected} onSelect={openConversation} unreadMap={unreadMap} />
+              <SidebarSection key={section.key} section={section} selected={selectedUser} onSelect={openConversation} unreadMap={unreadMap} />
             ))}
           </div>
         </div>
 
         {/* Right workspace */}
-        <div className="cm-right">
-          {selected ? (
-            <>
-              <ChatHeader selected={selected} />
-              {selected.type === 'group' && selected.members && selected.members.length > 0 && (
-                <MemberStrip members={selected.members} />
-              )}
-              <div className="cm-messages">
-                {msgLoading && <div className="cm-empty">Loading...</div>}
-                {!msgLoading && messages.length === 0 && <div className="cm-empty">No messages yet</div>}
-                {renderMessages(messages, user)}
-                <div ref={messagesEndRef} />
-              </div>
-              <Composer text={text} setText={setText} onSend={send} sending={sending} onKeyDown={handleKey} />
-            </>
+        <div className="cm-right" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {selectedUser ? (
+            <ChatHeader selected={selectedUser} />
           ) : (
-            <div className="cm-empty" style={{ margin: 'auto' }}>Select a conversation</div>
+            <ChatHeader selected={{ name: 'Select a conversation', role: '', type: 'direct' }} />
+          )}
+          {selectedUser && selectedUser.type === 'group' && selectedUser.members && selectedUser.members.length > 0 && (
+            <MemberStrip members={selectedUser.members} />
+          )}
+          <div className="cm-messages" style={{ flex: 1, minHeight: 0 }}>
+            {msgLoading && <div className="cm-empty">Loading...</div>}
+            {!msgLoading && selectedUser && messages.length === 0 && <div className="cm-empty">No messages yet</div>}
+            {!selectedUser && !msgLoading && <div className="cm-empty">Select a conversation</div>}
+            {selectedUser && renderMessages(messages, user)}
+            <div ref={messagesEndRef} />
+          </div>
+          <input type="file" ref={fileInputRef} style={{ display: 'none' }} multiple accept={acceptType} onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            setAttachments((prev) => [...prev, ...files]);
+            e.target.value = '';
+            setShowAttachMenu(false);
+          }} />
+          <Composer text={text} setText={setText} onSend={send} sending={sending} onKeyDown={handleKey}
+            onAttachClick={() => { setAcceptType('*/*'); setTimeout(() => fileInputRef.current && fileInputRef.current.click(), 0); }}
+            onAttachHover={setShowAttachMenu}
+            showAttachMenu={showAttachMenu}
+            onSelectAttachType={(accept) => { setAcceptType(accept); setShowAttachMenu(false); setTimeout(() => fileInputRef.current && fileInputRef.current.click(), 0); }}
+            onEmoji={() => setShowEmoji((s) => !s)}
+            showEmoji={showEmoji}
+            attachments={attachments}
+            onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))} />
+          {showEmoji && (
+            <div className="cm-emoji-panel">
+              {['😀','😊','😂','😍','😎','🤔','👍','🙏','🔥','🎉','❤️','✅','📌','📎','💬','⭐'].map((e) => (
+                <button key={e} className="cm-emoji-item" onClick={() => { setText((t) => t + e); setShowEmoji(false); }}>{e}</button>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -257,6 +302,7 @@ function buildSections(role, me, users, groups) {
       role: it.role,
       members: it.members,
       avatar: it.avatar,
+      online: it.online,
       last: it.last || '',
       time: it.time || '',
     }));
@@ -266,7 +312,7 @@ function buildSections(role, me, users, groups) {
 }
 
 function toItem(type) {
-  return (u) => ({ type, id: u.id, name: u.name, role: u.role, avatar: u.avatar, members: null, last: '', time: '' });
+  return (u) => ({ type, id: u.id, name: u.name, role: u.role, avatar: u.avatar, online: u.online || u.status === 'online' || u.isOnline, members: null, last: '', time: '' });
 }
 
 function sharesGroup(u, me, groups) {
@@ -340,25 +386,26 @@ function SidebarSection({ section, selected, onSelect, unreadMap }) {
 }
 
 function ChatHeader({ selected }) {
+  const status = selected?.online === true ? 'Online' : (selected?.online === false ? 'Offline' : null);
   return (
     <div className="cm-header">
       <div className="cm-header-left">
-        {selected.type === 'group' ? (
+        {selected?.type === 'group' ? (
           <div className="cm-header-avatar group">G</div>
         ) : (
-          <Avatar user={{ name: selected.name, avatar: selected.avatar }} size={44} />
+          <Avatar user={{ name: selected?.name, avatar: selected?.avatar }} size={44} />
         )}
         <div>
-          <div className="cm-header-name">{selected.name}</div>
+          <div className="cm-header-name">{selected?.name}</div>
           <div className="cm-header-sub">
-            {selected.type === 'group' ? `Group Chat · ${selected.members?.length || 0} members` : (selected.role || '')}
+            {selected?.type === 'group' ? 'Group Chat' : [selected?.role, status].filter(Boolean).join(' · ')}
           </div>
         </div>
       </div>
       <div className="cm-header-actions">
         <button className="cm-icon-btn" title="Voice call">📞</button>
         <button className="cm-icon-btn" title="Video call">📹</button>
-        <button className="cm-icon-btn" title="More">⋮</button>
+        <button className="cm-icon-btn" title="More">⋯</button>
       </div>
     </div>
   );
