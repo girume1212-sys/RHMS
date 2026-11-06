@@ -165,6 +165,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
     { section: null, items: [
       { path: '/', label: t('sidebar.dashboard'), icon: 'home' },
       { path: '/requests', label: t('sidebar.requests'), icon: 'requests' },
+      { path: '/comments', label: 'Comment', icon: 'comment' },
     ]},
     { section: t('sidebar.management'), items: [
       { path: '/users', label: t('sidebar.users'), icon: 'users', roles: ['admin'] },

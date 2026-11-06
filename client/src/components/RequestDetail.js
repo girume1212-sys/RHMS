@@ -17,7 +17,14 @@ export default function RequestDetail() {
   const fileInputRef = useRef(null);
   const [request, setRequest] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [comment, setComment] = useState('');
+  const [contextMenu, setContextMenu] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const [selectedComments, setSelectedComments] = useState([]);
+  const [deleteConfirmComment, setDeleteConfirmComment] = useState(null);
+  const [editingComment, setEditingComment] = useState(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [statuses, setStatuses] = useState([]);
   const [users, setUsers] = useState([]);
@@ -123,6 +130,15 @@ export default function RequestDetail() {
   }, []);
 
   useEffect(() => {
+    const close = () => setContextMenu(null);
+    const esc = (e) => { if (e.key === 'Escape') setContextMenu(null); };
+    document.addEventListener('click', close);
+    document.addEventListener('contextmenu', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('click', close); document.removeEventListener('contextmenu', close); document.removeEventListener('keydown', esc); };
+  }, []);
+
+  useEffect(() => {
     loadRequest();
     loadActivity();
     api.get('/api/statuses').then(setStatuses).catch(() => {});
@@ -199,6 +215,8 @@ export default function RequestDetail() {
   };
 
   const loadRequest = () => {
+    setLoading(true);
+    setLoadError(null);
     api.get(`/api/requests/${id}`).then(data => {
       setRequest(data);
       initLastSeen();
@@ -206,7 +224,10 @@ export default function RequestDetail() {
       setEditForm({ subject: data.subject, description: data.description, categoryId: data.categoryId, priorityId: data.priorityId, statusId: data.statusId, assignedTo: data.assignedTo || '', attachments });
       setEditAttachments(attachments);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((err) => {
+      setLoadError(err?.message || 'Failed to load request');
+      setLoading(false);
+    });
   };
 
   const loadActivity = () => {
@@ -712,14 +733,38 @@ export default function RequestDetail() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← {t('common.backToRequests')}</button>
+          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>{t('common.backToRequests')}</button>
           <h1>{t('common.requestPrefixLabel')}{String(id).padStart(4, '0')}</h1>
         </div>
       </div>
       <div className="loading-screen"><div className="spinner"></div></div>
     </div>
   );
-  if (!request) return <div className="empty-state">{t('common.requestNotFound')}</div>;
+  if (loadError) return (
+    <div className="page-container">
+      <div className="page-header">
+        <div>
+          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>{t('common.backToRequests')}</button>
+          <h1>{t('common.requestPrefixLabel')}{String(id).padStart(4, '0')}</h1>
+        </div>
+      </div>
+      <div className="empty-state">{loadError}</div>
+      <div style={{ textAlign: 'center', marginTop: 12 }}>
+        <button className="btn btn-primary" onClick={loadRequest}>{t('common.retry') || 'Retry'}</button>
+      </div>
+    </div>
+  );
+  if (!request) return (
+    <div className="page-container">
+      <div className="page-header">
+        <div>
+          <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>{t('common.backToRequests')}</button>
+          <h1>{t('common.requestPrefixLabel')}{String(id).padStart(4, '0')}</h1>
+        </div>
+      </div>
+      <div className="empty-state">{t('common.requestNotFound')}</div>
+    </div>
+  );
 
   const developers = users.filter(u => u.role === 'developer' || u.role === 'support');
   const attachments = request.attachments || [];
@@ -1045,7 +1090,27 @@ export default function RequestDetail() {
                            {(!isOwnComment && !unreadComments.some(u => (u.id || u.createdAt) === (c.id || c.createdAt))) ? '✓✓' : '✓'}
                          </span>
                       </div>
-                      <div className={`chat-bubble ${isClientRole ? 'client' : 'staff'}`}>
+                      <div
+                        className={`chat-bubble ${isClientRole ? 'client' : 'staff'} ${selectedComments.includes(c.id || c.createdAt) ? 'selected' : ''}`}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const x = Math.min(e.clientX, window.innerWidth - 220);
+                          const y = Math.min(e.clientY, window.innerHeight - 260);
+                          setContextMenu({ x, y, comment: c });
+                        }}
+                        onTouchStart={(e) => {
+                          const t = e.touches[0];
+                          const timer = setTimeout(() => {
+                            const x = Math.min(t.clientX, window.innerWidth - 220);
+                            const y = Math.min(t.clientY, window.innerHeight - 260);
+                            setContextMenu({ x, y, comment: c });
+                          }, 500);
+                          e.currentTarget._lpTimer = timer;
+                        }}
+                        onTouchEnd={(e) => { clearTimeout(e.currentTarget._lpTimer); }}
+                        onTouchMove={(e) => { clearTimeout(e.currentTarget._lpTimer); }}
+                      >
                         {renderMessageContent(c.content)}
                         {c.attachments && c.attachments.length > 0 && (
                           <div className="msg-attachments">
@@ -1083,6 +1148,100 @@ export default function RequestDetail() {
                 <div className="chat-empty">{t('common.noMessagesYet')}</div>
               )}
             </div>
+
+            {contextMenu && (
+              <div className="tg-context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
+                <button className="tg-menu-item" onClick={() => { setReplyTo(contextMenu.comment); setContextMenu(null); }}>
+                  <Icon name="reply" size={16} /> Reply
+                </button>
+                <button className="tg-menu-item" onClick={() => { addToast('Forwarding requires additional backend support', 'error'); setContextMenu(null); }}>
+                  <Icon name="send" size={16} /> Forward
+                </button>
+                <button className="tg-menu-item" onClick={async () => {
+                  try { await navigator.clipboard.writeText(contextMenu.comment.content || ''); addToast('Copied', 'success'); } catch (e) { addToast('Copy failed', 'error'); }
+                  setContextMenu(null);
+                }}>
+                  <Icon name="copy" size={16} /> Copy
+                </button>
+                {(contextMenu.comment.user?.id === user?.id || user?.role === 'admin') && (
+                  <button className="tg-menu-item" onClick={() => { setEditingComment(contextMenu.comment); setEditingCommentText(contextMenu.comment.content || ''); setContextMenu(null); }}>
+                    <Icon name="edit" size={16} /> Edit
+                  </button>
+                )}
+                {(contextMenu.comment.user?.id === user?.id || user?.role === 'admin') && (
+                  <button className="tg-menu-item danger" onClick={() => { setDeleteConfirmComment(contextMenu.comment); setContextMenu(null); }}>
+                    <Icon name="trash" size={16} /> Delete
+                  </button>
+                )}
+                <button className="tg-menu-item" onClick={() => {
+                  const id = contextMenu.comment.id || contextMenu.comment.createdAt;
+                  setSelectedComments(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                  setContextMenu(null);
+                }}>
+                  <Icon name="check" size={16} /> Select
+                </button>
+                <button className="tg-menu-item" onClick={() => {
+                  const c = contextMenu.comment;
+                  addToast(`${c.user?.name || 'Unknown'} • ${new Date(c.createdAt).toLocaleString()}`, 'success');
+                  setContextMenu(null);
+                }}>
+                  <Icon name="info" size={16} /> View Details
+                </button>
+              </div>
+            )}
+
+            {deleteConfirmComment && (
+              <div className="modal-overlay" onClick={() => setDeleteConfirmComment(null)}>
+                <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+                  <h3>Delete comment</h3>
+                  <p>Are you sure you want to delete this comment?</p>
+                  <div className="modal-actions">
+                    <button className="btn btn-outline" onClick={() => setDeleteConfirmComment(null)}>Cancel</button>
+                    <button className="btn btn-danger" onClick={async () => {
+                      try {
+                        await api.delete(`/api/requests/${id}/comments/${deleteConfirmComment.id}`);
+                        loadRequest();
+                        addToast('Comment deleted', 'success');
+                      } catch (err) {
+                        addToast(err?.message || 'Delete failed', 'error');
+                      } finally {
+                        setDeleteConfirmComment(null);
+                      }
+                    }}>Delete</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {editingComment && (
+              <div className="modal-overlay" onClick={() => setEditingComment(null)}>
+                <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+                  <h3>Edit comment</h3>
+                  <textarea value={editingCommentText} onChange={(e) => setEditingCommentText(e.target.value)} rows={4} style={{ width: '100%' }} />
+                  <div className="modal-actions">
+                    <button className="btn btn-outline" onClick={() => setEditingComment(null)}>Cancel</button>
+                    <button className="btn btn-primary" onClick={async () => {
+                      try {
+                        await api.put(`/api/requests/${id}/comments/${editingComment.id}`, { content: editingCommentText });
+                        loadRequest();
+                        addToast('Comment updated', 'success');
+                      } catch (err) {
+                        addToast(err?.message || 'Update failed', 'error');
+                      } finally {
+                        setEditingComment(null);
+                      }
+                    }}>Save</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {replyTo && (
+              <div className="reply-reference">
+                Replying to {replyTo.user?.name}: {String(replyTo.content || '').slice(0, 60)}
+                <button onClick={() => setReplyTo(null)}>×</button>
+              </div>
+            )}
 
             <button
               type="button"

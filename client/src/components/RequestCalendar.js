@@ -60,7 +60,7 @@ export default function RequestCalendar() {
   const openRequest = (id) => {
     setOpen(false);
     const base = user?.role === 'client' ? '/client/requests' : '/requests';
-    navigate(`/${base}/${id}`);
+    navigate(`${base}/${id}`);
   };
 
   const byDay = useMemo(() => {
