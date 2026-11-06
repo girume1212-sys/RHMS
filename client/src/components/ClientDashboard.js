@@ -227,7 +227,7 @@ export default function ClientDashboard() {
             key={s.id}
             icon={<Icon name={getStatusIcon(s.name)} />}
             value={countByStatusId(requests, s.id)}
-            label={s.name}
+            label={t(`status.${s.name}`, { defaultValue: s.name })}
             color={s.color || '#6B7280'}
             onClick={() => navigate(`/client/requests?status=${s.name}`)}
             share={shareOfTotalPercent(countByStatusId(requests, s.id), requests.length)}

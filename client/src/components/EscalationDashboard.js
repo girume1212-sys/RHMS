@@ -313,7 +313,7 @@ if (statusName === 'New') {
             key={s.id}
             icon={<Icon name={getStatusIcon(s.name)} />}
             value={countByStatusId(displayRequests, s.id)}
-            label={s.name}
+            label={t(`status.${s.name}`, { defaultValue: s.name })}
             color={s.color || '#6B7280'}
             onClick={() => navigate(`/requests?status=${s.id}`)}
             share={shareOfTotalPercent(countByStatusId(displayRequests, s.id), displayRequests.length)}
