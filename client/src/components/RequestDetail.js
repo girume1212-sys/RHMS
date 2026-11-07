@@ -387,9 +387,10 @@ export default function RequestDetail() {
           if (res.path) attachments.push({ name: file.name, size: file.size, path: res.path });
         }
       }
-      await api.post(`/api/requests/${id}/comments`, { content: comment, attachments });
+      await api.post(`/api/requests/${id}/comments`, { content: comment, attachments, replyTo: replyTo?.id || null });
       setComment('');
       setPendingFiles([]);
+      setReplyTo(null);
       addToast(t('common.commentAdded'));
       loadRequest();
       loadActivity();
@@ -1154,8 +1155,25 @@ export default function RequestDetail() {
                 <button className="tg-menu-item" onClick={() => { setReplyTo(contextMenu.comment); setContextMenu(null); }}>
                   <Icon name="reply" size={16} /> Reply
                 </button>
-                <button className="tg-menu-item" onClick={() => { addToast('Forwarding requires additional backend support', 'error'); setContextMenu(null); }}>
+                <button className="tg-menu-item" onClick={async () => {
+                  try { await navigator.clipboard.writeText(contextMenu.comment.content || ''); addToast('Comment copied for forwarding', 'success'); } catch (e) { addToast('Copy failed', 'error'); }
+                  setContextMenu(null);
+                }}>
                   <Icon name="send" size={16} /> Forward
+                </button>
+                <button className="tg-menu-item" onClick={async () => {
+                  try {
+                    if (contextMenu.comment.likedByMe) {
+                      await api.delete(`/api/requests/${id}/comments/${contextMenu.comment.id}/like`);
+                    } else {
+                      await api.post(`/api/requests/${id}/comments/${contextMenu.comment.id}/like`);
+                    }
+                    loadRequest();
+                    addToast('Updated', 'success');
+                  } catch (e) { addToast('Failed', 'error'); }
+                  setContextMenu(null);
+                }}>
+                  <Icon name="heart" size={16} /> {contextMenu.comment.likedByMe ? 'Unlike' : 'Like'} ({contextMenu.comment.likes || 0})
                 </button>
                 <button className="tg-menu-item" onClick={async () => {
                   try { await navigator.clipboard.writeText(contextMenu.comment.content || ''); addToast('Copied', 'success'); } catch (e) { addToast('Copy failed', 'error'); }

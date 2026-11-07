@@ -136,6 +136,8 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS client_email VARCHAR(255) DEFAULT ''`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_client_email ON requests(client_email)`);
     await pool.query(`ALTER TABLE comments ADD COLUMN IF NOT EXISTS author_email VARCHAR(255) DEFAULT ''`);
+    await pool.query(`ALTER TABLE comments ADD COLUMN IF NOT EXISTS reply_to VARCHAR(50)`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS comment_likes (comment_id VARCHAR(50) REFERENCES comments(id) ON DELETE CASCADE, user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), PRIMARY KEY (comment_id, user_id))`);
     console.log('ownership trail columns ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'en'`);
     console.log('language column ready');
@@ -365,6 +367,10 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
       )
     `);
     console.log('messages tables ready');
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to VARCHAR(50)`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS reactions TEXT DEFAULT '[]'`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP WITH TIME ZONE`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sessions (
@@ -3376,6 +3382,7 @@ groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.grou
             requestId: c.request_id,
             userId: c.user_id,
             content: c.content,
+         replyTo: c.reply_to || null,
             createdAt: c.created_at,
             attachments: typeof c.attachments === 'string' ? JSON.parse(c.attachments) : (c.attachments || []),
             user: c.user_name ? { id: c.user_id, name: c.user_name, email: c.user_email, role: c.user_role, avatar: c.user_avatar } : null
@@ -3566,6 +3573,10 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       ORDER BY cm.created_at ASC
     `, [req.params.id]);
 
+    const likeRows = await pool.query(`SELECT comment_id, COUNT(*)::int AS cnt, BOOL_OR(user_id = $2) AS liked FROM comment_likes WHERE comment_id = ANY($1::varchar[]) GROUP BY comment_id`, [commentsResult.rows.map(c=>c.id), req.user.id]).catch(()=>({rows:[]}));
+    const likeMap = {};
+    for (const r of (likeRows.rows || [])) likeMap[r.comment_id] = { count: r.cnt, liked: !!r.liked };
+
     const enriched = {
       id: r.id,
       subject: r.subject,
@@ -3592,8 +3603,11 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
         requestId: c.request_id,
         userId: c.user_id,
         content: c.content,
+         replyTo: c.reply_to || null,
         createdAt: c.created_at,
         attachments: typeof c.attachments === 'string' ? JSON.parse(c.attachments) : (c.attachments || []),
+         likes: (likeMap[c.id] && likeMap[c.id].count) || 0,
+         likedByMe: !!(likeMap[c.id] && likeMap[c.id].liked),
         user: c.user_name ? { id: c.user_id, name: c.user_name, email: c.user_email, role: c.user_role, avatar: c.user_avatar, createdAt: c.user_created_at } : null
       }))
     };
@@ -4074,13 +4088,13 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
       }
     }
 
-    const { content, attachments } = req.body;
+    const { content, attachments, replyTo } = req.body;
     const id = uuidv4();
     const now = new Date().toISOString();
 
     await pool.query(
-      'INSERT INTO comments (id, request_id, user_id, author_email, content, attachments, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [id, req.params.id, req.user.id, req.user.email || '', content, JSON.stringify(attachments || []), now]
+      'INSERT INTO comments (id, request_id, user_id, author_email, content, attachments, reply_to, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, req.params.id, req.user.id, req.user.email || '', content, JSON.stringify(attachments || []), replyTo || null, now]
     );
 
     await pool.query(
@@ -4093,19 +4107,19 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
     const clientId = existing.rows[0].client_id;
     const assignedTo = existing.rows[0].assigned_to;
     console.log('[RHMS-TOAST-BACKEND] comment created on', req.params.id, 'by', req.user.id, 'clientId=', existing.rows[0].client_id, 'assignedTo=', existing.rows[0].assigned_to);
-    await notifyAdmins(`New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
+    const preview = (content || '').slice(0, 120);
+    const data = { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview };
+    await notifyAdmins(`New comment on Request #${req.params.id} by ${req.user.name}`, data);
     
     if (clientId && clientId !== req.user.id) {
-      console.log('[RHMS-TOAST-BACKEND] notify client', clientId);
-      await notifyUser(clientId, `New comment on your request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
+      await notifyUser(clientId, `New comment on your request #${req.params.id} by ${req.user.name}`, data);
     }
     
     if (assignedTo && assignedTo !== req.user.id) {
-      console.log('[RHMS-TOAST-BACKEND] notify assignee', assignedTo);
-      await notifyUser(assignedTo, `New comment on Request #${req.params.id} by ${req.user.name}`, { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
+      await notifyUser(assignedTo, `New comment on Request #${req.params.id} by ${req.user.name}`, data);
     }
 
-    res.status(201).json({ id, requestId: req.params.id, userId: req.user.id, content, createdAt: now, user: mapUser(req.user) });
+    res.status(201).json({ id, requestId: req.params.id, userId: req.user.id, content, replyTo: replyTo || null, createdAt: now, user: mapUser(req.user) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -4149,6 +4163,26 @@ app.delete('/api/requests/:id/comments/:commentId', authMiddleware, async (req, 
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+app.post('/api/requests/:id/comments/:commentId/like', authMiddleware, async (req, res) => {
+  try {
+    const existing = await pool.query('SELECT id FROM comments WHERE id = $1 AND request_id = $2', [req.params.commentId, req.params.id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Comment not found' });
+    await pool.query('INSERT INTO comment_likes (comment_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.commentId, req.user.id]);
+    const cnt = await pool.query('SELECT COUNT(*)::int AS c FROM comment_likes WHERE comment_id = $1', [req.params.commentId]);
+    res.json({ liked: true, likes: cnt.rows[0].c });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.delete('/api/requests/:id/comments/:commentId/like', authMiddleware, async (req, res) => {
+  try {
+    const existing = await pool.query('SELECT id FROM comments WHERE id = $1 AND request_id = $2', [req.params.commentId, req.params.id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Comment not found' });
+    await pool.query('DELETE FROM comment_likes WHERE comment_id = $1 AND user_id = $2', [req.params.commentId, req.user.id]);
+    const cnt = await pool.query('SELECT COUNT(*)::int AS c FROM comment_likes WHERE comment_id = $1', [req.params.commentId]);
+    res.json({ liked: false, likes: cnt.rows[0].c });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 app.get('/api/requests/:id/feedback', authMiddleware, async (req, res) => {
@@ -6270,7 +6304,7 @@ app.get('/api/messages', authMiddleware, async (req, res) => {
        ORDER BY m.created_at ASC`,
       [type, conversationId]
     );
-    res.json(result.rows.map((r) => ({ ...r, attachments: (() => { try { return JSON.parse(r.attachments || '[]'); } catch { return []; } })() })));
+    res.json(result.rows.map((r) => ({ ...r, attachments: (() => { try { return JSON.parse(r.attachments || '[]'); } catch { return []; } })(), reactions: (() => { try { return JSON.parse(r.reactions || '[]'); } catch { return []; } })() })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -6279,7 +6313,7 @@ app.get('/api/messages', authMiddleware, async (req, res) => {
 
 app.post('/api/messages', authMiddleware, async (req, res) => {
   try {
-    const { conversationType, conversationId, content, attachments } = req.body || {};
+    const { conversationType, conversationId, content, attachments, replyTo } = req.body || {};
     const type = String(conversationType || 'direct');
     const cid = String(conversationId || '');
     if (!cid || !content || !String(content).trim()) return res.status(400).json({ error: 'content required' });
@@ -6287,18 +6321,30 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
     const id = uuidv4();
     const att = JSON.stringify(Array.isArray(attachments) ? attachments : []);
     await pool.query(
-      `INSERT INTO messages (id, conversation_type, conversation_id, sender_id, content, attachments, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-      [id, type, cid, req.user.id, String(content), att]
+      `INSERT INTO messages (id, conversation_type, conversation_id, sender_id, content, attachments, reply_to, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+      [id, type, cid, req.user.id, String(content), att, replyTo || null]
     );
     const result = await pool.query(
-      `SELECT m.id, m.conversation_type, m.conversation_id, m.sender_id, m.content, m.attachments, m.created_at,
+      `SELECT m.id, m.conversation_type, m.conversation_id, m.sender_id, m.content, m.attachments, m.reply_to, m.reactions, m.created_at,
               u.name AS sender_name, u.avatar AS sender_avatar, u.role AS sender_role
        FROM messages m LEFT JOIN users u ON m.sender_id = u.id WHERE m.id = $1`,
       [id]
     );
     const row = result.rows[0];
     row.attachments = (() => { try { return JSON.parse(row.attachments || '[]'); } catch { return []; } })();
+    row.reactions = (() => { try { return JSON.parse(row.reactions || '[]'); } catch { return []; } })();
+    // notify recipients
+    try {
+      if (type === 'direct') {
+        await notifyUser(cid, `New message from ${req.user.name}`, { type: 'message', conversationType: type, conversationId: cid, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview: String(content).slice(0, 80) });
+      } else if (type === 'group') {
+        const mems = await pool.query('SELECT user_id FROM user_groups WHERE group_id = $1', [cid]);
+        for (const r of mems.rows) {
+          await notifyUser(r.user_id, `New group message from ${req.user.name}`, { type: 'message', conversationType: type, conversationId: cid, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview: String(content).slice(0, 80) });
+        }
+      }
+    } catch (e) { console.error('notify message err', e.message); }
     res.status(201).json(row);
   } catch (err) {
     console.error(err);
@@ -6346,6 +6392,58 @@ app.get('/api/messages/unread-count', authMiddleware, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+app.put('/api/messages/:id', authMiddleware, async (req, res) => {
+  try {
+    const { content } = req.body || {};
+    if (!content || !String(content).trim()) return res.status(400).json({ error: 'content required' });
+    const existing = await pool.query('SELECT id, sender_id, conversation_type, conversation_id FROM messages WHERE id = $1', [req.params.id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Message not found' });
+    const m = existing.rows[0];
+    if (req.user.role !== 'admin' && m.sender_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (!(await canAccessConversation(req.user, m.conversation_type, m.conversation_id))) return res.status(403).json({ error: 'Forbidden' });
+    await pool.query('UPDATE messages SET content = $1, edited_at = NOW() WHERE id = $2', [String(content), req.params.id]);
+    const result = await pool.query(`SELECT m.id, m.conversation_type, m.conversation_id, m.sender_id, m.content, m.attachments, m.reply_to, m.reactions, m.edited_at, m.created_at, u.name AS sender_name, u.avatar AS sender_avatar, u.role AS sender_role FROM messages m LEFT JOIN users u ON m.sender_id = u.id WHERE m.id = $1`, [req.params.id]);
+    const row = result.rows[0];
+    row.attachments = (() => { try { return JSON.parse(row.attachments || '[]'); } catch { return []; } })();
+    row.reactions = (() => { try { return JSON.parse(row.reactions || '[]'); } catch { return []; } })();
+    res.json(row);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.delete('/api/messages/:id', authMiddleware, async (req, res) => {
+  try {
+    const existing = await pool.query('SELECT id, sender_id, conversation_type, conversation_id FROM messages WHERE id = $1', [req.params.id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Message not found' });
+    const m = existing.rows[0];
+    if (req.user.role !== 'admin' && m.sender_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    await pool.query('DELETE FROM messages WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/messages/:id/reactions', authMiddleware, async (req, res) => {
+  try {
+    const { emoji } = req.body || {};
+    if (!emoji) return res.status(400).json({ error: 'emoji required' });
+    const existing = await pool.query('SELECT id, reactions, conversation_type, conversation_id FROM messages WHERE id = $1', [req.params.id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Message not found' });
+    const m = existing.rows[0];
+    if (!(await canAccessConversation(req.user, m.conversation_type, m.conversation_id))) return res.status(403).json({ error: 'Forbidden' });
+    let reactions = [];
+    try { reactions = JSON.parse(m.reactions || '[]'); } catch { reactions = []; }
+    const idx = reactions.findIndex((r) => r.emoji === emoji);
+    if (idx === -1) reactions.push({ emoji, users: [req.user.id] });
+    else {
+      const uidx = reactions[idx].users.indexOf(req.user.id);
+      if (uidx === -1) reactions[idx].users.push(req.user.id);
+      else reactions[idx].users.splice(uidx, 1);
+      if (reactions[idx].users.length === 0) reactions.splice(idx, 1);
+    }
+    await pool.query('UPDATE messages SET reactions = $1 WHERE id = $2', [JSON.stringify(reactions), req.params.id]);
+    res.json({ reactions });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 app.get('/api/sessions', authMiddleware, roleMiddleware('admin'), async (req, res) => {

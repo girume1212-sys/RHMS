@@ -3,39 +3,24 @@ import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from './Icon';
 
-const COLORS = {
-  navy: '#102B65',
-  royal: '#0866F5',
-  secondary: '#2563EB',
-  pale: '#EFF4FF',
-  incoming: '#E9EDFA',
-  border: '#D7E3FF',
-  white: '#FFFFFF',
-  secondaryText: '#38558D',
-  unread: '#0866F5',
-  notif: '#EF2929',
-};
-
-function avatarUrl(u) {
-  if (!u) return null;
-  return u.avatar || null;
-}
-
 function initials(name) {
   return (name || '?').trim().split(/\s+/).map((p) => p.charAt(0)).join('').slice(0, 2).toUpperCase() || '?';
 }
 
 function Avatar({ user, size = 40 }) {
-  const url = avatarUrl(user);
-  if (url) {
-    return <img src={url} alt={user?.name || ''} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }} />;
+  const [failed, setFailed] = useState(false);
+  const url = user?.avatar || user?.avatar_url || null;
+  if (!url || failed) {
+    return (
+      <div style={{ width: size, height: size, borderRadius: '50%', background: 'linear-gradient(110deg, #0875F9 0%, #2563EB 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: size * 0.38, flexShrink: 0 }}>
+        {initials(user?.name)}
+      </div>
+    );
   }
-  return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: 'linear-gradient(110deg, #0875F9 0%, #2563EB 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: size * 0.38 }}>
-      {initials(user?.name)}
-    </div>
-  );
+  return <img src={url} alt={user?.name || ''} onError={() => setFailed(true)} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />;
 }
+
+const ROLE_LABELS = { admin: 'Admin', client: 'Client', developer: 'Developer', support: 'Escalation Team' };
 
 export default function CommentManagement() {
   const { user } = useAuth();
@@ -44,18 +29,23 @@ export default function CommentManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
-  const [selectedUser, setSelectedUser] = useState(null); // selected conversation/user in right panel
+  const [filter, setFilter] = useState('all');
+  const [selectedUser, setSelectedUser] = useState(null);
   const [attachments, setAttachments] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [showEmoji, setShowEmoji] = useState(false);
-  const [showAttachMenu, setShowAttachMenu] = useState(false);
-  const [acceptType, setAcceptType] = useState('*/*');
-  const fileInputRef = useRef(null);
   const [messages, setMessages] = useState([]);
   const [msgLoading, setMsgLoading] = useState(false);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [unreadMap, setUnreadMap] = useState({});
+  const [replyTo, setReplyTo] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [contextMsg, setContextMsg] = useState(null);
+  const [acceptType, setAcceptType] = useState('*/*');
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
   const pollRef = useRef(null);
 
   const role = user?.role || 'client';
@@ -80,7 +70,6 @@ export default function CommentManagement() {
     return () => { cancelled = true; };
   }, []);
 
-  // build sidebar sections
   const sections = buildSections(role, user, users, groups);
 
   const openConversation = useCallback(async (conv) => {
@@ -88,6 +77,8 @@ export default function CommentManagement() {
     setMessages([]);
     setText('');
     setAttachments([]);
+    setReplyTo(null);
+    setEditingId(null);
     setMsgLoading(true);
     try {
       const data = await api.get(`/api/messages?conversationType=${conv.type}&conversationId=${encodeURIComponent(conv.id)}`);
@@ -106,50 +97,23 @@ export default function CommentManagement() {
     if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // polling for new messages
   useEffect(() => {
     if (!selectedUser) return;
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
         const data = await api.get(`/api/messages?conversationType=${selectedUser.type}&conversationId=${encodeURIComponent(selectedUser.id)}`);
-        if (Array.isArray(data) && data.length !== messages.length) {
+        if (Array.isArray(data)) {
           setMessages(data);
           await api.put('/api/messages/read', { conversationType: selectedUser.type, conversationId: selectedUser.id });
+          setUnreadMap((m) => ({ ...m, [selectedUser.type + ':' + selectedUser.id]: 0 }));
         }
       } catch {}
-    }, 5000);
+    }, 4000);
     return () => clearInterval(pollRef.current);
-  }, [selectedUser, messages.length]);
+  }, [selectedUser]);
 
-  const send = async () => {
-    if ((!text.trim() && attachments.length === 0) || !selectedUser) return;
-    setSending(true);
-    try {
-      const created = await api.post('/api/messages', {
-        conversationType: selectedUser.type,
-        conversationId: selectedUser.id,
-        content: text,
-        attachments: [],
-      });
-      setMessages((prev) => [...prev, created]);
-      setText('');
-      await api.put('/api/messages/read', { conversationType: selectedUser.type, conversationId: selectedUser.id });
-    } catch (e) {
-      // ignore
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
-  };
-
-  // compute unread counts for sidebar (best-effort)
+  // unread counts
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -178,15 +142,94 @@ export default function CommentManagement() {
       }
     } catch {}
     openConversation(target);
-  }, [loading, sections.length, selectedUser]);
+  }, [loading, sections.length, selectedUser, openConversation]);
 
-  if (loading) {
-    return <div className="page-container"><div className="loading-screen"><div className="spinner"></div></div></div>;
-  }
-  if (error) {
-    return <div className="page-container"><div className="empty-state">{error}</div></div>;
-  }
+  const uploadAttachments = async (files) => {
+    const uploaded = [];
+    for (let i = 0; i < files.length; i++) {
+      const fd = new FormData();
+      fd.append('file', files[i]);
+      try {
+        const res = await api.upload('/api/upload', fd);
+        uploaded.push({ name: files[i].name, path: res.path, size: files[i].size });
+      } catch (e) { console.error(e); }
+      setUploadProgress(Math.round(((i + 1) / files.length) * 100));
+    }
+    setUploadProgress(0);
+    return uploaded;
+  };
 
+  const send = async () => {
+    if ((!text.trim() && attachments.length === 0) || !selectedUser || sending) return;
+    setSending(true);
+    try {
+      let atts = attachments.map((f) => ({ name: f.name, path: f.path || null, size: f.size }));
+      // if raw files not uploaded yet
+      const rawFiles = attachments.filter((f) => !f.path && f instanceof File);
+      if (rawFiles.length) {
+        const uploaded = await uploadAttachments(rawFiles);
+        atts = [...attachments.filter((f) => f.path), ...uploaded];
+      }
+      const created = await api.post('/api/messages', {
+        conversationType: selectedUser.type,
+        conversationId: selectedUser.id,
+        content: text || (atts.length ? 'Attachment' : ''),
+        attachments: atts,
+        replyTo: replyTo?.id || null,
+      });
+      setMessages((prev) => [...prev, created]);
+      setText('');
+      setAttachments([]);
+      setReplyTo(null);
+      await api.put('/api/messages/read', { conversationType: selectedUser.type, conversationId: selectedUser.id });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  };
+
+  const handleFiles = async (files) => {
+    const list = Array.from(files || []);
+    setAttachments((prev) => [...prev, ...list]);
+  };
+
+  const handleReaction = async (msgId, emoji) => {
+    try {
+      const res = await api.post(`/api/messages/${msgId}/reactions`, { emoji });
+      setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, reactions: res.reactions } : m)));
+    } catch {}
+  };
+
+  const handleEdit = async (msgId) => {
+    try {
+      const res = await api.put(`/api/messages/${msgId}`, { content: editText });
+      setMessages((prev) => prev.map((m) => (m.id === msgId ? res : m)));
+      setEditingId(null);
+      setEditText('');
+    } catch {}
+  };
+
+  const handleDelete = async (msgId) => {
+    if (!window.confirm('Delete this message?')) return;
+    try {
+      await api.delete(`/api/messages/${msgId}`);
+      setMessages((prev) => prev.filter((m) => m.id !== msgId));
+    } catch {}
+  };
+
+  const handleCopy = (content) => {
+    try { navigator.clipboard.writeText(content); } catch {}
+  };
+
+  const flatItems = sections.flatMap((s) => s.items);
   const filteredSections = sections.map((s) => ({
     ...s,
     items: s.items.filter((it) => {
@@ -196,66 +239,209 @@ export default function CommentManagement() {
     }),
   })).filter((s) => s.items.length > 0);
 
+  const totalUnread = Object.values(unreadMap).reduce((a, b) => a + (b || 0), 0);
+
+  if (loading) return <div className="page-container"><div className="loading-screen"><div className="spinner"></div></div></div>;
+  if (error) return <div className="page-container"><div className="empty-state">{error}</div></div>;
+
   return (
     <div className="page-container" style={{ padding: 0 }}>
-      <div className="cm-shell">
-        {/* Left sidebar */}
-        <div className="cm-left">
-          <div className="cm-left-header">
-            <h2 className="cm-title">Conversations</h2>
-            <button className="cm-new-btn" title="New conversation">+</button>
+      <div className="cm-shell" style={{ display: 'flex', gap: 12, padding: 12, height: 'calc(100vh - 120px)' }}>
+        {/* Left panel */}
+        <div className="cm-left" style={{ display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid #D7E3FF', overflow: 'hidden', width: 340, flexShrink: 0 }}>
+          <div style={{ padding: 16, borderBottom: '1px solid #D7E3FF', background: '#EFF4FF' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h2 style={{ margin: 0, fontSize: 18, color: '#102B65' }}>Conversations</h2>
+              <button className="cm-new-btn" title="New conversation" style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#0866F5', color: '#fff', cursor: 'pointer' }}>+</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              {['all', 'unread', 'mentions'].map((f) => (
+                <button key={f} onClick={() => setFilter(f)} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #D7E3FF', background: filter === f ? '#0866F5' : '#fff', color: filter === f ? '#fff' : '#38558D', cursor: 'pointer', fontSize: 12, textTransform: 'capitalize' }}>
+                  {f} {f === 'all' ? `(${flatItems.length})` : f === 'unread' ? `(${totalUnread})` : ''}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 8, padding: '6px 10px', border: '1px solid #D7E3FF' }}>
+              <Icon name="search" size={14} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search conversations..." style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13 }} />
+            </div>
           </div>
-          <div className="cm-search">
-            <Icon name="search" size={14} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search conversations..." />
-          </div>
-          <div className="cm-sort">Newest ▾</div>
-          <div className="cm-list">
-            {filteredSections.length === 0 && <div className="cm-empty">No conversations</div>}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+            {filteredSections.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>No conversations</div>}
             {filteredSections.map((section) => (
-              <SidebarSection key={section.key} section={section} selected={selectedUser} onSelect={openConversation} unreadMap={unreadMap} />
+              <div key={section.key} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#38558D', padding: '8px 4px' }}>{section.title} ({section.items.length})</div>
+                {section.items.map((it) => {
+                  const key = it.type + ':' + it.id;
+                  const isActive = selectedUser && selectedUser.type === it.type && selectedUser.id === it.id;
+                  const unread = unreadMap[key] || 0;
+                  if (filter === 'unread' && unread === 0) return null;
+                  return (
+                    <div key={key} onClick={() => openConversation(it)} style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 10, cursor: 'pointer', background: isActive ? '#EAF1FF' : 'transparent', marginBottom: 4, alignItems: 'center' }}>
+                      <Avatar user={{ name: it.name, avatar: it.avatar }} size={40} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ fontWeight: 600, fontSize: 14, color: '#102B65' }}>{it.name}</span>
+                          <span style={{ fontSize: 11, color: '#6b7280' }}>{it.time}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#0866F5' }}>{ROLE_LABELS[it.role] || it.role}</div>
+                        <div style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.last || 'No messages yet'}</div>
+                      </div>
+                      {unread > 0 && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: '#0866F5', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{unread}</div>}
+                    </div>
+                  );
+                })}
+              </div>
             ))}
           </div>
         </div>
 
-        {/* Right workspace */}
-        <div className="cm-right" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {/* Right panel */}
+        <div className="cm-right" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid #D7E3FF', overflow: 'hidden', minWidth: 0 }}>
           {selectedUser ? (
-            <ChatHeader selected={selectedUser} />
+            <>
+              <div style={{ padding: 14, borderBottom: '1px solid #D7E3FF', background: '#EFF4FF', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Avatar user={{ name: selectedUser.name, avatar: selectedUser.avatar }} size={44} />
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#102B65' }}>{selectedUser.name}</div>
+                    <div style={{ fontSize: 12, color: '#38558D' }}>{ROLE_LABELS[selectedUser.role] || selectedUser.role} · {selectedUser.online ? 'Online' : 'Offline'}</div>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>ID: {selectedUser.id}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button style={{ padding: 8, borderRadius: 8, border: '1px solid #D7E3FF', background: '#fff', cursor: 'pointer' }} title="Call">📞</button>
+                  <button style={{ padding: 8, borderRadius: 8, border: '1px solid #D7E3FF', background: '#fff', cursor: 'pointer' }} title="More">⋯</button>
+                </div>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: 16, background: '#F8FAFF' }}>
+                {msgLoading && <div style={{ textAlign: 'center', color: '#6b7280' }}>Loading...</div>}
+                {!msgLoading && messages.length === 0 && <div style={{ textAlign: 'center', color: '#6b7280' }}>No messages yet</div>}
+                {messages.map((m, idx) => {
+                  const d = new Date(m.created_at);
+                  const dateStr = d.toLocaleDateString();
+                  const prev = messages[idx - 1];
+                  const prevDate = prev ? new Date(prev.created_at).toLocaleDateString() : null;
+                  const own = m.sender_id === user?.id;
+                  const replied = m.reply_to ? messages.find((x) => x.id === m.reply_to) : null;
+                  return (
+                    <div key={m.id || idx}>
+                      {dateStr !== prevDate && <div style={{ textAlign: 'center', margin: '12px 0', fontSize: 11, color: '#6b7280' }}>{dateStr}</div>}
+                      <div style={{ display: 'flex', justifyContent: own ? 'flex-end' : 'flex-start', marginBottom: 10, gap: 8, alignItems: 'flex-end' }}>
+                        {!own && <Avatar user={{ name: m.sender_name, avatar: m.sender_avatar }} size={32} />}
+                        <div style={{ maxWidth: '70%' }}>
+                          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2, textAlign: own ? 'right' : 'left' }}>
+                            {!own && <span style={{ fontWeight: 600, color: '#102B65', marginRight: 6 }}>{m.sender_name}</span>}
+                            {ROLE_LABELS[m.sender_role] || m.sender_role}
+                            <span style={{ marginLeft: 6 }}>{d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                            {m.edited_at && <span style={{ marginLeft: 6, fontStyle: 'italic' }}>(edited)</span>}
+                          </div>
+                          {replied && (
+                            <div style={{ fontSize: 11, color: '#6b7280', background: '#EAF1FF', padding: '4px 8px', borderRadius: 8, marginBottom: 4, borderLeft: '3px solid #0866F5' }}>
+                              ↩ {replied.content?.slice(0, 60)}
+                            </div>
+                          )}
+                          {editingId === m.id ? (
+                            <div>
+                              <textarea value={editText} onChange={(e) => setEditText(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 8, border: '1px solid #D7E3FF' }} />
+                              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                                <button onClick={() => handleEdit(m.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#0866F5', color: '#fff', cursor: 'pointer' }}>Save</button>
+                                <button onClick={() => { setEditingId(null); setEditText(''); }} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #D7E3FF', background: '#fff', cursor: 'pointer' }}>Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ background: own ? 'linear-gradient(110deg, #0875F9 0%, #2563EB 100%)' : '#E9EDFA', color: own ? '#fff' : '#102B65', padding: '8px 12px', borderRadius: 12, position: 'relative' }} onContextMenu={(e) => { e.preventDefault(); setContextMsg(m); }}>
+                              {m.content}
+                              {Array.isArray(m.attachments) && m.attachments.length > 0 && (
+                                <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  {m.attachments.map((a, i) => (
+                                    <a key={i} href={a.path ? (process.env.REACT_APP_API_URL || '') + a.path : '#'} download target="_blank" rel="noreferrer" style={{ fontSize: 12, color: own ? '#fff' : '#0866F5', textDecoration: 'underline' }}>
+                                      📎 {a.name || 'file'} {a.size ? `(${Math.round(a.size / 1024)}KB)` : ''}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {Array.isArray(m.reactions) && m.reactions.length > 0 && (
+                            <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                              {m.reactions.map((r) => (
+                                <button key={r.emoji} onClick={() => handleReaction(m.id, r.emoji)} style={{ padding: '2px 6px', borderRadius: 10, border: '1px solid #D7E3FF', background: r.users.includes(user?.id) ? '#DBEAFE' : '#fff', cursor: 'pointer', fontSize: 12 }}>
+                                  {r.emoji} {r.users.length}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {own && <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'right', marginTop: 2 }}>✓✓</div>}
+                          {/* context menu */}
+                          {contextMsg?.id === m.id && (
+                            <div style={{ position: 'absolute', zIndex: 10, background: '#fff', border: '1px solid #D7E3FF', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, marginTop: 4 }}>
+                              {[
+                                { label: 'Reply', action: () => { setReplyTo(m); setContextMsg(null); } },
+                                { label: 'Copy', action: () => { handleCopy(m.content); setContextMsg(null); } },
+                                { label: 'React 👍', action: () => { handleReaction(m.id, '👍'); setContextMsg(null); } },
+                                ...(own ? [
+                                  { label: 'Edit', action: () => { setEditingId(m.id); setEditText(m.content); setContextMsg(null); } },
+                                  { label: 'Delete', action: () => { handleDelete(m.id); setContextMsg(null); } },
+                                ] : []),
+                              ].map((a) => (
+                                <button key={a.label} onClick={a.action} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>{a.label}</button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {own && <Avatar user={{ name: m.sender_name, avatar: m.sender_avatar }} size={32} />}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Composer */}
+              <div style={{ padding: 12, borderTop: '1px solid #D7E3FF', background: '#fff' }}>
+                {replyTo && (
+                  <div style={{ fontSize: 12, color: '#38558D', marginBottom: 6, padding: '4px 8px', background: '#EFF4FF', borderRadius: 6, display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Replying to: {replyTo.content?.slice(0, 40)}</span>
+                    <button onClick={() => setReplyTo(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>✕</button>
+                  </div>
+                )}
+                {attachments.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                    {attachments.map((f, i) => (
+                      <div key={i} style={{ fontSize: 12, background: '#EFF4FF', padding: '4px 8px', borderRadius: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
+                        📎 {f.name || f?.name}
+                        <button onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {uploadProgress > 0 && <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Uploading... {uploadProgress}%</div>}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                  <button onClick={() => { setAcceptType('*/*'); setTimeout(() => fileInputRef.current && fileInputRef.current.click(), 0); }} style={{ padding: 10, borderRadius: 10, border: '1px solid #D7E3FF', background: '#fff', cursor: 'pointer' }} title="Attach">📎</button>
+                  <textarea
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    onKeyDown={handleKey}
+                    placeholder="Write a message..."
+                    rows={1}
+                    style={{ flex: 1, padding: 10, borderRadius: 10, border: '1px solid #D7E3FF', resize: 'none', fontSize: 14 }}
+                  />
+                  <button onClick={() => setShowEmoji((s) => !s)} style={{ padding: 10, borderRadius: 10, border: '1px solid #D7E3FF', background: '#fff', cursor: 'pointer' }} title="Emoji">😊</button>
+                  <button onClick={send} disabled={sending || (!text.trim() && attachments.length === 0)} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#0866F5', color: '#fff', cursor: 'pointer', opacity: (sending || (!text.trim() && attachments.length === 0)) ? 0.5 : 1 }}>Send</button>
+                </div>
+                {showEmoji && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                    {['😀','😊','😂','😍','😎','🤔','👍','🙏','🔥','🎉','❤️','✅','📌','📎','💬','⭐'].map((e) => (
+                      <button key={e} onClick={() => { setText((t) => t + e); setShowEmoji(false); }} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18 }}>{e}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <input type="file" ref={fileInputRef} style={{ display: 'none' }} multiple onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+            </>
           ) : (
-            <ChatHeader selected={{ name: 'Select a conversation', role: '', type: 'direct' }} />
-          )}
-          {selectedUser && selectedUser.type === 'group' && selectedUser.members && selectedUser.members.length > 0 && (
-            <MemberStrip members={selectedUser.members} />
-          )}
-          <div className="cm-messages" style={{ flex: 1, minHeight: 0 }}>
-            {msgLoading && <div className="cm-empty">Loading...</div>}
-            {!msgLoading && selectedUser && messages.length === 0 && <div className="cm-empty">No messages yet</div>}
-            {!selectedUser && !msgLoading && <div className="cm-empty">Select a conversation</div>}
-            {selectedUser && renderMessages(messages, user)}
-            <div ref={messagesEndRef} />
-          </div>
-          <input type="file" ref={fileInputRef} style={{ display: 'none' }} multiple accept={acceptType} onChange={(e) => {
-            const files = Array.from(e.target.files || []);
-            setAttachments((prev) => [...prev, ...files]);
-            e.target.value = '';
-            setShowAttachMenu(false);
-          }} />
-          <Composer text={text} setText={setText} onSend={send} sending={sending} onKeyDown={handleKey}
-            onAttachClick={() => { setAcceptType('*/*'); setTimeout(() => fileInputRef.current && fileInputRef.current.click(), 0); }}
-            onAttachHover={setShowAttachMenu}
-            showAttachMenu={showAttachMenu}
-            onSelectAttachType={(accept) => { setAcceptType(accept); setShowAttachMenu(false); setTimeout(() => fileInputRef.current && fileInputRef.current.click(), 0); }}
-            onEmoji={() => setShowEmoji((s) => !s)}
-            showEmoji={showEmoji}
-            attachments={attachments}
-            onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))} />
-          {showEmoji && (
-            <div className="cm-emoji-panel">
-              {['😀','😊','😂','😍','😎','🤔','👍','🙏','🔥','🎉','❤️','✅','📌','📎','💬','⭐'].map((e) => (
-                <button key={e} className="cm-emoji-item" onClick={() => { setText((t) => t + e); setShowEmoji(false); }}>{e}</button>
-              ))}
-            </div>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>Select a conversation</div>
           )}
         </div>
       </div>
@@ -265,8 +451,6 @@ export default function CommentManagement() {
 
 function buildSections(role, me, users, groups) {
   const byRole = (r) => users.filter((u) => u.role === r && u.id !== me?.id);
-  const myGroupIds = new Set((groups || []).filter((g) => Array.isArray(g.members) ? g.members.includes(me?.id) : false).map((g) => g.id));
-  // fallback: infer membership via user_groups not provided; use groups with members
   const sections = [];
   if (role === 'admin') {
     sections.push({ key: 'dev', title: 'Developers', count: byRole('developer').length, items: byRole('developer').map(toItem('direct')) });
@@ -277,15 +461,13 @@ function buildSections(role, me, users, groups) {
     const admins = byRole('admin');
     sections.push({ key: 'adm', title: 'Admin', count: admins.length, items: admins.map(toItem('direct')) });
   } else if (role === 'developer') {
-    // same-group developers
     const sameGroupDevs = users.filter((u) => u.role === 'developer' && u.id !== me?.id && sharesGroup(u, me, groups));
     sections.push({ key: 'dev', title: 'Developers', count: sameGroupDevs.length, items: sameGroupDevs.map(toItem('direct')) });
     const esc = byRole('support');
     sections.push({ key: 'esc', title: 'Escalation Team', count: esc.length, items: esc.map(toItem('direct')) });
-    // group chat entry
     const myGroups = groups.filter((g) => isMember(g, me?.id));
     myGroups.forEach((g) => {
-      sections.unshift({ key: 'grp-' + g.id, title: g.name, count: (g.members || []).length, items: [{ id: g.id, type: 'group', name: g.name, role: 'Group Chat', members: (g.members || []).map((mid) => users.find((u) => u.id === mid)).filter(Boolean), avatar: null, last: '', time: '' }] });
+      sections.unshift({ key: 'grp-' + g.id, title: g.name, count: (g.members || []).length, items: [{ id: g.id, type: 'group', name: g.name, role: 'Group Chat', members: (g.members || []).map((mid) => users.find((u) => u.id === mid)).filter(Boolean), avatar: null, last: '', time: '', online: true }] });
     });
   } else if (role === 'support') {
     const esc = byRole('support').filter((u) => u.id !== me?.id);
@@ -293,7 +475,6 @@ function buildSections(role, me, users, groups) {
     const devs = byRole('developer');
     sections.push({ key: 'dev', title: 'Developers', count: devs.length, items: devs.map(toItem('direct')) });
   }
-  // ensure item shape
   sections.forEach((s) => {
     s.items = s.items.map((it) => ({
       type: it.type || 'direct',
@@ -302,13 +483,12 @@ function buildSections(role, me, users, groups) {
       role: it.role,
       members: it.members,
       avatar: it.avatar,
-      online: it.online,
+      online: it.online || false,
       last: it.last || '',
       time: it.time || '',
     }));
   });
-  // remove empty sections
-  return sections.filter((s) => s.items && s.items.length > 0 || true);
+  return sections.filter((s) => s.items && s.items.length > 0);
 }
 
 function toItem(type) {
@@ -316,7 +496,6 @@ function toItem(type) {
 }
 
 function sharesGroup(u, me, groups) {
-  // groups may not include members; fallback true for demo
   if (!groups || groups.length === 0) return true;
   const uGroups = groups.filter((g) => Array.isArray(g.members) && g.members.includes(u.id)).map((g) => g.id);
   const mGroups = groups.filter((g) => Array.isArray(g.members) && g.members.includes(me?.id)).map((g) => g.id);
@@ -328,152 +507,4 @@ function isMember(g, uid) {
   if (!g) return false;
   if (Array.isArray(g.members)) return g.members.includes(uid);
   return false;
-}
-
-const GRADIENTS = {
-  Developers: 'linear-gradient(120deg, #DBEAFE 0%, #E0E7FF 100%)',
-  'Escalation Team': 'linear-gradient(120deg, #CCFBF1 0%, #DBEAFE 100%)',
-  Clients: 'linear-gradient(120deg, #FEF3C7 0%, #FFEDD5 100%)',
-  Users: 'linear-gradient(120deg, #F3E8FF 0%, #E0E7FF 100%)',
-};
-
-function SidebarSection({ section, selected, onSelect, unreadMap }) {
-  const [open, setOpen] = useState(true);
-  const grad = GRADIENTS[section.title] || 'linear-gradient(120deg, #DBEAFE 0%, #E0E7FF 100%)';
-  return (
-    <div className="cm-section">
-      <div className="cm-section-header" onClick={() => setOpen((o) => !o)}>
-        <span className="cm-section-title">{section.title}({section.count ?? section.items.length})</span>
-        <span className="cm-section-arrow">
-          {open ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38558D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38558D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-          )}
-        </span>
-      </div>
-      {open && (
-        <div className="cm-grad-container" style={{ background: grad }}>
-          {section.items.map((it) => {
-            const key = it.type + ':' + it.id;
-            const isActive = selected && selected.type === it.type && selected.id === it.id;
-            const unread = unreadMap[key] || 0;
-            return (
-              <div key={key} className={`cm-conv ${isActive ? 'active' : ''}`} onClick={() => onSelect(it)}>
-                <div className="cm-avatar-wrap">
-                  {it.type === 'group' ? (
-                    <div className="cm-avatar group">G</div>
-                  ) : (
-                    <Avatar user={{ name: it.name, avatar: it.avatar }} size={40} />
-                  )}
-                </div>
-                <div className="cm-conv-body">
-                  <div className="cm-conv-name">{it.name}</div>
-                  <div className="cm-conv-role">{it.role}</div>
-                  <div className="cm-conv-preview">{it.last || 'No messages yet'}</div>
-                </div>
-                <div className="cm-conv-right">
-                  <div className="cm-conv-time">{it.time}</div>
-                  {unread > 0 && <div className="cm-unread">{unread}</div>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ChatHeader({ selected }) {
-  const status = selected?.online === true ? 'Online' : (selected?.online === false ? 'Offline' : null);
-  return (
-    <div className="cm-header">
-      <div className="cm-header-left">
-        {selected?.type === 'group' ? (
-          <div className="cm-header-avatar group">G</div>
-        ) : (
-          <Avatar user={{ name: selected?.name, avatar: selected?.avatar }} size={44} />
-        )}
-        <div>
-          <div className="cm-header-name">{selected?.name}</div>
-          <div className="cm-header-sub">
-            {selected?.type === 'group' ? 'Group Chat' : [selected?.role, status].filter(Boolean).join(' · ')}
-          </div>
-        </div>
-      </div>
-      <div className="cm-header-actions">
-        <button className="cm-icon-btn" title="Voice call">📞</button>
-        <button className="cm-icon-btn" title="Video call">📹</button>
-        <button className="cm-icon-btn" title="More">⋯</button>
-      </div>
-    </div>
-  );
-}
-
-function MemberStrip({ members }) {
-  const shown = members.slice(0, 5);
-  const extra = members.length - shown.length;
-  return (
-    <div className="cm-members">
-      {shown.map((m) => (
-        <div key={m.id} className="cm-member">
-          <Avatar user={m} size={28} />
-          <div className="cm-member-info">
-            <div className="cm-member-name">{m.name}</div>
-            <div className="cm-member-role">{m.role}</div>
-          </div>
-        </div>
-      ))}
-      {extra > 0 && <div className="cm-member-extra">+{extra}</div>}
-    </div>
-  );
-}
-
-function renderMessages(messages, me) {
-  let lastDate = null;
-  const out = [];
-  messages.forEach((m, idx) => {
-    const d = new Date(m.created_at);
-    const dateStr = d.toLocaleDateString();
-    if (dateStr !== lastDate) {
-      lastDate = dateStr;
-      out.push(<div key={'date-' + idx} className="cm-date-sep">{dateStr}</div>);
-    }
-    const own = m.sender_id === me?.id;
-    out.push(
-      <div key={m.id || idx} className={`cm-msg ${own ? 'out' : 'in'}`}>
-        {!own && <div className="cm-msg-avatar"><Avatar user={{ name: m.sender_name, avatar: m.sender_avatar }} size={32} /></div>}
-        <div className="cm-msg-col">
-          <div className="cm-msg-meta">
-            <span className="cm-msg-sender">{m.sender_name || 'Unknown'}</span>
-            <span className="cm-msg-time">{d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-          </div>
-          <div className="cm-bubble">{m.content}</div>
-          {own && <div className="cm-checks">✓✓</div>}
-        </div>
-        {own && <div className="cm-msg-avatar"><Avatar user={{ name: m.sender_name, avatar: m.sender_avatar }} size={32} /></div>}
-      </div>
-    );
-  });
-  return out;
-}
-
-function Composer({ text, setText, onSend, sending, onKeyDown }) {
-  return (
-    <div className="cm-composer">
-      <button className="cm-plus-btn" title="Add">+</button>
-      <textarea
-        className="cm-input"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder="Write a message..."
-        rows={1}
-      />
-      <button className="cm-attach-btn" title="Attach">📎</button>
-      <button className="cm-emoji-btn" title="Emoji">😊</button>
-      <button className="cm-send-btn" onClick={onSend} disabled={sending || !text.trim()}>➤</button>
-    </div>
-  );
 }
