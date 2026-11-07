@@ -34,7 +34,7 @@ export function LanguageProvider({ children }) {
         return key;
       }
     }
-    let str = typeof value === 'string' ? value : key;
+    let str = typeof value === 'string' ? value : (params && params.defaultValue != null ? params.defaultValue : key);
     if (params) {
       for (const [k, v] of Object.entries(params)) {
         str = str.replace(new RegExp('\\{' + k + '\\}', 'g'), String(v));
