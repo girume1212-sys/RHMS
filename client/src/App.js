@@ -9,6 +9,7 @@ import Dashboard from './components/Dashboard';
 import DeveloperDashboard from './components/DeveloperDashboard';
 import EscalationDashboard from './components/EscalationDashboard';
 import RequestsList from './components/RequestsList';
+import CommentManagement from './components/CommentManagement';
 import CreateRequest from './components/CreateRequest';
 import RequestDetail from './components/RequestDetail';
 import Users from './components/Users';
@@ -55,6 +56,7 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute allowedRoles={['admin', 'support', 'developer']}><Layout /></ProtectedRoute>}>
         <Route index element={<RoleDashboard />} />
         <Route path="requests" element={<RequestsList />} />
+        <Route path="comments" element={<CommentManagement />} />
         <Route path="requests/create" element={<CreateRequest />} />
         <Route path="requests/:id" element={<RequestDetail />} />
         <Route path="search" element={<GlobalSearchResults />} />
@@ -73,6 +75,7 @@ function AppRoutes() {
       <Route path="/client" element={<ProtectedRoute allowedRoles={['client']}><ClientLayout /></ProtectedRoute>}>
         <Route index element={<ClientDashboard />} />
         <Route path="requests" element={<RequestsList />} />
+        <Route path="comments" element={<CommentManagement />} />
         <Route path="requests/create" element={<CreateRequest />} />
         <Route path="requests/:id" element={<RequestDetail />} />
         <Route path="search" element={<GlobalSearchResults clientMode />} />
