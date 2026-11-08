@@ -131,6 +131,14 @@ export default function ClientLayout() {
   const commentNotes = allNotifications.filter(n => n.type === 'comment');
   const unreadBell = bellNotes.filter(n => !n.is_read).length;
   const unreadMsgs = commentNotes.filter(n => !n.is_read).length;
+
+  const markAllCommentNotificationsRead = useCallback(() => {
+    const unread = commentNotes.filter(n => !n.is_read);
+    if (unread.length === 0) return;
+    setAllNotifications(prev => prev.map(n => n.type === 'comment' ? { ...n, is_read: true } : n));
+    unread.forEach(n => api.put(`/api/notifications/${n.id}/read`).catch(() => refreshNotifications()));
+  }, [commentNotes, refreshNotifications]);
+const totalIncomingComments = commentNotes.length;
   
   const [notifFilter, setNotifFilter] = useState('unread');
   const [msgFilter, setMsgFilter] = useState('unread');
@@ -419,10 +427,11 @@ export default function ClientLayout() {
             <button
               key={item.path}
               className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
-              onClick={() => navigate(item.path)}
+              onClick={() => { if (item.path === '/client/comments') markAllCommentNotificationsRead(); navigate(item.path); }}
             >
               <span className="nav-icon"><Icon name={item.icon} /></span>
               {sidebarOpen && <span className="nav-label">{item.label}</span>}
+              {sidebarOpen && item.path === '/client/comments' && unreadMsgs > 0 && <span className="badge" style={{ position: 'static', marginLeft: 'auto', background: '#2563EB', color: '#fff' }}>{unreadMsgs > 99 ? '99+' : unreadMsgs}</span>}
             </button>
           ))}
         </nav>
@@ -570,7 +579,7 @@ export default function ClientLayout() {
                   ) : (
                     <div className="dropdown-panel-list">
                       {shownMsgs.slice(0, 10).map((m) => (
-                        <div key={m.id} className={`dropdown-panel-item${m.is_read ? '' : ' notif-unread'}`} onClick={() => { markNotificationRead(m.id); navigate(`/client/requests/${m.requestId}`); setShowMessages(false); }}>
+                        <div key={m.id} className={`dropdown-panel-item${m.is_read ? '' : ' notif-unread'}`} onClick={() => { markNotificationRead(m.id); navigate('/client/comments'); setShowMessages(false); }}>
                           <div className="dropdown-panel-icon"><Icon name="comment" size={16} /></div>
                           <div className="dropdown-panel-content">
                             <p><strong>{m.userName || t('common.unknown')}</strong> {t('common.commentedOn')} <strong>#{m.requestId}</strong></p>

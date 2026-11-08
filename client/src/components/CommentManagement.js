@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search } from 'lucide-react';
+import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from './Icon';
@@ -36,6 +36,7 @@ export default function CommentManagement() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [attachments, setAttachments] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [previewMedia, setPreviewMedia] = useState(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [emojiTab, setEmojiTab] = useState('stickers');
@@ -192,7 +193,7 @@ export default function CommentManagement() {
       const created = await api.post('/api/messages', {
         conversationType: selectedUser.type,
         conversationId: selectedUser.id,
-        content: text || (atts.length ? 'Attachment' : ''),
+        content: text || '',
         attachments: atts,
         replyTo: replyTo?.id || null,
       });
@@ -315,14 +316,46 @@ export default function CommentManagement() {
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
             {filteredSections.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: T.muted }}>No conversations</div>}
-            {filteredSections.map((section) => (
-              <div key={section.key} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.text2, padding: '8px 4px' }}>{section.title} ({section.items.length})</div>
+            {filteredSections.map((section) => {
+              const isAdminSection = !!section.special || section.key === 'admin-support';
+              return (
+              <div key={section.key} style={{ marginBottom: isAdminSection ? 12 : 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: isAdminSection ? T.accent : T.text2, padding: '8px 4px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {isAdminSection && <ShieldCheck size={14} color={T.accent} />}
+                  {section.title} ({section.items.length})
+                </div>
+                {isAdminSection && <div style={{ height: 1, background: T.border, margin: '0 4px 8px', opacity: 0.6 }} />}
                 {section.items.map((it) => {
                   const key = it.type + ':' + it.id;
                   const isActive = selectedUser && selectedUser.type === it.type && selectedUser.id === it.id;
                   const unread = unreadMap[key] || 0;
                   if (filter === 'unread' && unread === 0) return null;
+                  if (isAdminSection) {
+                    return (
+                      <div key={key} data-conv onClick={() => openConversation(it)} style={{ display: 'flex', gap: 10, padding: 12, borderRadius: 12, cursor: 'pointer', marginBottom: 6, alignItems: 'center', transition: 'all 0.2s', background: isActive ? (dark ? 'rgba(59,130,246,0.18)' : 'rgba(8,102,245,0.12)') : (dark ? 'rgba(59,130,246,0.08)' : 'rgba(8,102,245,0.05)'), border: '1px solid ' + (isActive ? T.accent : (dark ? 'rgba(59,130,246,0.35)' : 'rgba(8,102,245,0.25)')), boxShadow: isActive ? '0 4px 12px rgba(37,99,235,0.18)' : 'none' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37,99,235,0.15)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = isActive ? '0 4px 12px rgba(37,99,235,0.18)' : 'none'; }}>
+                        <div style={{ position: 'relative' }}>
+                          <Avatar user={{ name: it.name, avatar: it.avatar }} size={44} />
+                          <div style={{ position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: '50%', background: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid ' + T.panel }}>
+                            <ShieldCheck size={11} color="#fff" />
+                          </div>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 700, fontSize: 15, color: T.text }}>{it.name}</span>
+                            <span style={{ fontSize: 11, color: T.muted }}>{it.time}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: '#2563EB', padding: '2px 6px', borderRadius: 6, letterSpacing: 0.5 }}>ADMIN</span>
+                            <span style={{ fontSize: 11, color: T.text2 }}>Support</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{it.last || 'No messages yet'}</div>
+                        </div>
+                        {unread > 0 && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: '#2563EB', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{unread}</div>}
+                      </div>
+                    );
+                  }
                   return (
                     <div key={key} data-conv onClick={() => openConversation(it)} style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 10, cursor: 'pointer', background: isActive ? T.hover : 'transparent', marginBottom: 4, alignItems: 'center', transition: 'background 0.2s' }}>
                       <Avatar user={{ name: it.name, avatar: it.avatar }} size={40} />
@@ -338,8 +371,10 @@ export default function CommentManagement() {
                     </div>
                   );
                 })}
+                {isAdminSection && <div style={{ height: 1, background: T.border, margin: '8px 4px 0', opacity: 0.4 }} />}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -401,19 +436,61 @@ export default function CommentManagement() {
                                   <span style={{ color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280') }}>{d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                                   {m.edited_at && <span style={{ fontStyle: 'italic', color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280') }}>(edited)</span>}
                                 </div>
-                                <div style={{ fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word' }}>{m.content}</div>
+                                {m.content ? <div style={{ fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word' }}>{m.content}</div> : null}
                                 {Array.isArray(m.attachments) && m.attachments.length > 0 && (
-                                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    {m.attachments.map((a, i) => (
-                                      <a key={i} href={a.path ? (process.env.REACT_APP_API_URL || '') + a.path : '#'} download target="_blank" rel="noreferrer" style={{ fontSize: 12, color: own ? (dark ? '#BFDBFE' : '#1D4ED8') : T.accent, textDecoration: 'underline' }}>
-                                        📎 {a.name || 'file'} {a.size ? `(${Math.round(a.size / 1024)}KB)` : ''}
-                                      </a>
-                                    ))}
+                                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, alignItems: own ? 'flex-end' : 'flex-start' }}>
+                                    {(() => {
+                                      const media = m.attachments.filter((a) => /\.(jpe?g|png|gif|webp)$/i.test(a.name || '') || /\.(mp4|webm|ogg|mov)$/i.test(a.name || ''));
+                                      const docs = m.attachments.filter((a) => !(/\.(jpe?g|png|gif|webp)$/i.test(a.name || '') || /\.(mp4|webm|ogg|mov)$/i.test(a.name || '')));
+                                      return (
+                                        <>
+                                          {media.length > 0 && (
+                                            <div style={{ display: 'grid', gridTemplateColumns: media.length > 1 ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: 4, maxWidth: 300, borderRadius: 8, overflow: 'hidden' }}>
+                                              {media.map((a, i) => {
+                                                const url = a.path ? (process.env.REACT_APP_API_URL || '') + a.path : '#';
+                                                const name = a.name || 'file';
+                                                const isImg = /\.(jpe?g|png|gif|webp)$/i.test(name);
+                                                if (isImg) {
+                                                  return (
+                                                    <img key={i} src={url} alt={name} onClick={() => setPreviewMedia({ type: 'image', url })} style={{ width: '100%', height: media.length > 1 ? 120 : 'auto', maxHeight: 260, objectFit: 'cover', cursor: 'pointer', display: 'block', borderRadius: 6 }} />
+                                                  );
+                                                }
+                                                return (
+                                                  <div key={i} onClick={() => setPreviewMedia({ type: 'video', url })} style={{ position: 'relative', width: '100%', height: media.length > 1 ? 120 : 180, background: '#000', cursor: 'pointer', borderRadius: 6, overflow: 'hidden' }}>
+                                                    <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} muted preload="metadata" />
+                                                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)' }}>
+                                                      <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>▶</div>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                          {docs.map((a, i) => {
+                                            const url = a.path ? (process.env.REACT_APP_API_URL || '') + a.path : '#';
+                                            const name = a.name || 'file';
+                                            const sizeLabel = a.size ? (a.size > 1024 * 1024 ? (a.size / (1024 * 1024)).toFixed(1) + ' MB' : Math.round(a.size / 1024) + ' KB') : '';
+                                            const ext = (name.split('.').pop() || '').toUpperCase();
+                                            const icon = /\.pdf$/i.test(name) ? 'PDF' : /\.(docx?)$/i.test(name) ? 'DOC' : /\.(xlsx?|csv)$/i.test(name) ? 'XLS' : /\.(pptx?)$/i.test(name) ? 'PPT' : /\.(mp3|wav|ogg|m4a)$/i.test(name) ? 'AUD' : 'FILE';
+                                            return (
+                                              <a key={i} href={url} target="_blank" rel="noreferrer" download style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, borderRadius: 8, background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', border: '1px solid ' + T.border, textDecoration: 'none', color: own ? (dark ? '#BFDBFE' : '#1D4ED8') : T.accent, maxWidth: 300 }}>
+                                                <div style={{ width: 36, height: 36, borderRadius: 8, background: T.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{icon}</div>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                  <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                                                  <div style={{ fontSize: 10, color: T.muted }}>{ext}{sizeLabel ? ' · ' + sizeLabel : ''}</div>
+                                                </div>
+                                                <div style={{ fontSize: 12, flexShrink: 0 }}>⬇</div>
+                                              </a>
+                                            );
+                                          })}
+                                        </>
+                                      );
+                                    })()}
                                   </div>
                                 )}
-                              </div>
-                            </div>
-                          )}
+                               </div>
+                             </div>
+                            )}
                           {Array.isArray(m.reactions) && m.reactions.length > 0 && (
                             <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                               {m.reactions.map((r) => (
@@ -591,7 +668,18 @@ export default function CommentManagement() {
           )}
         </div>
       </div>
+      {previewMedia && (
+        <div onClick={() => setPreviewMedia(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 20 }}>
+          {previewMedia.type === 'image' ? (
+            <img src={previewMedia.url} alt="preview" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 10, objectFit: 'contain' }} />
+          ) : (
+            <video src={previewMedia.url} controls autoPlay style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 10 }} />
+          )}
+          <a href={previewMedia.url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', bottom: 24, right: 24, padding: '8px 14px', borderRadius: 8, background: '#fff', color: '#111', textDecoration: 'none', fontWeight: 600 }}>Download</a>
+        </div>
+      )}
     </div>
+
   );
 }
 
@@ -607,19 +695,22 @@ function buildSections(role, me, users, groups) {
     const admins = byRole('admin');
     sections.push({ key: 'adm', title: 'Admin', count: admins.length, items: admins.map(toItem('direct')) });
   } else if (role === 'developer') {
+    const adminItems = byRole('admin').map(toItem('direct')).map((it) => ({ ...it, specialAdmin: true }));
     const sameGroupDevs = users.filter((u) => u.role === 'developer' && u.id !== me?.id && sharesGroup(u, me, groups));
-    sections.push({ key: 'dev', title: 'Developers', count: sameGroupDevs.length, items: sameGroupDevs.map(toItem('direct')) });
     const esc = byRole('support');
-    sections.push({ key: 'esc', title: 'Escalation Team', count: esc.length, items: esc.map(toItem('direct')) });
     const myGroups = groups.filter((g) => isMember(g, me?.id));
-    myGroups.forEach((g) => {
-      sections.unshift({ key: 'grp-' + g.id, title: g.name, count: (g.members || []).length, items: [{ id: g.id, type: 'group', name: g.name, role: 'Group Chat', members: (g.members || []).map((mid) => users.find((u) => u.id === mid)).filter(Boolean), avatar: null, last: '', time: '', online: true }] });
-    });
+    const groupSections = myGroups.map((g) => ({ key: 'grp-' + g.id, title: g.name, count: (g.members || []).length, items: [{ id: g.id, type: 'group', name: g.name, role: 'Group Chat', members: (g.members || []).map((mid) => users.find((u) => u.id === mid)).filter(Boolean), avatar: null, last: '', time: '', online: true, specialAdmin: false }] }));
+    if (adminItems.length) sections.push({ key: 'admin-support', title: 'ADMIN SUPPORT', special: true, count: adminItems.length, items: adminItems });
+    groupSections.forEach((s) => sections.push(s));
+    if (sameGroupDevs.length) sections.push({ key: 'dev', title: 'Developers', count: sameGroupDevs.length, items: sameGroupDevs.map(toItem('direct')) });
+    if (esc.length) sections.push({ key: 'esc', title: 'Escalation Team', count: esc.length, items: esc.map(toItem('direct')) });
   } else if (role === 'support') {
+    const adminItems = byRole('admin').map(toItem('direct')).map((it) => ({ ...it, specialAdmin: true }));
     const esc = byRole('support').filter((u) => u.id !== me?.id);
-    sections.push({ key: 'esc', title: 'Escalation Team', count: esc.length, items: esc.map(toItem('direct')) });
     const devs = byRole('developer');
-    sections.push({ key: 'dev', title: 'Developers', count: devs.length, items: devs.map(toItem('direct')) });
+    if (adminItems.length) sections.push({ key: 'admin-support', title: 'ADMIN SUPPORT', special: true, count: adminItems.length, items: adminItems });
+    if (esc.length) sections.push({ key: 'esc', title: 'Escalation Team', count: esc.length, items: esc.map(toItem('direct')) });
+    if (devs.length) sections.push({ key: 'dev', title: 'Developers', count: devs.length, items: devs.map(toItem('direct')) });
   }
   sections.forEach((s) => {
     s.items = s.items.map((it) => ({
@@ -632,6 +723,7 @@ function buildSections(role, me, users, groups) {
       online: it.online || false,
       last: it.last || '',
       time: it.time || '',
+      specialAdmin: !!it.specialAdmin || !!s.special,
     }));
   });
   return sections.filter((s) => s.items && s.items.length > 0);
