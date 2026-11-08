@@ -105,7 +105,7 @@ export function AuthProvider({ children }) {
     }
   }, [token, fetchUser]);
 
-  const googleLogin = async (credential, intent = 'login') => {
+  const googleLogin = useCallback(async (credential, intent = 'login') => {
     let res;
     try {
       res = await fetch(`${API_BASE}/api/auth/google`, {
@@ -127,9 +127,9 @@ export function AuthProvider({ children }) {
     setToken(data.token);
     setLoading(false);
     return data.user;
-  };
+  }, [changeLanguage]);
 
-  const login = async (username, email, password) => {
+  const login = useCallback(async (username, email, password) => {
     let res;
     try {
       res = await fetch(`${API_BASE}/api/auth/login`, {
@@ -151,7 +151,7 @@ export function AuthProvider({ children }) {
     setToken(data.token);
     setLoading(false);
     return data.user;
-  };
+  }, [changeLanguage]);
 
   const logout = () => {
     localStorage.removeItem('rhms_token');

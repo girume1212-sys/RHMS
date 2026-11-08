@@ -24,7 +24,7 @@ export function LanguageProvider({ children }) {
     }
   }, []);
 
-  const t = (key, params) => {
+  const t = useCallback((key, params) => {
     const keys = key.split('.');
     let value = translations[language] || translations.en;
     for (const k of keys) {
@@ -41,7 +41,7 @@ export function LanguageProvider({ children }) {
       }
     }
     return str;
-  };
+  }, [language]);
 
   return (
     <LanguageContext.Provider value={{ language, changeLanguage, t }}>

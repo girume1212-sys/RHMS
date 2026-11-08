@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import Icon from './Icon';
@@ -23,7 +24,9 @@ function Avatar({ user, size = 40 }) {
 const ROLE_LABELS = { admin: 'Admin', client: 'Client', developer: 'Developer', support: 'Escalation Team' };
 
 export default function CommentManagement() {
-  const { user } = useAuth();
+  const { user, darkMode } = useAuth();
+  const dark = !!darkMode;
+  const T = dark ? { bg:'#0B1220', panel:'#111C2E', surface:'#16243A', bubbleIn:'#1B2A41', border:'#263750', text:'#E6EDF7', text2:'#9AAAC0', muted:'#71829B', accent:'#3B82F6', purple:'#6366F1', btn:'linear-gradient(90deg,#2563EB,#6366F1)', out:'linear-gradient(90deg,#1D4ED8,#4F46E5)', hover:'#1C2B45', input:'#0F1A2B', green:'#22C55E' } : { bg:'#F8FAFF', panel:'#FFFFFF', surface:'#EFF4FF', bubbleIn:'#E9EDFA', border:'#D7E3FF', text:'#102B65', text2:'#38558D', muted:'#6b7280', accent:'#0866F5', purple:'#6366F1', btn:'linear-gradient(90deg,#0875F9,#2563EB)', out:'linear-gradient(90deg,#0875F9,#2563EB)', hover:'#EAF1FF', input:'#FFFFFF', green:'#10B981' };
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +37,10 @@ export default function CommentManagement() {
   const [attachments, setAttachments] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiTab, setEmojiTab] = useState('stickers');
+  const [emojiSearch, setEmojiSearch] = useState('');
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [messages, setMessages] = useState([]);
   const [msgLoading, setMsgLoading] = useState(false);
   const [text, setText] = useState('');
@@ -47,6 +54,9 @@ export default function CommentManagement() {
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const pollRef = useRef(null);
+  const textareaRef = useRef(null);
+  const attachRef = useRef(null);
+  const emojiRef = useRef(null);
 
   const role = user?.role || 'client';
 
@@ -96,6 +106,15 @@ export default function CommentManagement() {
   useEffect(() => {
     if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    const onClick = (e) => {
+      if (attachRef.current && !attachRef.current.contains(e.target)) setShowAttachMenu(false);
+      if (emojiRef.current && !emojiRef.current.contains(e.target)) setShowEmojiPicker(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
 
   useEffect(() => {
     if (!selectedUser) return;
@@ -201,6 +220,19 @@ export default function CommentManagement() {
     setAttachments((prev) => [...prev, ...list]);
   };
 
+  const insertAtCursor = (emoji) => {
+    const ta = textareaRef.current;
+    if (ta) {
+      const start = ta.selectionStart ?? text.length;
+      const end = ta.selectionEnd ?? text.length;
+      const next = text.slice(0, start) + emoji + text.slice(end);
+      setText(next);
+      setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + emoji.length; }, 0);
+    } else {
+      setText((t) => t + emoji);
+    }
+  };
+
   const handleReaction = async (msgId, emoji) => {
     try {
       const res = await api.post(`/api/messages/${msgId}/reactions`, { emoji });
@@ -245,49 +277,64 @@ export default function CommentManagement() {
   if (error) return <div className="page-container"><div className="empty-state">{error}</div></div>;
 
   return (
-    <div className="page-container" style={{ padding: 0 }}>
-      <div className="cm-shell" style={{ display: 'flex', gap: 12, padding: 12, height: 'calc(100vh - 120px)' }}>
+    <div className="page-container cm-root" style={{ padding: 0, '--cm-hover': T.hover }}>
+      <style>{`
+        .cm-root button { transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease; }
+        .cm-root button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .cm-root button:active { transform: translateY(0); }
+        .cm-root [data-conv]:hover { background: var(--cm-hover) !important; }
+      `}</style>
+      <div style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'center', gap: 12, background: dark ? 'linear-gradient(90deg, rgba(37,99,235,0.12), rgba(99,102,241,0.08))' : 'linear-gradient(90deg, rgba(37,99,235,0.08), rgba(99,102,241,0.05))', borderRadius: 12, margin: '12px 12px 0' }}>
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: T.btn, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+          <MessageCircleMore size={20} />
+        </div>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>Comments</div>
+          <div style={{ fontSize: 13, color: T.muted }}>Manage conversations, discuss requests, and collaborate with your team.</div>
+        </div>
+      </div>
+      <div className="cm-shell" style={{ display: 'flex', gap: 12, padding: 12, height: 'calc(100vh - 180px)', background: T.bg }}>
         {/* Left panel */}
-        <div className="cm-left" style={{ display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid #D7E3FF', overflow: 'hidden', width: 340, flexShrink: 0 }}>
-          <div style={{ padding: 16, borderBottom: '1px solid #D7E3FF', background: '#EFF4FF' }}>
+        <div className="cm-left" style={{ display: 'flex', flexDirection: 'column', background: T.panel, borderRadius: 16, border: '1px solid ' + T.border, overflow: 'hidden', width: 340, flexShrink: 0 }}>
+          <div style={{ padding: 16, borderBottom: '1px solid ' + T.border, background: T.surface }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h2 style={{ margin: 0, fontSize: 18, color: '#102B65' }}>Conversations</h2>
-              <button className="cm-new-btn" title="New conversation" style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#0866F5', color: '#fff', cursor: 'pointer' }}>+</button>
+              <h2 style={{ margin: 0, fontSize: 18, color: T.text }}>Conversations</h2>
+              <button className="cm-new-btn" title="New conversation" style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: T.accent, color: '#fff', cursor: 'pointer' }}>+</button>
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
               {['all', 'unread', 'mentions'].map((f) => (
-                <button key={f} onClick={() => setFilter(f)} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #D7E3FF', background: filter === f ? '#0866F5' : '#fff', color: filter === f ? '#fff' : '#38558D', cursor: 'pointer', fontSize: 12, textTransform: 'capitalize' }}>
+                <button key={f} onClick={() => setFilter(f)} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid ' + T.border, background: filter === f ? T.accent : T.panel, color: filter === f ? T.panel : T.text2, cursor: 'pointer', fontSize: 12, textTransform: 'capitalize' }}>
                   {f} {f === 'all' ? `(${flatItems.length})` : f === 'unread' ? `(${totalUnread})` : ''}
                 </button>
               ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 8, padding: '6px 10px', border: '1px solid #D7E3FF' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.panel, borderRadius: 8, padding: '6px 10px', border: '1px solid ' + T.border, transition: 'border-color 0.2s, box-shadow 0.2s' }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.boxShadow = '0 0 0 3px ' + (dark ? 'rgba(59,130,246,0.15)' : 'rgba(8,102,245,0.12)'); }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = 'none'; }}>
               <Icon name="search" size={14} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search conversations..." style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13 }} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search conversations..." style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13, background: 'transparent', color: T.text }} />
             </div>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
-            {filteredSections.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>No conversations</div>}
+            {filteredSections.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: T.muted }}>No conversations</div>}
             {filteredSections.map((section) => (
               <div key={section.key} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#38558D', padding: '8px 4px' }}>{section.title} ({section.items.length})</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.text2, padding: '8px 4px' }}>{section.title} ({section.items.length})</div>
                 {section.items.map((it) => {
                   const key = it.type + ':' + it.id;
                   const isActive = selectedUser && selectedUser.type === it.type && selectedUser.id === it.id;
                   const unread = unreadMap[key] || 0;
                   if (filter === 'unread' && unread === 0) return null;
                   return (
-                    <div key={key} onClick={() => openConversation(it)} style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 10, cursor: 'pointer', background: isActive ? '#EAF1FF' : 'transparent', marginBottom: 4, alignItems: 'center' }}>
+                    <div key={key} data-conv onClick={() => openConversation(it)} style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 10, cursor: 'pointer', background: isActive ? T.hover : 'transparent', marginBottom: 4, alignItems: 'center', transition: 'background 0.2s' }}>
                       <Avatar user={{ name: it.name, avatar: it.avatar }} size={40} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 600, fontSize: 14, color: '#102B65' }}>{it.name}</span>
-                          <span style={{ fontSize: 11, color: '#6b7280' }}>{it.time}</span>
+                          <span style={{ fontWeight: 600, fontSize: 14, color: T.text }}>{it.name}</span>
+                          <span style={{ fontSize: 11, color: T.muted }}>{it.time}</span>
                         </div>
-                        <div style={{ fontSize: 11, color: '#0866F5' }}>{ROLE_LABELS[it.role] || it.role}</div>
-                        <div style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.last || 'No messages yet'}</div>
+                        <div style={{ fontSize: 11, color: T.accent }}>{ROLE_LABELS[it.role] || it.role}</div>
+                        <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.last || 'No messages yet'}</div>
                       </div>
-                      {unread > 0 && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: '#0866F5', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{unread}</div>}
+                      {unread > 0 && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: T.accent, color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{unread}</div>}
                     </div>
                   );
                 })}
@@ -297,26 +344,26 @@ export default function CommentManagement() {
         </div>
 
         {/* Right panel */}
-        <div className="cm-right" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid #D7E3FF', overflow: 'hidden', minWidth: 0 }}>
+        <div className="cm-right" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.panel, borderRadius: 16, border: '1px solid ' + T.border, overflow: 'hidden', minWidth: 0 }}>
           {selectedUser ? (
             <>
-              <div style={{ padding: 14, borderBottom: '1px solid #D7E3FF', background: '#EFF4FF', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ padding: 14, borderBottom: '1px solid ' + T.border, background: T.surface, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <Avatar user={{ name: selectedUser.name, avatar: selectedUser.avatar }} size={44} />
                   <div>
-                    <div style={{ fontWeight: 700, color: '#102B65' }}>{selectedUser.name}</div>
-                    <div style={{ fontSize: 12, color: '#38558D' }}>{ROLE_LABELS[selectedUser.role] || selectedUser.role} · {selectedUser.online ? 'Online' : 'Offline'}</div>
-                    <div style={{ fontSize: 11, color: '#6b7280' }}>ID: {selectedUser.id}</div>
+                    <div style={{ fontWeight: 700, color: T.text }}>{selectedUser.name}</div>
+                    <div style={{ fontSize: 12, color: T.text2 }}>{ROLE_LABELS[selectedUser.role] || selectedUser.role} · {selectedUser.online ? 'Online' : 'Offline'}</div>
+                    <div style={{ fontSize: 11, color: T.muted }}>ID: {selectedUser.id}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button style={{ padding: 8, borderRadius: 8, border: '1px solid #D7E3FF', background: '#fff', cursor: 'pointer' }} title="Call">📞</button>
-                  <button style={{ padding: 8, borderRadius: 8, border: '1px solid #D7E3FF', background: '#fff', cursor: 'pointer' }} title="More">⋯</button>
+                  <button style={{ padding: 8, borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }} title="Call">📞</button>
+                  <button style={{ padding: 8, borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }} title="More">⋯</button>
                 </div>
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: 16, background: '#F8FAFF' }}>
-                {msgLoading && <div style={{ textAlign: 'center', color: '#6b7280' }}>Loading...</div>}
-                {!msgLoading && messages.length === 0 && <div style={{ textAlign: 'center', color: '#6b7280' }}>No messages yet</div>}
+              <div style={{ flex: 1, overflowY: 'auto', padding: 16, background: T.bg }}>
+                {msgLoading && <div style={{ textAlign: 'center', color: T.muted }}>Loading...</div>}
+                {!msgLoading && messages.length === 0 && <div style={{ textAlign: 'center', color: T.muted }}>No messages yet</div>}
                 {messages.map((m, idx) => {
                   const d = new Date(m.created_at);
                   const dateStr = d.toLocaleDateString();
@@ -326,56 +373,60 @@ export default function CommentManagement() {
                   const replied = m.reply_to ? messages.find((x) => x.id === m.reply_to) : null;
                   return (
                     <div key={m.id || idx}>
-                      {dateStr !== prevDate && <div style={{ textAlign: 'center', margin: '12px 0', fontSize: 11, color: '#6b7280' }}>{dateStr}</div>}
+                      {dateStr !== prevDate && <div style={{ textAlign: 'center', margin: '12px 0', fontSize: 11, color: T.muted }}>{dateStr}</div>}
                       <div style={{ display: 'flex', justifyContent: own ? 'flex-end' : 'flex-start', marginBottom: 10, gap: 8, alignItems: 'flex-end' }}>
                         {!own && <Avatar user={{ name: m.sender_name, avatar: m.sender_avatar }} size={32} />}
-                        <div style={{ maxWidth: '70%' }}>
-                          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2, textAlign: own ? 'right' : 'left' }}>
-                            {!own && <span style={{ fontWeight: 600, color: '#102B65', marginRight: 6 }}>{m.sender_name}</span>}
-                            {ROLE_LABELS[m.sender_role] || m.sender_role}
-                            <span style={{ marginLeft: 6 }}>{d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-                            {m.edited_at && <span style={{ marginLeft: 6, fontStyle: 'italic' }}>(edited)</span>}
-                          </div>
+                        <div style={{ maxWidth: '72%' }}>
                           {replied && (
-                            <div style={{ fontSize: 11, color: '#6b7280', background: '#EAF1FF', padding: '4px 8px', borderRadius: 8, marginBottom: 4, borderLeft: '3px solid #0866F5' }}>
+                            <div style={{ fontSize: 11, color: T.muted, background: T.hover, padding: '4px 8px', borderRadius: 8, marginBottom: 4, borderLeft: '3px solid #0866F5' }}>
                               ↩ {replied.content?.slice(0, 60)}
                             </div>
                           )}
                           {editingId === m.id ? (
                             <div>
-                              <textarea value={editText} onChange={(e) => setEditText(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 8, border: '1px solid #D7E3FF' }} />
+                              <textarea value={editText} onChange={(e) => setEditText(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 8, border: '1px solid ' + T.border }} />
                               <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                                <button onClick={() => handleEdit(m.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#0866F5', color: '#fff', cursor: 'pointer' }}>Save</button>
-                                <button onClick={() => { setEditingId(null); setEditText(''); }} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #D7E3FF', background: '#fff', cursor: 'pointer' }}>Cancel</button>
+                                <button onClick={() => handleEdit(m.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: T.accent, color: '#fff', cursor: 'pointer' }}>Save</button>
+                                <button onClick={() => { setEditingId(null); setEditText(''); }} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }}>Cancel</button>
                               </div>
                             </div>
                           ) : (
-                            <div style={{ background: own ? 'linear-gradient(110deg, #0875F9 0%, #2563EB 100%)' : '#E9EDFA', color: own ? '#fff' : '#102B65', padding: '8px 12px', borderRadius: 12, position: 'relative' }} onContextMenu={(e) => { e.preventDefault(); setContextMsg(m); }}>
-                              {m.content}
-                              {Array.isArray(m.attachments) && m.attachments.length > 0 && (
-                                <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                  {m.attachments.map((a, i) => (
-                                    <a key={i} href={a.path ? (process.env.REACT_APP_API_URL || '') + a.path : '#'} download target="_blank" rel="noreferrer" style={{ fontSize: 12, color: own ? '#fff' : '#0866F5', textDecoration: 'underline' }}>
-                                      📎 {a.name || 'file'} {a.size ? `(${Math.round(a.size / 1024)}KB)` : ''}
-                                    </a>
-                                  ))}
+                            <div style={{ position: 'relative', background: own ? (dark ? '#DBEAFE22' : '#EAF2FF') : (dark ? '#F1F5F922' : '#F3F4F6'), color: own ? (dark ? '#E2E8F0' : '#1E3A8A') : (dark ? '#E2E8F0' : '#1F2937'), padding: '10px 14px', borderRadius: 18, border: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : (dark ? '1px solid #475569' : '1px solid #E5E7EB'), boxShadow: own ? '0 4px 12px rgba(37,99,235,0.14)' : '0 4px 12px rgba(0,0,0,0.08)', backdropFilter: 'blur(2px)' }} onContextMenu={(e) => { e.preventDefault(); setContextMsg(m); }}>
+                              {/* tail */}
+                              <span style={{ position: 'absolute', bottom: -7, [own ? 'right' : 'left']: 16, width: 14, height: 14, background: 'inherit', transform: 'rotate(45deg)', borderRadius: 3, borderRight: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : 'none', borderBottom: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : 'none', borderLeft: !own ? (dark ? '1px solid #475569' : '1px solid #E5E7EB') : 'none', borderTop: !own ? (dark ? '1px solid #475569' : '1px solid #E5E7EB') : 'none', zIndex: 0, boxShadow: own ? '2px 2px 6px rgba(37,99,235,0.08)' : '2px 2px 6px rgba(0,0,0,0.05)' }} />
+                              <div style={{ position: 'relative', zIndex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 11, opacity: 0.9, flexWrap: 'wrap', textAlign: own ? 'right' : 'left', justifyContent: own ? 'flex-end' : 'flex-start' }}>
+                                  <span style={{ fontWeight: 700, color: own ? (dark ? '#BFDBFE' : '#1D4ED8') : (dark ? '#E2E8F0' : '#111827') }}>{own ? (m.sender_name || 'You') : (m.sender_name || 'Unknown')}</span>
+                                  <span style={{ color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280'), fontWeight: 500 }}>{ROLE_LABELS[m.sender_role] || m.sender_role}</span>
+                                  <span style={{ color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280') }}>{d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                                  {m.edited_at && <span style={{ fontStyle: 'italic', color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280') }}>(edited)</span>}
                                 </div>
-                              )}
+                                <div style={{ fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word' }}>{m.content}</div>
+                                {Array.isArray(m.attachments) && m.attachments.length > 0 && (
+                                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    {m.attachments.map((a, i) => (
+                                      <a key={i} href={a.path ? (process.env.REACT_APP_API_URL || '') + a.path : '#'} download target="_blank" rel="noreferrer" style={{ fontSize: 12, color: own ? (dark ? '#BFDBFE' : '#1D4ED8') : T.accent, textDecoration: 'underline' }}>
+                                        📎 {a.name || 'file'} {a.size ? `(${Math.round(a.size / 1024)}KB)` : ''}
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                           {Array.isArray(m.reactions) && m.reactions.length > 0 && (
                             <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                               {m.reactions.map((r) => (
-                                <button key={r.emoji} onClick={() => handleReaction(m.id, r.emoji)} style={{ padding: '2px 6px', borderRadius: 10, border: '1px solid #D7E3FF', background: r.users.includes(user?.id) ? '#DBEAFE' : '#fff', cursor: 'pointer', fontSize: 12 }}>
+                                <button key={r.emoji} onClick={() => handleReaction(m.id, r.emoji)} style={{ padding: '2px 6px', borderRadius: 10, border: '1px solid ' + T.border, background: r.users.includes(user?.id) ? T.hover : T.panel, cursor: 'pointer', fontSize: 12 }}>
                                   {r.emoji} {r.users.length}
                                 </button>
                               ))}
                             </div>
                           )}
-                          {own && <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'right', marginTop: 2 }}>✓✓</div>}
+                          {own && <div style={{ fontSize: 11, color: '#3B82F6', textAlign: 'right', marginTop: 2, display: 'flex', justifyContent: 'flex-end', gap: 4, alignItems: 'center' }}>{m.read ? <><span>✓✓</span><span>Seen</span></> : <span>✓</span>}</div>}
                           {/* context menu */}
                           {contextMsg?.id === m.id && (
-                            <div style={{ position: 'absolute', zIndex: 10, background: '#fff', border: '1px solid #D7E3FF', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, marginTop: 4 }}>
+                            <div style={{ position: 'absolute', zIndex: 10, background: T.panel, border: '1px solid ' + T.border, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, marginTop: 4 }}>
                               {[
                                 { label: 'Reply', action: () => { setReplyTo(m); setContextMsg(null); } },
                                 { label: 'Copy', action: () => { handleCopy(m.content); setContextMsg(null); } },
@@ -399,9 +450,9 @@ export default function CommentManagement() {
               </div>
 
               {/* Composer */}
-              <div style={{ padding: 12, borderTop: '1px solid #D7E3FF', background: '#fff' }}>
+              <div style={{ padding: 12, borderTop: '1px solid ' + T.border, background: T.panel }}>
                 {replyTo && (
-                  <div style={{ fontSize: 12, color: '#38558D', marginBottom: 6, padding: '4px 8px', background: '#EFF4FF', borderRadius: 6, display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 12, color: T.text2, marginBottom: 6, padding: '4px 8px', background: T.surface, borderRadius: 6, display: 'flex', justifyContent: 'space-between' }}>
                     <span>Replying to: {replyTo.content?.slice(0, 40)}</span>
                     <button onClick={() => setReplyTo(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>✕</button>
                   </div>
@@ -409,26 +460,121 @@ export default function CommentManagement() {
                 {attachments.length > 0 && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
                     {attachments.map((f, i) => (
-                      <div key={i} style={{ fontSize: 12, background: '#EFF4FF', padding: '4px 8px', borderRadius: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <div key={i} style={{ fontSize: 12, background: T.surface, padding: '4px 8px', borderRadius: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
                         📎 {f.name || f?.name}
                         <button onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>✕</button>
                       </div>
                     ))}
                   </div>
                 )}
-                {uploadProgress > 0 && <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Uploading... {uploadProgress}%</div>}
+                {uploadProgress > 0 && <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>Uploading... {uploadProgress}%</div>}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                  <button onClick={() => { setAcceptType('*/*'); setTimeout(() => fileInputRef.current && fileInputRef.current.click(), 0); }} style={{ padding: 10, borderRadius: 10, border: '1px solid #D7E3FF', background: '#fff', cursor: 'pointer' }} title="Attach">📎</button>
+                  <div ref={attachRef} style={{ position: 'relative' }} onMouseEnter={() => setShowAttachMenu(true)} onMouseLeave={() => setShowAttachMenu(false)}>
+                     <button style={{ padding: 10, borderRadius: 10, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }} title="Attach"><Paperclip size={18} color={T.text2} /></button>
+                     {showAttachMenu && (
+                       <div style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 8, background: T.panel, border: '1px solid ' + T.border, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: 6, zIndex: 60, minWidth: 190 }}>
+                         {[
+                           { label: 'Photos', icon: <ImageIcon size={16} color="#2B547E" />, accept: 'image/*' },
+                           { label: 'Videos', icon: <Video size={16} color="#2B547E" />, accept: 'video/*' },
+                           { label: 'Documents', icon: <FileText size={16} color="#2B547E" />, accept: '.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,application/pdf' },
+                           { label: 'Music / Audio', icon: <Music size={16} color="#2B547E" />, accept: 'audio/*' },
+                           { label: 'Other Files', icon: <Paperclip size={16} color="#2B547E" />, accept: '*/*' },
+                         ].map((opt) => (
+                           <button key={opt.label} onClick={() => { setAcceptType(opt.accept); setShowAttachMenu(false); setTimeout(() => fileInputRef.current && fileInputRef.current.click(), 0); }}
+                             style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8, color: T.text, fontSize: 13, textAlign: 'left' }}
+                             onMouseEnter={(e) => { e.currentTarget.style.background = T.hover; }}
+                             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                             {opt.icon} {opt.label}
+                           </button>
+                         ))}
+                       </div>
+                     )}
+                   </div>
                   <textarea
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={handleKey}
                     placeholder="Write a message..."
                     rows={1}
-                    style={{ flex: 1, padding: 10, borderRadius: 10, border: '1px solid #D7E3FF', resize: 'none', fontSize: 14 }}
+                    style={{ flex: 1, padding: 10, borderRadius: 10, border: '1px solid ' + T.border, resize: 'none', fontSize: 14, background: T.input, color: T.text, transition: 'border-color 0.2s, box-shadow 0.2s' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.boxShadow = '0 0 0 3px ' + (dark ? 'rgba(59,130,246,0.15)' : 'rgba(8,102,245,0.12)'); }}
+                    onMouseLeave={(e) => { if (document.activeElement !== e.currentTarget) { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = 'none'; } }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.boxShadow = '0 0 0 3px ' + (dark ? 'rgba(59,130,246,0.2)' : 'rgba(8,102,245,0.15)'); }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = 'none'; }}
                   />
-                  <button onClick={() => setShowEmoji((s) => !s)} style={{ padding: 10, borderRadius: 10, border: '1px solid #D7E3FF', background: '#fff', cursor: 'pointer' }} title="Emoji">😊</button>
-                  <button onClick={send} disabled={sending || (!text.trim() && attachments.length === 0)} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#0866F5', color: '#fff', cursor: 'pointer', opacity: (sending || (!text.trim() && attachments.length === 0)) ? 0.5 : 1 }}>Send</button>
+                  <div ref={emojiRef} style={{ position: 'relative' }} onMouseEnter={() => setShowEmojiPicker(true)} onMouseLeave={() => setShowEmojiPicker(false)}>
+                     <button style={{ padding: 10, borderRadius: 10, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }} title="Emoji"><Smile size={18} color={T.text2} /></button>
+                     {showEmojiPicker && (
+                       <div style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: 8, background: T.panel, border: '1px solid ' + T.border, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', width: 320, maxHeight: 360, overflow: 'hidden', zIndex: 60, display: 'flex', flexDirection: 'column' }}>
+                         <div style={{ display: 'flex', borderBottom: '1px solid ' + T.border, background: T.surface }}>
+                           {['stickers','emoji','more'].map((tab) => (
+                             <button key={tab} onClick={() => setEmojiTab(tab)}
+                               style={{ flex: 1, padding: '8px 4px', border: 'none', background: emojiTab === tab ? T.panel : 'transparent', color: emojiTab === tab ? '#2B547E' : T.text2, cursor: 'pointer', fontWeight: 600, fontSize: 12, borderBottom: emojiTab === tab ? '2px solid #2B547E' : '2px solid transparent' }}>
+                               {tab === 'stickers' ? 'Stickers' : tab === 'emoji' ? 'Emoji' : 'More'}
+                             </button>
+                           ))}
+                         </div>
+                         <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+                           {emojiTab === 'stickers' && (
+                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                               {['🎉','🎊','🥳','😍','😎','🤩','🔥','💪','👍','❤️','💯','✨','🚀','🎯','🏆','🌟','👏','🙌','🫶','💖','🎁','🎈','🌈','⭐'].map((s, i) => (
+                                 <button key={i} onClick={() => { insertAtCursor(s); setShowEmojiPicker(false); }}
+                                   style={{ fontSize: 28, border: 'none', background: 'transparent', cursor: 'pointer', padding: 6, borderRadius: 8 }}
+                                   onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.background = T.hover; }}
+                                   onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'transparent'; }}>
+                                   {s}
+                                 </button>
+                               ))}
+                             </div>
+                           )}
+                           {emojiTab === 'emoji' && (
+                             <div>
+                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, background: T.input, borderRadius: 8, padding: '4px 8px', border: '1px solid ' + T.border }}>
+                                 <Search size={14} color={T.muted} />
+                                 <input value={emojiSearch} onChange={(e) => setEmojiSearch(e.target.value)} placeholder="Search emoji..." style={{ border: 'none', outline: 'none', flex: 1, fontSize: 12, background: 'transparent', color: T.text }} />
+                               </div>
+                               {[
+                                 { name: 'Smileys', items: ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','😱','😨','😰','😥','😓'] },
+                                 { name: 'Gestures', items: ['👍','👎','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','👈','👉','👆','👇','☝️','✋','🤚','🖐','🖖','👋','🤝','🙏','👏','🙌','👐','🤲'] },
+                                 { name: 'Symbols', items: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','✅','❌','⭐','🔥','✨','💯','⚡','🎉','🎊'] },
+                               ].map((cat) => {
+                                 const filtered = emojiSearch ? cat.items.filter((e) => e.includes(emojiSearch)) : cat.items;
+                                 if (emojiSearch && filtered.length === 0) return null;
+                                 return (
+                                   <div key={cat.name} style={{ marginBottom: 8 }}>
+                                     <div style={{ fontSize: 11, fontWeight: 700, color: T.text2, marginBottom: 4 }}>{cat.name}</div>
+                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                                       {filtered.map((e, i) => (
+                                         <button key={i} onClick={() => { insertAtCursor(e); setShowEmojiPicker(false); }}
+                                           style={{ fontSize: 18, border: 'none', background: 'transparent', cursor: 'pointer', padding: 4, borderRadius: 6 }}
+                                           onMouseEnter={(ev) => { ev.currentTarget.style.background = T.hover; }}
+                                           onMouseLeave={(ev) => { ev.currentTarget.style.background = 'transparent'; }}>
+                                           {e}
+                                         </button>
+                                       ))}
+                                     </div>
+                                   </div>
+                                 );
+                               })}
+                             </div>
+                           )}
+                           {emojiTab === 'more' && (
+                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                               {['👍','❤️','😂','😮','😢','😡','🎉','🔥','👏','🙏','💯','✅','❌','⭐','💬','📌'].map((r, i) => (
+                                 <button key={i} onClick={() => { insertAtCursor(r); setShowEmojiPicker(false); }}
+                                   style={{ fontSize: 22, border: 'none', background: 'transparent', cursor: 'pointer', padding: 6, borderRadius: 8 }}
+                                   onMouseEnter={(e) => { e.currentTarget.style.background = T.hover; }}
+                                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                                   {r}
+                                 </button>
+                               ))}
+                             </div>
+                           )}
+                         </div>
+                       </div>
+                     )}
+                   </div>
+                  <button onClick={send} disabled={sending || (!text.trim() && attachments.length === 0)} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: T.accent, color: '#fff', cursor: 'pointer', opacity: (sending || (!text.trim() && attachments.length === 0)) ? 0.5 : 1 }}>Send</button>
                 </div>
                 {showEmoji && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
@@ -438,10 +584,10 @@ export default function CommentManagement() {
                   </div>
                 )}
               </div>
-              <input type="file" ref={fileInputRef} style={{ display: 'none' }} multiple onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+              <input type="file" ref={fileInputRef} accept={acceptType} style={{ display: "none" }} multiple onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
             </>
           ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>Select a conversation</div>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted }}>Select a conversation</div>
           )}
         </div>
       </div>
@@ -508,3 +654,6 @@ function isMember(g, uid) {
   if (Array.isArray(g.members)) return g.members.includes(uid);
   return false;
 }
+
+
+

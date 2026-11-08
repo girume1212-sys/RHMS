@@ -353,10 +353,12 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
         sender_id VARCHAR(50) REFERENCES users(id) ON DELETE SET NULL,
         content TEXT NOT NULL,
         attachments TEXT DEFAULT '[]',
+        delivered BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_type, conversation_id, created_at)`);
+     await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered BOOLEAN DEFAULT FALSE`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS message_read_tracking (
         user_id VARCHAR(50) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -6296,9 +6298,14 @@ app.get('/api/messages', authMiddleware, async (req, res) => {
     const conversationId = String(req.query.conversationId || '');
     if (!conversationId) return res.status(400).json({ error: 'conversationId required' });
     if (!(await canAccessConversation(req.user, type, conversationId))) return res.status(403).json({ error: 'Forbidden' });
-    const result = await pool.query(
-      `SELECT m.id, m.conversation_type, m.conversation_id, m.sender_id, m.content, m.attachments, m.created_at,
-              u.name AS sender_name, u.avatar AS sender_avatar, u.role AS sender_role
+    await pool.query(
+      `UPDATE messages SET delivered = TRUE WHERE conversation_type = $1 AND conversation_id = $2 AND sender_id <> $3`,
+       [type, conversationId, req.user.id]
+     );
+     const result = await pool.query(
+       `SELECT m.id, m.conversation_type, m.conversation_id, m.sender_id, m.content, m.attachments, m.delivered, m.created_at,
+              u.name AS sender_name, u.avatar AS sender_avatar, u.role AS sender_role,
+               EXISTS (SELECT 1 FROM message_read_tracking r WHERE r.conversation_type = m.conversation_type AND r.conversation_id = m.conversation_id AND r.user_id <> m.sender_id AND r.last_read_at >= m.created_at) AS read
        FROM messages m LEFT JOIN users u ON m.sender_id = u.id
        WHERE m.conversation_type = $1 AND m.conversation_id = $2
        ORDER BY m.created_at ASC`,
@@ -6326,7 +6333,7 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
       [id, type, cid, req.user.id, String(content), att, replyTo || null]
     );
     const result = await pool.query(
-      `SELECT m.id, m.conversation_type, m.conversation_id, m.sender_id, m.content, m.attachments, m.reply_to, m.reactions, m.created_at,
+      `SELECT m.id, m.conversation_type, m.conversation_id, m.sender_id, m.content, m.attachments, m.reply_to, m.reactions, m.delivered, m.created_at,
               u.name AS sender_name, u.avatar AS sender_avatar, u.role AS sender_role
        FROM messages m LEFT JOIN users u ON m.sender_id = u.id WHERE m.id = $1`,
       [id]

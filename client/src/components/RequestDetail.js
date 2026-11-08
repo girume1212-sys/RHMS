@@ -1030,326 +1030,109 @@ export default function RequestDetail() {
             </div>
           )}
 
-          {}
-          <div className="chat-card">
-            <div className="chat-header">
-              <div className="chat-header-title">
-                <span className="chat-header-icon"><Icon name="comment" size={16} /></span>
-                <span className="chat-header-text">{t('common.comments')}</span>
-                <span className="chat-count">({request.comments?.length || 0})</span>
-              </div>
-              <div className="chat-header-actions">
-                <div className="chat-search">
-                  <span className="chat-search-icon"><Icon name="search" size={13} /></span>
-                  <input
-                    type="text"
-                    placeholder={t('common.searchComments')}
-                    value={commentSearch}
-                    onChange={(e) => setCommentSearch(e.target.value)}
-                  />
-                </div>
-                <select className="chat-filter" value={commentFilter} onChange={(e) => setCommentFilter(e.target.value)}>
-                  <option value="all">{t('common.all')}</option>
-                  <option value="client">{t('common.fromClient')}</option>
-                  <option value="staff">{t('common.fromStaff')}</option>
-                </select>
+      {}
+      <div className="detail-history-full">
+          <div className="detail-card">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, border: 'none', padding: 0 }}>📜 {t('common.history')}</h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <button
-                  className="chat-sort-btn"
-                  onClick={() => setCommentSort(commentSort === 'latest' ? 'oldest' : 'latest')}
-                  title={t('common.toggleSortOrder')}
+                  className="action-btn-text edit"
+                  onClick={() => setShowHistory(!showHistory)}
                 >
-                  {commentSort === 'latest' ? t('common.sortLatest') : t('common.sortOldest')}
+                  {showHistory ? t('common.hideHistory') : t('common.showHistory')}
                 </button>
               </div>
             </div>
 
-            <div className="chat-conversation" ref={chatRef}>
-              {buildChatItems().map((item, idx) => {
-                if (item.kind === 'separator') {
-                  return (
-                    <div key={`sep-${idx}`} className="chat-date-separator">
-                      <span>{dayLabel(item.ts)}</span>
-                    </div>
-                  );
-                }
-                const c = item.comment;
-                const isClientRole = c.user?.role === 'client';
-                const isOwnComment = !!user && !!c.user && c.user.id === user.id;
-                return (
-                  <div key={c.id || `cm-${idx}`} className={`chat-row ${isOwnComment ? 'right' : ''}`}>
-                    <div className={`chat-avatar ${isClientRole ? 'client' : 'staff'}`}>{renderAvatar(c.user)}</div>
-                    <div className="chat-column">
-                      <div className="chat-meta">
-                        <span className="chat-name">{c.user?.name || t('common.unknown')}</span>
-                         <span className={`chat-online-status ${((c.user?.id && user?.id && c.user.id === user.id) || !!c.user?.isOnline) ? 'online' : 'offline'}`}>
-                           <span className="chat-online-dot" />
-                           {((c.user?.id && user?.id && c.user.id === user.id) || !!c.user?.isOnline) ? 'Online' : 'Offline'}
-                         </span>
-                        <span className={`chat-role-badge ${isClientRole ? 'client' : 'staff'}`}>{chatRoleLabel(c.user?.role)}</span>
-                        <span className="chat-time">{new Date(c.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-                         <span className={`chat-seen-status ${(!isOwnComment && !unreadComments.some(u => (u.id || u.createdAt) === (c.id || c.createdAt))) ? 'seen' : 'sent'}`}>
-                           {(!isOwnComment && !unreadComments.some(u => (u.id || u.createdAt) === (c.id || c.createdAt))) ? '✓✓' : '✓'}
-                         </span>
-                      </div>
-                      <div
-                        className={`chat-bubble ${isClientRole ? 'client' : 'staff'} ${selectedComments.includes(c.id || c.createdAt) ? 'selected' : ''}`}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const x = Math.min(e.clientX, window.innerWidth - 220);
-                          const y = Math.min(e.clientY, window.innerHeight - 260);
-                          setContextMenu({ x, y, comment: c });
-                        }}
-                        onTouchStart={(e) => {
-                          const t = e.touches[0];
-                          const timer = setTimeout(() => {
-                            const x = Math.min(t.clientX, window.innerWidth - 220);
-                            const y = Math.min(t.clientY, window.innerHeight - 260);
-                            setContextMenu({ x, y, comment: c });
-                          }, 500);
-                          e.currentTarget._lpTimer = timer;
-                        }}
-                        onTouchEnd={(e) => { clearTimeout(e.currentTarget._lpTimer); }}
-                        onTouchMove={(e) => { clearTimeout(e.currentTarget._lpTimer); }}
-                      >
-                        {renderMessageContent(c.content)}
-                        {c.attachments && c.attachments.length > 0 && (
-                          <div className="msg-attachments">
-                            {c.attachments.map((att, ai) => (
-                              <div key={ai} className="msg-attachment">
-                                <span className="msg-att-icon"><Icon name={isImageFile(att.path) ? 'image' : 'paperclip'} size={14} /></span>
-                                <div className="msg-att-info">
-                                  <span className="msg-att-name">{att.name || getFileName(att.path)}</span>
-                                  <span className="msg-att-size">{formatSize(att.size)}</span>
-                                </div>
-                                <a className="msg-att-download" href={`${API_BASE}${att.path}`} download target="_blank" rel="noopener noreferrer" title={t('common.download')}>⬇</a>
+            {showHistory && (
+              <>
+                {}
+                <div className="status-lifecycle">
+                  <div className="lifecycle-header">
+                    <span className="lifecycle-icon"><Icon name="refresh" size={16} /></span>
+                    <span className="lifecycle-title">{t('common.statusFlow')}</span>
+                  </div>
+                  <div className="lifecycle-flow" ref={lifecycleFlowRef}>
+                    {(() => {
+                      const flowSteps = getStatusFlow();
+                      const requestId = `REQ-${String(id).padStart(4, '0')}`;
+                      return flowSteps.map((step, idx) => (
+                        <React.Fragment key={idx}>
+                          <div className={`lifecycle-step visited ${step.current ? 'current' : ''} ${step.isPast ? 'past' : ''}`} style={{
+                            background: getStatusCardBackground(step.color),
+                            border: `1px solid ${hexAlpha(step.color, 0.28)}`
+                          }}>
+                            <div className={`lifecycle-dot ${step.current ? getStatusAnim(step.name) : 'anim-none'}`} style={{
+                              background: step.color,
+                              '--step-color': step.color,
+                              boxShadow: step.current ? `0 0 0 4px ${step.color}30, 0 0 12px ${step.color}50` : 'none',
+                              animationDelay: `${idx * 0.15}s`
+                            }}>
+                              {step.isPast && <span className="lifecycle-check">✓</span>}
+                              {step.current && <span className="lifecycle-pulse" style={{ borderColor: step.color }}></span>}
+                            </div>
+                            <span className="lifecycle-label" style={{ color: step.color, fontWeight: step.current ? 700 : 600 }}>
+                              {transSeeded(step.name, 'status', t)}
+                            </span>
+                            {step.time && (
+                              <div className="lifecycle-meta">
+                                <span className="lifecycle-time">
+                                  {new Date(step.time).toLocaleDateString()} {new Date(step.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                </span>
+                                <span className="lifecycle-user">{step.user}</span>
+                                <span className="lifecycle-role">{roleLabel(step.role)}</span>
+                                <span className="lifecycle-request">{requestId}</span>
+                                <span className="lifecycle-desc">{step.description}</span>
                               </div>
-                            ))}
+                            )}
                           </div>
-                        )}
-                        {c.attachments && c.attachments.filter(a => isImageFile(a.path)).length > 0 && (
-                          <div className="msg-images">
-                            {c.attachments.filter(a => isImageFile(a.path)).map((att, ai) => (
-                              <img
-                                key={ai}
-                                src={`${API_BASE}${att.path}`}
-                                alt={att.name || 'image'}
-                                className="msg-image"
-                                onClick={() => setLightbox(`${API_BASE}${att.path}`)}
-                              />
-                            ))}
+                          {idx < flowSteps.length - 1 && (
+                            <div className="lifecycle-connector" style={{
+                              background: `linear-gradient(90deg, ${step.color}, ${flowSteps[idx + 1].color})`,
+                              animationDelay: `${(idx + 1) * 0.15}s`,
+                              '--arrow-delay': `${idx * 0.45}s`
+                            }}></div>
+                          )}
+                        </React.Fragment>
+                      ));
+                    })()}
+                  </div>
+                </div>
+
+                <div className="timeline">
+                  {loadingActivity ? (
+                    <div className="loading-screen" style={{ minHeight: 'auto', padding: '20px' }}><div className="spinner"></div></div>
+                  ) : activityLog.length === 0 ? (
+                    <div className="empty-state">{t('common.noActivityYet')}</div>
+                  ) : (
+                    <div className="timeline-list">
+                      {activityLog.map((activity) => (
+                        <div key={activity.id} className="timeline-item">
+                          <div className="timeline-marker" style={{ background: getActivityColor(activity.type) }}></div>
+                          <div className="timeline-connector"></div>
+                          <div className="timeline-content">
+                            <div className="timeline-header">
+                              <span className="timeline-icon" style={{ color: getActivityColor(activity.type) }}>
+                                {getActivityIcon(activity.type) && <Icon name={getActivityIcon(activity.type)} size={16} />}
+                              </span>
+                              <span className="timeline-message">{translateActivityMessage(activity.message, activity.type, t, activity.details)}</span>
+                            </div>
+                            <div className="timeline-meta">
+                              <span className="timeline-user">{activity.user?.name || t('role.system')}</span>
+                              <span className="timeline-dot">·</span>
+                              <span className="timeline-time">{new Date(activity.createdAt).toLocaleString()}</span>
+                            </div>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                );
-              })}
-              {(request.comments || []).length === 0 && (
-                <div className="chat-empty">{t('common.noMessagesYet')}</div>
-              )}
-            </div>
-
-            {contextMenu && (
-              <div className="tg-context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
-                <button className="tg-menu-item" onClick={() => { setReplyTo(contextMenu.comment); setContextMenu(null); }}>
-                  <Icon name="reply" size={16} /> Reply
-                </button>
-                <button className="tg-menu-item" onClick={async () => {
-                  try { await navigator.clipboard.writeText(contextMenu.comment.content || ''); addToast('Comment copied for forwarding', 'success'); } catch (e) { addToast('Copy failed', 'error'); }
-                  setContextMenu(null);
-                }}>
-                  <Icon name="send" size={16} /> Forward
-                </button>
-                <button className="tg-menu-item" onClick={async () => {
-                  try {
-                    if (contextMenu.comment.likedByMe) {
-                      await api.delete(`/api/requests/${id}/comments/${contextMenu.comment.id}/like`);
-                    } else {
-                      await api.post(`/api/requests/${id}/comments/${contextMenu.comment.id}/like`);
-                    }
-                    loadRequest();
-                    addToast('Updated', 'success');
-                  } catch (e) { addToast('Failed', 'error'); }
-                  setContextMenu(null);
-                }}>
-                  <Icon name="heart" size={16} /> {contextMenu.comment.likedByMe ? 'Unlike' : 'Like'} ({contextMenu.comment.likes || 0})
-                </button>
-                <button className="tg-menu-item" onClick={async () => {
-                  try { await navigator.clipboard.writeText(contextMenu.comment.content || ''); addToast('Copied', 'success'); } catch (e) { addToast('Copy failed', 'error'); }
-                  setContextMenu(null);
-                }}>
-                  <Icon name="copy" size={16} /> Copy
-                </button>
-                {(contextMenu.comment.user?.id === user?.id || user?.role === 'admin') && (
-                  <button className="tg-menu-item" onClick={() => { setEditingComment(contextMenu.comment); setEditingCommentText(contextMenu.comment.content || ''); setContextMenu(null); }}>
-                    <Icon name="edit" size={16} /> Edit
-                  </button>
-                )}
-                {(contextMenu.comment.user?.id === user?.id || user?.role === 'admin') && (
-                  <button className="tg-menu-item danger" onClick={() => { setDeleteConfirmComment(contextMenu.comment); setContextMenu(null); }}>
-                    <Icon name="trash" size={16} /> Delete
-                  </button>
-                )}
-                <button className="tg-menu-item" onClick={() => {
-                  const id = contextMenu.comment.id || contextMenu.comment.createdAt;
-                  setSelectedComments(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-                  setContextMenu(null);
-                }}>
-                  <Icon name="check" size={16} /> Select
-                </button>
-                <button className="tg-menu-item" onClick={() => {
-                  const c = contextMenu.comment;
-                  addToast(`${c.user?.name || 'Unknown'} • ${new Date(c.createdAt).toLocaleString()}`, 'success');
-                  setContextMenu(null);
-                }}>
-                  <Icon name="info" size={16} /> View Details
-                </button>
-              </div>
-            )}
-
-            {deleteConfirmComment && (
-              <div className="modal-overlay" onClick={() => setDeleteConfirmComment(null)}>
-                <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-                  <h3>Delete comment</h3>
-                  <p>Are you sure you want to delete this comment?</p>
-                  <div className="modal-actions">
-                    <button className="btn btn-outline" onClick={() => setDeleteConfirmComment(null)}>Cancel</button>
-                    <button className="btn btn-danger" onClick={async () => {
-                      try {
-                        await api.delete(`/api/requests/${id}/comments/${deleteConfirmComment.id}`);
-                        loadRequest();
-                        addToast('Comment deleted', 'success');
-                      } catch (err) {
-                        addToast(err?.message || 'Delete failed', 'error');
-                      } finally {
-                        setDeleteConfirmComment(null);
-                      }
-                    }}>Delete</button>
-                  </div>
+                  )}
                 </div>
-              </div>
-            )}
-
-            {editingComment && (
-              <div className="modal-overlay" onClick={() => setEditingComment(null)}>
-                <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-                  <h3>Edit comment</h3>
-                  <textarea value={editingCommentText} onChange={(e) => setEditingCommentText(e.target.value)} rows={4} style={{ width: '100%' }} />
-                  <div className="modal-actions">
-                    <button className="btn btn-outline" onClick={() => setEditingComment(null)}>Cancel</button>
-                    <button className="btn btn-primary" onClick={async () => {
-                      try {
-                        await api.put(`/api/requests/${id}/comments/${editingComment.id}`, { content: editingCommentText });
-                        loadRequest();
-                        addToast('Comment updated', 'success');
-                      } catch (err) {
-                        addToast(err?.message || 'Update failed', 'error');
-                      } finally {
-                        setEditingComment(null);
-                      }
-                    }}>Save</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {replyTo && (
-              <div className="reply-reference">
-                Replying to {replyTo.user?.name}: {String(replyTo.content || '').slice(0, 60)}
-                <button onClick={() => setReplyTo(null)}>×</button>
-              </div>
-            )}
-
-            <button
-              type="button"
-              className="chat-unread-float"
-              style={{ bottom: canComment ? 76 : 16 }}
-              title={t('common.unreadComments')}
-              onClick={() => {
-                if (unreadFilterIds) {
-                  setUnreadFilterIds(null);
-                } else {
-                  const ids = unreadComments.map(c => c.id || c.createdAt);
-                  if (ids.length > 0) {
-                    setUnreadFilterIds(ids);
-                    persistLastSeen();
-                  }
-                }
-              }}
-            >
-              <Icon name="comment" size={18} />
-              {unreadCount > 0 && !unreadFilterIds && (
-                <span className="badge chat-unread-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
-              )}
-            </button>
-
-            {canComment ? (
-              <div className="chat-composer">
-                {pendingFiles.length > 0 && (
-                  <div className="composer-pending">
-                    {pendingFiles.map((file, i) => (
-                      <div key={`pf-${i}`} className="composer-pending-item">
-                        <span className="composer-pending-icon"><Icon name="paperclip" size={14} /></span>
-                        <span className="composer-pending-name">{file.name}</span>
-                        <button type="button" className="composer-pending-remove" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}>✕</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {showEmojiPicker && (
-                  <div className="emoji-picker">
-                    {['😀', '😂', '😊', '😍', '👍', '👏', '🙏', '🎉', '🔥', '✅', '❌', '⚠️', '📌', '💡', '📎', '🕐', '🚀', '👀'].map(e => (
-                      <button key={e} type="button" className="emoji-picker-item" onClick={() => insertEmoji(e)}>{e}</button>
-                    ))}
-                  </div>
-                )}
-                <div className="composer-toolbar">
-                  <button type="button" className="composer-btn" title={t('common.attachFile')} onClick={() => commentFileInputRef.current?.click()}><Icon name="paperclip" size={16} /></button>
-                  <button type="button" className="composer-btn" title={t('common.emoji')} onClick={() => setShowEmojiPicker(v => !v)}><Icon name="smile" size={16} /></button>
-                  <textarea
-                    ref={commentTextareaRef}
-                    className="composer-textarea"
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleComment();
-                      }
-                    }}
-                    placeholder={t('common.typeComment')}
-                    rows={1}
-                  />
-                  <button
-                    type="button"
-                    className="composer-send"
-                    title={t('common.send')}
-                    disabled={submitting || (!comment.trim() && pendingFiles.length === 0)}
-                    onClick={handleComment}
-                  >
-                    {submitting ? '⏳' : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13" /><path d="M22 2L15 22l-4-9-9-4z" /></svg>}
-                  </button>
-                  <input
-                    ref={commentFileInputRef}
-                    type="file"
-                    multiple
-                    style={{ display: 'none' }}
-                    onChange={(e) => {
-                      const files = Array.from(e.target.files || []);
-                      if (files.length > 0) setPendingFiles(prev => [...prev, ...files]);
-                      e.target.value = '';
-                    }}
-                  />
-                </div>
-                <div className="composer-hint">{t('common.composerHint')}</div>
-              </div>
-            ) : (
-              <div className="composer-hint" style={{ padding: '16px', textAlign: 'center', color: '#9ca3af' }}>
-                {t('common.readOnly')}
-              </div>
+              </>
             )}
           </div>
+      </div>
         </div>
 
         {}

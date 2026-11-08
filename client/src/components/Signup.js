@@ -79,7 +79,12 @@ export default function Signup() {
       init();
       return;
     }
+    const existing = document.getElementById('google-gsi-script');
+    if (existing) {
+      return;
+    }
     const script = document.createElement('script');
+    script.id = 'google-gsi-script';
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
