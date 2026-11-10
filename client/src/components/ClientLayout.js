@@ -34,6 +34,7 @@ export default function ClientLayout() {
   
   
   const [allNotifications, setAllNotifications] = useState([]);
+  const [unreadCommentTotal, setUnreadCommentTotal] = useState(0);
   const [bubbleNotifications, setBubbleNotifications] = useState([]);
   const [toasts, setToasts] = useState([]);
   const eventSourceRef = useRef(null);
@@ -108,6 +109,20 @@ export default function ClientLayout() {
       setAllNotifications(mapNotifRows(data.notifications));
     }).catch(() => {});
   }, [mapNotifRows]);
+
+  const refreshUnreadCommentTotal = useCallback(() => {
+    api.get('/api/messages/unread-total').then(data => {
+      setUnreadCommentTotal(data?.count || 0);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshUnreadCommentTotal();
+    const t = setInterval(refreshUnreadCommentTotal, 4000);
+    const onEvt = () => refreshUnreadCommentTotal();
+    window.addEventListener('rhms:unread-changed', onEvt);
+    return () => { clearInterval(t); window.removeEventListener('rhms:unread-changed', onEvt); };
+  }, [refreshUnreadCommentTotal]);
   
   
   
@@ -390,7 +405,7 @@ const totalIncomingComments = commentNotes.length;
   const menuItems = [
     { path: '/client', label: t('common.dashboard'), icon: 'home' },
     { path: '/client/requests', label: t('common.myRequests'), icon: 'requests' },
-    { path: '/client/comments', label: 'Comment', icon: 'comment' },
+    { path: '/client/comments', label: t('sidebar.comments'), icon: 'comment' },
   ];
 
   const activeMenuItem = menuItems.find((item) => location.pathname === item.path)
@@ -431,7 +446,7 @@ const totalIncomingComments = commentNotes.length;
             >
               <span className="nav-icon"><Icon name={item.icon} /></span>
               {sidebarOpen && <span className="nav-label">{item.label}</span>}
-              {sidebarOpen && item.path === '/client/comments' && unreadMsgs > 0 && <span className="badge" style={{ position: 'static', marginLeft: 'auto', background: '#2563EB', color: '#fff' }}>{unreadMsgs > 99 ? '99+' : unreadMsgs}</span>}
+              {sidebarOpen && item.path === '/client/comments' && unreadCommentTotal > 0 && <span className="badge" style={{ position: 'static', marginLeft: 'auto', background: '#2563EB', color: '#fff' }}>{unreadCommentTotal > 99 ? '99+' : unreadCommentTotal}</span>}
             </button>
           ))}
         </nav>
@@ -558,9 +573,9 @@ const totalIncomingComments = commentNotes.length;
             <div className="notification-container" style={{ position: 'relative' }}>
               <button className="theme-toggle" onClick={openMessages} title={t('topbar.messages')} style={{ position: 'relative' }}>
                 <span className="toggle-icon"><Icon name="mail" /></span>
-                {unreadMsgs > 0 && (
+                {unreadCommentTotal > 0 && (
                   <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                    {unreadMsgs > 99 ? '99+' : unreadMsgs}
+                    {unreadCommentTotal > 99 ? '99+' : unreadCommentTotal}
                   </span>
                 )}
               </button>

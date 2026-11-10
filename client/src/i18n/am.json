@@ -16,7 +16,8 @@
     "settings": "ቅንብሮች",
     "systemSettings": "የስርዓት ቅንብሮች",
     "company": "ኩባንያ",
-    "feedback": "አስተያየት"
+    "feedback": "አስተያየት",
+    "comments": "አስተያየቶች"
   },
   "topbar": {
     "searchPlaceholder": "ጥያቄዎችን፣ ተጠቃሚዎችን፣ ምድቦችን ይፈልጉ...",
@@ -85,7 +86,7 @@
     "all": "ሁሉም",
     "saveChanges": "ለውጦቹን አስቀምጥ",
     "failedToLoad": "{items} መጫን አልተሳካም",
-    "failedToSave": "{item} ማስቀመጥ አልተሳካም",
+    "failedToSave": "ማስቀመጥ አልተሳካም",
     "failedToDelete": "{item} መሰረዝ አልተሳካም",
     "createdSuccess": "{item} በተሳካ ሁኔታ ተፈጥሯል!",
     "updatedSuccess": "{item} በተሳካ ሁኔታ ተሻሽሏል!",
@@ -188,7 +189,6 @@
     "googleSignIn": "በGoogle በመግባት ላይ...",
     "googleContinue": "ከGoogle ጋር ይቀጥሉ",
     "googleSignUp": "በGoogle ይመዝገቡ",
-    "or": "ወይም",
     "googleSignInFailed": "የGoogle መግቢያ አልተሳካም",
     "welcomeSubtitle": "እንኳን ደህና መጡ! ዝርዝሮችዎን ያስገቡ",
     "fillDetails": "ለመጀመር ዝርዝሮቹን ይሙሉ",
@@ -357,7 +357,6 @@
     "refresh": "አድስ",
     "refreshTitle": "ውሂብ አድስ",
     "commentedOn": "አስተያየት ሰጥቷል",
-    "failedToSave": "ማስቀመጥ አልተሳካም",
     "searchRequests": "ጥያቄዎችን ይፈልጉ...",
     "searchComments": "አስተያየቶችን ይፈልጉ...",
     "fromClient": "ከደንበኛ",
@@ -510,7 +509,10 @@
     "nameRequired": "ስም አስፈላጊ ነው",
     "notFound": "አልተገኘም",
     "userIdRequired": "የተጠቃሚ መለያ አስፈላጊ ነው",
-    "invalidTableName": "ልክ ያልሆነ የሰንጠረዥ ስም"
+    "invalidTableName": "ልክ ያልሆነ የሰንጠረዥ ስም",
+    "users": "ተጠቃሚዎች",
+    "online": "የመስመር ላይ",
+    "offline": "ከመስመር ውጭ"
   },
   "settings": {
     "title": "የስርዓት ቅንብሮች",
@@ -998,5 +1000,13 @@
     "assigned": "ለ{name} ተመድቧል",
     "claimed": "በ{name} ተያዟል",
     "comment": "በጥያቄው ላይ አዲስ አስተያየት ተጨምሯል"
+  },
+  "messages": {
+    "newMessage": "አዲስ መልእክት",
+    "noConversations": "ምንም ውይይት የለም",
+    "noMessagesYet": "እስካሁን መልእክት የለም",
+    "searchConversations": "ውይይቶችን ፈልግ...",
+    "searchEmoji": "ኢሞጂ ፈልግ...",
+    "send": "ላክ"
   }
 }

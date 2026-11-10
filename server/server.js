@@ -6271,26 +6271,42 @@ function directConvKey(a, b) {
   return [String(a), String(b)].sort().join(':');
 }
 
+// Resolve the "other participant" id from a raw direct conversation identifier.
+// Accepts either a single user id or a colon-joined pair, but only when the
+// authenticated user is one of the participants. Returns the other id (or the
+// raw value when it cannot be normalized) so callers can build a canonical key.
+function directOtherId(user, rawCid) {
+  const cid = String(rawCid || '');
+  if (cid.includes(':')) {
+    const parts = cid.split(':');
+    if (parts.length === 2 && parts.includes(String(user.id))) {
+      return parts.find((p) => p !== String(user.id));
+    }
+    return cid; // invalid; will fail access checks
+  }
+  return cid;
+}
+
 async function canAccessConversation(user, type, conversationId) {
   if (type === 'direct') {
-    let parts;
-    if (String(conversationId).includes(':')) {
-      parts = String(conversationId).split(':');
+    const cid = String(conversationId || '');
+    let otherId;
+    if (cid.includes(':')) {
+      const parts = cid.split(':');
+      if (parts.length !== 2) return false;
+      if (!parts.includes(String(user.id))) return false;
+      otherId = parts.find((p) => p !== String(user.id));
     } else {
-      parts = [String(user.id), String(conversationId)];
+      otherId = cid;
     }
-    if (parts.length !== 2) return false;
-    if (!parts.includes(String(user.id))) return false;
-    const otherId = parts.find((p) => p !== String(user.id)) || parts[0];
-    if (user.id === otherId && parts[0] === parts[1]) return true;
-    // fall through uses otherId
-    var __otherId = otherId;
-    // validate other user
+    if (otherId === undefined || otherId === null || otherId === '') return false;
+    // self conversation
+    if (String(otherId) === String(user.id)) return true;
     const r = await pool.query('SELECT id, role FROM users WHERE id = $1', [otherId]);
-    if (r.rows.length === 0 && otherId !== user.id) return false;
-    const other = r.rows[0] || { id: user.id, role: user.role };
+    if (r.rows.length === 0) return false;
+    const other = r.rows[0];
     if (user.role === 'admin') return true;
-    if (user.role === 'client') return other.role === 'admin' || other.id === user.id;
+    if (user.role === 'client') return other.role === 'admin';
     if (user.role === 'developer') {
       if (other.role === 'admin') return true;
       if (other.role === 'support') return true;
@@ -6325,7 +6341,8 @@ app.get('/api/messages', authMiddleware, async (req, res) => {
     const rawCid = String(req.query.conversationId || '');
     if (!rawCid) return res.status(400).json({ error: 'conversationId required' });
     if (!(await canAccessConversation(req.user, type, rawCid))) return res.status(403).json({ error: 'Forbidden' });
-    const conversationId = type === 'direct' ? directConvKey(req.user.id, rawCid) : rawCid;
+    const otherId = directOtherId(req.user, rawCid);
+    const conversationId = type === 'direct' ? directConvKey(req.user.id, otherId) : rawCid;
     await pool.query(
       `UPDATE messages SET delivered = TRUE WHERE conversation_type = $1 AND conversation_id = $2 AND sender_id <> $3`,
        [type, conversationId, req.user.id]
@@ -6353,7 +6370,8 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
     const rawCid = String(conversationId || '');
     if (!rawCid || !content || !String(content).trim()) return res.status(400).json({ error: 'content required' });
     if (!(await canAccessConversation(req.user, type, rawCid))) return res.status(403).json({ error: 'Forbidden' });
-    const cid = type === 'direct' ? directConvKey(req.user.id, rawCid) : rawCid;
+    const otherId = directOtherId(req.user, rawCid);
+    const cid = type === 'direct' ? directConvKey(req.user.id, otherId) : rawCid;
     const id = uuidv4();
     const att = JSON.stringify(Array.isArray(attachments) ? attachments : []);
     await pool.query(
@@ -6373,7 +6391,7 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
     // notify recipients
     try {
       if (type === 'direct') {
-        await notifyUser(rawCid, `New message from ${req.user.name}`, { type: 'message', conversationType: type, conversationId: rawCid, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview: String(content).slice(0, 80) });
+        await notifyUser(otherId, `New message from ${req.user.name}`, { type: 'message', conversationType: type, conversationId: otherId, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview: String(content).slice(0, 80) });
       } else if (type === 'group') {
         const mems = await pool.query('SELECT user_id FROM user_groups WHERE group_id = $1', [cid]);
         for (const r of mems.rows) {
@@ -6395,7 +6413,7 @@ app.put('/api/messages/read', authMiddleware, async (req, res) => {
     const rawCid = String(conversationId || '');
     if (!rawCid) return res.status(400).json({ error: 'conversationId required' });
     if (!(await canAccessConversation(req.user, type, rawCid))) return res.status(403).json({ error: 'Forbidden' });
-    const cid = type === 'direct' ? directConvKey(req.user.id, rawCid) : rawCid;
+    const cid = type === 'direct' ? directConvKey(req.user.id, directOtherId(req.user, rawCid)) : rawCid;
     await pool.query(
       `INSERT INTO message_read_tracking (user_id, conversation_type, conversation_id, last_read_at)
        VALUES ($1, $2, $3, NOW())
@@ -6415,7 +6433,7 @@ app.get('/api/messages/unread-count', authMiddleware, async (req, res) => {
     const rawCid = String(req.query.conversationId || '');
     if (!rawCid) return res.status(400).json({ error: 'conversationId required' });
     if (!(await canAccessConversation(req.user, type, rawCid))) return res.status(403).json({ error: 'Forbidden' });
-    const conversationId = type === 'direct' ? directConvKey(req.user.id, rawCid) : rawCid;
+    const conversationId = type === 'direct' ? directConvKey(req.user.id, directOtherId(req.user, rawCid)) : rawCid;
     const readRes = await pool.query(
       `SELECT last_read_at FROM message_read_tracking WHERE user_id = $1 AND conversation_type = $2 AND conversation_id = $3`,
       [req.user.id, type, conversationId]
@@ -6426,6 +6444,41 @@ app.get('/api/messages/unread-count', authMiddleware, async (req, res) => {
       [type, conversationId, req.user.id, lastRead]
     );
     res.json({ count: countRes.rows[0]?.c || 0 });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/messages/unread-total', authMiddleware, async (req, res) => {
+  try {
+    let total = 0;
+    const directRes = await pool.query(`SELECT DISTINCT conversation_id FROM messages WHERE conversation_type = 'direct'`);
+    for (const row of directRes.rows) {
+      const cid = row.conversation_id;
+      const parts = String(cid).split(':');
+      if (parts.length !== 2) continue;
+      if (!parts.includes(String(req.user.id))) continue;
+      const otherId = parts.find((p) => p !== String(req.user.id));
+      if (!(await canAccessConversation(req.user, 'direct', otherId))) continue;
+      const readRes = await pool.query(`SELECT last_read_at FROM message_read_tracking WHERE user_id = $1 AND conversation_type = $2 AND conversation_id = $3`, [req.user.id, 'direct', cid]);
+      const lastRead = readRes.rows[0]?.last_read_at || new Date(0).toISOString();
+      const cntRes = await pool.query(`SELECT COUNT(*)::int AS c FROM messages WHERE conversation_type = $1 AND conversation_id = $2 AND sender_id <> $3 AND created_at > $4`, ['direct', cid, req.user.id, lastRead]);
+      total += cntRes.rows[0]?.c || 0;
+    }
+    const groupRes = await pool.query(`SELECT DISTINCT conversation_id FROM messages WHERE conversation_type = 'group'`);
+    for (const row of groupRes.rows) {
+      const gid = row.conversation_id;
+      if (req.user.role !== 'admin') {
+        const mem = await pool.query('SELECT 1 FROM user_groups WHERE user_id = $1 AND group_id = $2', [req.user.id, gid]);
+        if (mem.rows.length === 0) continue;
+      }
+      const readRes = await pool.query(`SELECT last_read_at FROM message_read_tracking WHERE user_id = $1 AND conversation_type = $2 AND conversation_id = $3`, [req.user.id, 'group', gid]);
+      const lastRead = readRes.rows[0]?.last_read_at || new Date(0).toISOString();
+      const cntRes = await pool.query(`SELECT COUNT(*)::int AS c FROM messages WHERE conversation_type = $1 AND conversation_id = $2 AND sender_id <> $3 AND created_at > $4`, ['group', gid, req.user.id, lastRead]);
+      total += cntRes.rows[0]?.c || 0;
+    }
+    res.json({ count: total });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck } from 'lucide-react';
-import { api } from '../api';
+import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
+import { useTranslation } from '../i18n/useTranslation';
 import Icon from './Icon';
 
 function initials(name) {
@@ -25,6 +26,7 @@ const ROLE_LABELS = { admin: 'Admin', client: 'Client', developer: 'Developer', 
 
 export default function CommentManagement() {
   const { user, darkMode } = useAuth();
+  const { t } = useTranslation();
   const dark = !!darkMode;
   const T = dark ? { bg:'#0B1220', panel:'#111C2E', surface:'#16243A', bubbleIn:'#1B2A41', border:'#263750', text:'#E6EDF7', text2:'#9AAAC0', muted:'#71829B', accent:'#3B82F6', purple:'#6366F1', btn:'linear-gradient(90deg,#2563EB,#6366F1)', out:'linear-gradient(90deg,#1D4ED8,#4F46E5)', hover:'#1C2B45', input:'#0F1A2B', green:'#22C55E' } : { bg:'#F8FAFF', panel:'#FFFFFF', surface:'#EFF4FF', bubbleIn:'#E9EDFA', border:'#D7E3FF', text:'#102B65', text2:'#38558D', muted:'#6b7280', accent:'#0866F5', purple:'#6366F1', btn:'linear-gradient(90deg,#0875F9,#2563EB)', out:'linear-gradient(90deg,#0875F9,#2563EB)', hover:'#EAF1FF', input:'#FFFFFF', green:'#10B981' };
   const [users, setUsers] = useState([]);
@@ -47,12 +49,13 @@ export default function CommentManagement() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [unreadMap, setUnreadMap] = useState({});
-  const [replyTo, setReplyTo] = useState(null);
+  const [activity, setActivity] = useState({});  const [replyTo, setReplyTo] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
   const [contextMsg, setContextMsg] = useState(null);
   const [acceptType, setAcceptType] = useState('*/*');
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const pollRef = useRef(null);
   const textareaRef = useRef(null);
@@ -60,6 +63,13 @@ export default function CommentManagement() {
   const emojiRef = useRef(null);
 
   const role = user?.role || 'client';
+
+  useEffect(() => {
+    const content = document.querySelector('.content');
+    const prev = content ? content.style.overflow : '';
+    if (content) content.style.overflow = 'hidden';
+    return () => { if (content) content.style.overflow = prev; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +91,15 @@ export default function CommentManagement() {
     return () => { cancelled = true; };
   }, []);
 
-  const sections = buildSections(role, user, users, groups);
+  const sections = buildSections(role, user, users, groups, t);
+  sections.sort((a, b) => {
+    const aAct = Math.max(0, ...a.items.map((it) => activity[it.id] || 0));
+    const bAct = Math.max(0, ...b.items.map((it) => activity[it.id] || 0));
+    return bAct - aAct;
+  });
+  sections.forEach((s) => {
+    s.items.sort((a, b) => (activity[b.id] || 0) - (activity[a.id] || 0));
+  });
 
   const openConversation = useCallback(async (conv) => {
     setSelectedUser(conv);
@@ -94,8 +112,20 @@ export default function CommentManagement() {
     try {
       const data = await api.get(`/api/messages?conversationType=${conv.type}&conversationId=${encodeURIComponent(conv.id)}`);
       setMessages(Array.isArray(data) ? data : []);
+      if (Array.isArray(data)) {
+        const incoming = data.filter((m) => m.sender_id !== user?.id);
+        if (incoming.length) {
+          const last = incoming[incoming.length - 1];
+          const ts = new Date(last.created_at).getTime() || Date.now();
+          setActivity((prev) => {
+            const prevTs = prev[conv.id] || 0;
+            return { ...prev, [conv.id]: Math.max(ts, prevTs + 1) };
+          });
+        }
+      }
       await api.put('/api/messages/read', { conversationType: conv.type, conversationId: conv.id });
       setUnreadMap((m) => ({ ...m, [conv.type + ':' + conv.id]: 0 }));
+      try { window.dispatchEvent(new Event('rhms:unread-changed')); } catch {}
       try { localStorage.setItem('rhms_selected_conv', JSON.stringify({ type: conv.type, id: conv.id })); } catch {}
     } catch (e) {
       setMessages([]);
@@ -105,7 +135,10 @@ export default function CommentManagement() {
   }, []);
 
   useEffect(() => {
-    if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    if (nearBottom && messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
@@ -117,6 +150,72 @@ export default function CommentManagement() {
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
+  // Realtime reordering based on incoming messages (SSE)
+  useEffect(() => {
+    const token = localStorage.getItem('rhms_token');
+    if (!token || !user?.id) return;
+    let es;
+    try {
+      es = new EventSource(`${API_BASE}/api/notifications/stream?token=${token}`);
+    } catch (e) {
+      return;
+    }
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (!data || data.type === 'init' || data.message === 'Connected') return;
+        const d = data.data || {};
+        if (d.type !== 'message') return;
+        if (d.userId && String(d.userId) === String(user.id)) return; // skip own
+        const ts = data.timestamp ? new Date(data.timestamp).getTime() : Date.now();
+        const convType = d.conversationType || 'direct';
+        const convId = convType === 'group' ? d.conversationId : d.userId;
+        if (!convId) return;
+        setActivity((prev) => {
+          const prevTs = prev[convId] || 0;
+          const nextTs = Math.max(ts, prevTs + 1);
+          if (nextTs === prevTs) return prev;
+          return { ...prev, [convId]: nextTs };
+        });
+        // refresh unread badge for this conversation
+        api.get(`/api/messages/unread-count?conversationType=${convType}&conversationId=${encodeURIComponent(convId)}`)
+          .then((r) => {
+            setUnreadMap((m) => ({ ...m, [convType + ':' + convId]: r?.count || 0 }));
+          })
+          .catch(() => {});
+      } catch (e) {}
+    };
+    return () => { try { es.close(); } catch (e) {} };
+  }, [user?.id]);
+
+  // Fallback polling: keep reordering working even if SSE is unavailable
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    const pollAll = async () => {
+      const flat = (sections || []).flatMap((s) => s.items || []);
+      for (const it of flat) {
+        if (cancelled) return;
+        try {
+          const data = await api.get(`/api/messages?conversationType=${it.type}&conversationId=${encodeURIComponent(it.id)}`);
+          if (!Array.isArray(data)) continue;
+          const incoming = data.filter((m) => m.sender_id !== user.id);
+          if (!incoming.length) continue;
+          const last = incoming[incoming.length - 1];
+          const ts = new Date(last.created_at).getTime() || Date.now();
+          setActivity((prev) => {
+            const prevTs = prev[it.id] || 0;
+            if (ts <= prevTs) return prev;
+            return { ...prev, [it.id]: Math.max(ts, prevTs + 1) };
+          });
+        } catch {}
+      }
+    };
+    pollAll();
+    const t = setInterval(pollAll, 6000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [user?.id, sections.length]);
+
   useEffect(() => {
     if (!selectedUser) return;
     if (pollRef.current) clearInterval(pollRef.current);
@@ -125,8 +224,18 @@ export default function CommentManagement() {
         const data = await api.get(`/api/messages?conversationType=${selectedUser.type}&conversationId=${encodeURIComponent(selectedUser.id)}`);
         if (Array.isArray(data)) {
           setMessages(data);
+          const incoming = data.filter((m) => m.sender_id !== user?.id);
+          if (incoming.length) {
+            const last = incoming[incoming.length - 1];
+            const ts = new Date(last.created_at).getTime() || Date.now();
+            setActivity((prev) => {
+              const prevTs = prev[selectedUser.id] || 0;
+              return { ...prev, [selectedUser.id]: Math.max(ts, prevTs + 1) };
+            });
+          }
           await api.put('/api/messages/read', { conversationType: selectedUser.type, conversationId: selectedUser.id });
           setUnreadMap((m) => ({ ...m, [selectedUser.type + ':' + selectedUser.id]: 0 }));
+          try { window.dispatchEvent(new Event('rhms:unread-changed')); } catch {}
         }
       } catch {}
     }, 4000);
@@ -278,12 +387,16 @@ export default function CommentManagement() {
   if (error) return <div className="page-container"><div className="empty-state">{error}</div></div>;
 
   return (
-    <div className="page-container cm-root" style={{ padding: 0, '--cm-hover': T.hover }}>
+    <div className="page-container cm-root" style={{ padding: 0, height: 'calc(100vh - 88px)', overflow: 'hidden', '--cm-hover': T.hover }}>
       <style>{`
         .cm-root button { transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease; }
         .cm-root button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
         .cm-root button:active { transform: translateY(0); }
         .cm-root [data-conv]:hover { background: var(--cm-hover) !important; }
+        .cm-root { height: 100vh; max-height: 100vh; overflow: hidden; }
+        .cm-root .cm-shell { overflow: hidden; min-height: 0; }
+        .cm-root .cm-left, .cm-root .cm-right { min-height: 0; overflow: hidden; }
+        .cm-root .cm-messages { overflow-y: auto; overflow-x: hidden; min-height: 0; }
       `}</style>
       <div style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'center', gap: 12, background: dark ? 'linear-gradient(90deg, rgba(37,99,235,0.12), rgba(99,102,241,0.08))' : 'linear-gradient(90deg, rgba(37,99,235,0.08), rgba(99,102,241,0.05))', borderRadius: 12, margin: '12px 12px 0' }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: T.btn, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
@@ -294,9 +407,9 @@ export default function CommentManagement() {
           <div style={{ fontSize: 13, color: T.muted }}>Manage conversations, discuss requests, and collaborate with your team.</div>
         </div>
       </div>
-      <div className="cm-shell" style={{ display: 'flex', gap: 12, padding: 12, height: 'calc(100vh - 180px)', background: T.bg }}>
+      <div className="cm-shell" style={{ display: 'flex', gap: 12, padding: 12, height: 'calc(100vh - 180px)', background: T.bg, overflow: 'hidden', minHeight: 0 }}>
         {/* Left panel */}
-        <div className="cm-left" style={{ display: 'flex', flexDirection: 'column', background: T.panel, borderRadius: 16, border: '1px solid ' + T.border, overflow: 'hidden', width: 340, flexShrink: 0 }}>
+        <div className="cm-left" style={{ display: 'flex', flexDirection: 'column', background: T.panel, borderRadius: 16, border: '1px solid ' + T.border, overflow: 'hidden', width: 300, flexShrink: 0, minHeight: 0 }}>
           <div style={{ padding: 16, borderBottom: '1px solid ' + T.border, background: T.surface }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h2 style={{ margin: 0, fontSize: 18, color: T.text }}>Conversations</h2>
@@ -311,11 +424,11 @@ export default function CommentManagement() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.panel, borderRadius: 8, padding: '6px 10px', border: '1px solid ' + T.border, transition: 'border-color 0.2s, box-shadow 0.2s' }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.boxShadow = '0 0 0 3px ' + (dark ? 'rgba(59,130,246,0.15)' : 'rgba(8,102,245,0.12)'); }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = 'none'; }}>
               <Icon name="search" size={14} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search conversations..." style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13, background: 'transparent', color: T.text }} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('messages.searchConversations')} style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13, background: 'transparent', color: T.text }} />
             </div>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
-            {filteredSections.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: T.muted }}>No conversations</div>}
+            {filteredSections.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: T.muted }}>{t('messages.noConversations')}</div>}
             {filteredSections.map((section) => {
               const isAdminSection = !!section.special || section.key === 'admin-support';
               return (
@@ -350,9 +463,9 @@ export default function CommentManagement() {
                             <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: '#2563EB', padding: '2px 6px', borderRadius: 6, letterSpacing: 0.5 }}>ADMIN</span>
                             <span style={{ fontSize: 11, color: T.text2 }}>Support</span>
                           </div>
-                          <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{it.last || 'No messages yet'}</div>
+                          <div style={{ fontSize: 12, color: unread > 0 ? T.accent : T.muted, fontWeight: unread > 0 ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{unread > 0 ? (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 80 }}><span style={{ background: 'linear-gradient(90deg,#2563EB,#6366F1)', color: '#fff', fontWeight: 600, padding: '1px 8px', borderRadius: 999 }}>{t('messages.newMessage')}</span><span style={{ background: 'linear-gradient(90deg,#2563EB,#6366F1)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999, letterSpacing: 0.3, minWidth: 20, textAlign: 'center' }}>{unread}</span></span>) : (it.last || '')}</div>
                         </div>
-                        {unread > 0 && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: '#2563EB', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{unread}</div>}
+
                       </div>
                     );
                   }
@@ -364,10 +477,10 @@ export default function CommentManagement() {
                           <span style={{ fontWeight: 600, fontSize: 14, color: T.text }}>{it.name}</span>
                           <span style={{ fontSize: 11, color: T.muted }}>{it.time}</span>
                         </div>
-                        <div style={{ fontSize: 11, color: T.accent }}>{ROLE_LABELS[it.role] || it.role}</div>
-                        <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.last || 'No messages yet'}</div>
+                        <div style={{ fontSize: 11, color: T.accent }}>{t('role.' + (it.role === 'support' ? 'escalationTeam' : it.role)) || it.role}</div>
+                        <div style={{ fontSize: 12, color: unread > 0 ? T.accent : T.muted, fontWeight: unread > 0 ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{unread > 0 ? (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 80 }}><span style={{ background: 'linear-gradient(90deg,#2563EB,#6366F1)', color: '#fff', fontWeight: 600, padding: '1px 8px', borderRadius: 999 }}>{t('messages.newMessage')}</span><span style={{ background: 'linear-gradient(90deg,#2563EB,#6366F1)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999, letterSpacing: 0.3, minWidth: 20, textAlign: 'center' }}>{unread}</span></span>) : (it.last || '')}</div>
                       </div>
-                      {unread > 0 && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: T.accent, color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{unread}</div>}
+
                     </div>
                   );
                 })}
@@ -379,7 +492,7 @@ export default function CommentManagement() {
         </div>
 
         {/* Right panel */}
-        <div className="cm-right" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.panel, borderRadius: 16, border: '1px solid ' + T.border, overflow: 'hidden', minWidth: 0 }}>
+        <div className="cm-right" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.panel, borderRadius: 16, border: '1px solid ' + T.border, overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
           {selectedUser ? (
             <>
               <div style={{ padding: 14, borderBottom: '1px solid ' + T.border, background: T.surface, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -387,7 +500,7 @@ export default function CommentManagement() {
                   <Avatar user={{ name: selectedUser.name, avatar: selectedUser.avatar }} size={44} />
                   <div>
                     <div style={{ fontWeight: 700, color: T.text }}>{selectedUser.name}</div>
-                    <div style={{ fontSize: 12, color: T.text2 }}>{ROLE_LABELS[selectedUser.role] || selectedUser.role} · {selectedUser.online ? 'Online' : 'Offline'}</div>
+                    <div style={{ fontSize: 12, color: T.text2 }}>{t('role.' + (selectedUser.role === 'support' ? 'escalationTeam' : selectedUser.role)) || selectedUser.role} · {selectedUser.online ? t('common.online') : t('common.offline')}</div>
                     <div style={{ fontSize: 11, color: T.muted }}>ID: {selectedUser.id}</div>
                   </div>
                 </div>
@@ -396,9 +509,9 @@ export default function CommentManagement() {
                   <button style={{ padding: 8, borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }} title="More">⋯</button>
                 </div>
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: 16, background: T.bg }}>
+              <div ref={messagesContainerRef} className="cm-messages" style={{ flex: 1, overflowY: 'auto', padding: 16, background: T.bg }}>
                 {msgLoading && <div style={{ textAlign: 'center', color: T.muted }}>Loading...</div>}
-                {!msgLoading && messages.length === 0 && <div style={{ textAlign: 'center', color: T.muted }}>No messages yet</div>}
+                {!msgLoading && messages.length === 0 && <div style={{ textAlign: 'center', color: T.muted }}>{t('messages.noMessagesYet')}</div>}
                 {messages.map((m, idx) => {
                   const d = new Date(m.created_at);
                   const dateStr = d.toLocaleDateString();
@@ -432,7 +545,7 @@ export default function CommentManagement() {
                               <div style={{ position: 'relative', zIndex: 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 11, opacity: 0.9, flexWrap: 'wrap', textAlign: own ? 'right' : 'left', justifyContent: own ? 'flex-end' : 'flex-start' }}>
                                   <span style={{ fontWeight: 700, color: own ? (dark ? '#BFDBFE' : '#1D4ED8') : (dark ? '#E2E8F0' : '#111827') }}>{own ? (m.sender_name || 'You') : (m.sender_name || 'Unknown')}</span>
-                                  <span style={{ color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280'), fontWeight: 500 }}>{ROLE_LABELS[m.sender_role] || m.sender_role}</span>
+                                  <span style={{ color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280'), fontWeight: 500 }}>{t('role.' + (m.sender_role === 'support' ? 'escalationTeam' : m.sender_role)) || m.sender_role}</span>
                                   <span style={{ color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280') }}>{d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                                   {m.edited_at && <span style={{ fontStyle: 'italic', color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280') }}>(edited)</span>}
                                 </div>
@@ -608,7 +721,7 @@ export default function CommentManagement() {
                              <div>
                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, background: T.input, borderRadius: 8, padding: '4px 8px', border: '1px solid ' + T.border }}>
                                  <Search size={14} color={T.muted} />
-                                 <input value={emojiSearch} onChange={(e) => setEmojiSearch(e.target.value)} placeholder="Search emoji..." style={{ border: 'none', outline: 'none', flex: 1, fontSize: 12, background: 'transparent', color: T.text }} />
+                                 <input value={emojiSearch} onChange={(e) => setEmojiSearch(e.target.value)} placeholder={t('messages.searchEmoji')} style={{ border: 'none', outline: 'none', flex: 1, fontSize: 12, background: 'transparent', color: T.text }} />
                                </div>
                                {[
                                  { name: 'Smileys', items: ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','😱','😨','😰','😥','😓'] },
@@ -651,7 +764,7 @@ export default function CommentManagement() {
                        </div>
                      )}
                    </div>
-                  <button onClick={send} disabled={sending || (!text.trim() && attachments.length === 0)} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: T.accent, color: '#fff', cursor: 'pointer', opacity: (sending || (!text.trim() && attachments.length === 0)) ? 0.5 : 1 }}>Send</button>
+                  <button onClick={send} disabled={sending || (!text.trim() && attachments.length === 0)} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: T.accent, color: '#fff', cursor: 'pointer', opacity: (sending || (!text.trim() && attachments.length === 0)) ? 0.5 : 1 }}>{t('messages.send')}</button>
                 </div>
                 {showEmoji && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
@@ -683,17 +796,17 @@ export default function CommentManagement() {
   );
 }
 
-function buildSections(role, me, users, groups) {
+function buildSections(role, me, users, groups, t) {
   const byRole = (r) => users.filter((u) => u.role === r && u.id !== me?.id);
   const sections = [];
   if (role === 'admin') {
-    sections.push({ key: 'dev', title: 'Developers', count: byRole('developer').length, items: byRole('developer').map(toItem('direct')) });
-    sections.push({ key: 'esc', title: 'Escalation Team', count: byRole('support').length, items: byRole('support').map(toItem('direct')) });
-    sections.push({ key: 'cli', title: 'Clients', count: byRole('client').length, items: byRole('client').map(toItem('direct')) });
-    sections.push({ key: 'usr', title: 'Users', count: users.filter((u) => !['admin','developer','support','client'].includes(u.role) && u.id !== me?.id).length, items: users.filter((u) => !['admin','developer','support','client'].includes(u.role) && u.id !== me?.id).map(toItem('direct')) });
+    sections.push({ key: 'dev', title: t('role.developers'), count: byRole('developer').length, items: byRole('developer').map(toItem('direct')) });
+    sections.push({ key: 'esc', title: t('role.escalationTeam'), count: byRole('support').length, items: byRole('support').map(toItem('direct')) });
+    sections.push({ key: 'cli', title: t('role.client') + 's', count: byRole('client').length, items: byRole('client').map(toItem('direct')) });
+    sections.push({ key: 'usr', title: t('common.users') || 'Users', count: users.filter((u) => !['admin','developer','support','client'].includes(u.role) && u.id !== me?.id).length, items: users.filter((u) => !['admin','developer','support','client'].includes(u.role) && u.id !== me?.id).map(toItem('direct')) });
   } else if (role === 'client') {
     const admins = byRole('admin');
-    sections.push({ key: 'adm', title: 'Admin', count: admins.length, items: admins.map(toItem('direct')) });
+    sections.push({ key: 'adm', title: t('role.admin'), count: admins.length, items: admins.map(toItem('direct')) });
   } else if (role === 'developer') {
     const adminItems = byRole('admin').map(toItem('direct')).map((it) => ({ ...it, specialAdmin: true }));
     const sameGroupDevs = users.filter((u) => u.role === 'developer' && u.id !== me?.id && sharesGroup(u, me, groups));
@@ -702,8 +815,8 @@ function buildSections(role, me, users, groups) {
     const groupSections = myGroups.map((g) => ({ key: 'grp-' + g.id, title: g.name, count: (g.members || []).length, items: [{ id: g.id, type: 'group', name: g.name, role: 'Group Chat', members: (g.members || []).map((mid) => users.find((u) => u.id === mid)).filter(Boolean), avatar: null, last: '', time: '', online: true, specialAdmin: false }] }));
     if (adminItems.length) sections.push({ key: 'admin-support', title: 'ADMIN SUPPORT', special: true, count: adminItems.length, items: adminItems });
     groupSections.forEach((s) => sections.push(s));
-    if (sameGroupDevs.length) sections.push({ key: 'dev', title: 'Developers', count: sameGroupDevs.length, items: sameGroupDevs.map(toItem('direct')) });
-    if (esc.length) sections.push({ key: 'esc', title: 'Escalation Team', count: esc.length, items: esc.map(toItem('direct')) });
+    if (sameGroupDevs.length) sections.push({ key: 'dev', title: t('role.developers'), count: sameGroupDevs.length, items: sameGroupDevs.map(toItem('direct')) });
+    if (esc.length) sections.push({ key: 'esc', title: t('role.escalationTeam'), count: esc.length, items: esc.map(toItem('direct')) });
   } else if (role === 'support') {
     const adminItems = byRole('admin').map(toItem('direct')).map((it) => ({ ...it, specialAdmin: true }));
     const esc = byRole('support').filter((u) => u.id !== me?.id);

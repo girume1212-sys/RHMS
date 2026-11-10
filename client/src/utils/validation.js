@@ -1,7 +1,7 @@
 import { translate } from '../i18n/translate';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phoneRegex = /^[\+]?[\d\s\-\(\)]{7,20}$/;
+const phoneRegex = /^[+]?[\d\s\-()]{7,20}$/;
 const nameRegex = /^[A-Za-z\u1200-\u137F\s'-]+$/u;
 
 export function validateRequired(value, fieldName) {

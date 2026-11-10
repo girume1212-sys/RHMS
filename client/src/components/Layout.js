@@ -35,6 +35,7 @@ export default function Layout() {
   
   const [allNotifications, setAllNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadCommentTotal, setUnreadCommentTotal] = useState(0);
   const dismissedIds = useRef(new Set());
   const addToast = useCallback((message, type = 'info') => {
     const id = Date.now() + Math.random();
@@ -114,6 +115,20 @@ export default function Layout() {
     }).catch(() => {});
   }, [mapNotifRows]);
 
+  const refreshUnreadCommentTotal = useCallback(() => {
+    api.get('/api/messages/unread-total').then(data => {
+      setUnreadCommentTotal(data?.count || 0);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshUnreadCommentTotal();
+    const t = setInterval(refreshUnreadCommentTotal, 4000);
+    const onEvt = () => refreshUnreadCommentTotal();
+    window.addEventListener('rhms:unread-changed', onEvt);
+    return () => { clearInterval(t); window.removeEventListener('rhms:unread-changed', onEvt); };
+  }, [refreshUnreadCommentTotal]);
+
   
   
   const markNotificationRead = useCallback((id) => {
@@ -174,7 +189,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
     { section: null, items: [
       { path: '/', label: t('sidebar.dashboard'), icon: 'home' },
       { path: '/requests', label: t('sidebar.requests'), icon: 'requests' },
-      { path: '/comments', label: 'Comment', icon: 'comment' },
+      { path: '/comments', label: t('sidebar.comments'), icon: 'comment' },
     ]},
     { section: t('sidebar.management'), items: [
       { path: '/users', label: t('sidebar.users'), icon: 'users', roles: ['admin'] },
@@ -474,7 +489,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
                   >
                     <span className="nav-icon"><Icon name={item.icon} /></span>
                     {sidebarOpen && <span className="nav-label">{item.label}</span>}
-                    {sidebarOpen && item.path === '/comments' && unreadMsgs > 0 && <span className="badge" style={{ position: 'static', marginLeft: 'auto', background: '#2563EB', color: '#fff' }}>{unreadMsgs > 99 ? '99+' : unreadMsgs}</span>}
+                    {sidebarOpen && item.path === '/comments' && unreadCommentTotal > 0 && <span className="badge" style={{ position: 'static', marginLeft: 'auto', background: '#2563EB', color: '#fff' }}>{unreadCommentTotal > 99 ? '99+' : unreadCommentTotal}</span>}
                   </button>
                 </div>
               ))}
@@ -595,7 +610,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
             <div className="topbar-icon-container">
               <button className="topbar-icon" title={t('topbar.messages')} onClick={openMessages}>
                 <Icon name="mail" />
-                {unreadMsgs > 0 && <span className="badge">{unreadMsgs > 99 ? '99+' : unreadMsgs}</span>}
+                {unreadCommentTotal > 0 && <span className="badge">{unreadCommentTotal > 99 ? '99+' : unreadCommentTotal}</span>}
               </button>
               {showMessages && (
                 <div className="dropdown-panel">

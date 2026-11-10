@@ -16,7 +16,8 @@
     "settings": "SETTINGS",
     "systemSettings": "System Settings",
     "company": "Company",
-    "feedback": "Feedback"
+    "feedback": "Feedback",
+    "comments": "Comments"
   },
   "topbar": {
     "searchPlaceholder": "Search requests, users, categories...",
@@ -66,7 +67,7 @@
     "forgotPassword": "Forgot Password?",
     "noAccount": "Don't have an account?",
     "signUp": "Sign Up",
-    "or": "or",
+    "or": "OR",
     "show": "Show",
     "hide": "Hide",
     "showPassword": "Show password",
@@ -85,7 +86,7 @@
     "all": "All",
     "saveChanges": "Save Changes",
     "failedToLoad": "Failed to load {items}",
-    "failedToSave": "Failed to save {item}",
+    "failedToSave": "Failed to save",
     "failedToDelete": "Failed to delete {item}",
     "createdSuccess": "{item} created successfully!",
     "updatedSuccess": "{item} updated successfully!",
@@ -188,7 +189,6 @@
     "googleSignIn": "Signing in with Google...",
     "googleContinue": "Continue with Google",
     "googleSignUp": "Sign up with Google",
-    "or": "OR",
     "googleSignInFailed": "Google sign-in failed",
     "welcomeSubtitle": "Welcome back! Please enter your details",
     "fillDetails": "Fill in the details to get started",
@@ -349,7 +349,6 @@
     "newComment": "New Comment",
     "notification": "Notification",
     "requestShort": "Request",
-    "requestFailed": "Request failed",
     "markAllRead": "Mark all read",
     "markRead": "Mark read",
     "read": "Read",
@@ -358,7 +357,6 @@
     "refresh": "Refresh",
     "refreshTitle": "Refresh data",
     "commentedOn": "commented on",
-    "failedToSave": "Failed to save",
     "searchRequests": "Search requests...",
     "searchComments": "Search comments...",
     "fromClient": "From Client",
@@ -511,7 +509,10 @@
     "nameRequired": "Name is required",
     "notFound": "Not found",
     "userIdRequired": "User ID is required",
-    "invalidTableName": "Invalid table name"
+    "invalidTableName": "Invalid table name",
+    "users": "Users",
+    "online": "Online",
+    "offline": "Offline"
   },
   "settings": {
     "title": "System Settings",
@@ -999,5 +1000,13 @@
     "assigned": "Assigned to {name}",
     "claimed": "Claimed by {name}",
     "comment": "New comment on request"
+  },
+  "messages": {
+    "newMessage": "New message",
+    "noConversations": "No conversations",
+    "noMessagesYet": "No messages yet",
+    "searchConversations": "Search conversations...",
+    "searchEmoji": "Search emoji...",
+    "send": "Send"
   }
 }
