@@ -886,6 +886,7 @@
   "role": {
     "admin": "አስተዳዳሪ",
     "administrator": "አስተዳዳሪ",
+    "administrators": "አስተዳዳሪዎች",
     "developer": "ገንቢ",
     "client": "ደንበኛ",
     "support": "ድጋፍ",

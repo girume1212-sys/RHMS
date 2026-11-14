@@ -886,6 +886,7 @@
   "role": {
     "admin": "Admin",
     "administrator": "Administrator",
+    "administrators": "Administrators",
     "developer": "Developer",
     "client": "Client",
     "support": "Support",

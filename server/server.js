@@ -4533,10 +4533,47 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       count: categoryMap[c.id] || 0
     }));
 
+    // Same source of truth as Company Management: the companies table.
+    // Count qualifying requests per company in a scoped subquery, then LEFT JOIN
+    // to all companies so companies with zero matching requests are always included.
+    // Requests whose client cannot be resolved to a registered company are shown as "Unknown".
     const companyCounts = await pool.query(
-      `SELECT COALESCE(NULLIF(u.company_name, ''), 'Unknown') as name, COUNT(*) as count FROM requests r LEFT JOIN users u ON r.client_id = u.id ${whereClause} GROUP BY u.company_name ORDER BY count DESC`, params
+      `WITH user_company AS (
+         SELECT DISTINCT ON (u.id)
+                u.id AS user_id,
+                COALESCE(
+                  u.company_id,
+                  (SELECT c.id FROM companies c
+                    WHERE LOWER(c.name) = LOWER(NULLIF(TRIM(u.company_name), ''))
+                    ORDER BY c.created_at ASC NULLS LAST, c.id ASC
+                    LIMIT 1)
+                ) AS company_id
+         FROM users u
+         ORDER BY u.id
+       ),
+       company_request_counts AS (
+         SELECT uc.company_id, COUNT(r.id)::int AS count
+         FROM requests r
+         LEFT JOIN user_company uc ON uc.user_id = r.client_id
+         ${whereClause}
+         GROUP BY uc.company_id
+       ),
+       company_rows AS (
+         SELECT co.name, COALESCE(crc.count, 0)::int AS count
+         FROM companies co
+         LEFT JOIN company_request_counts crc ON crc.company_id = co.id
+       ),
+       unknown_row AS (
+         SELECT 'Unknown'::text AS name, COALESCE(SUM(crc.count), 0)::int AS count
+         FROM company_request_counts crc
+         WHERE crc.company_id IS NULL
+       )
+       SELECT name, count FROM company_rows
+       UNION ALL
+       SELECT name, count FROM unknown_row WHERE count > 0
+       ORDER BY count DESC, name ASC`, params
     );
-    const byCompany = companyCounts.rows.map(r => ({ ...r, count: parseInt(r.count) }));
+    const byCompany = companyCounts.rows.map(r => ({ ...r, name: r.name, count: Number(r.count) || 0 }));
 
     
     
@@ -5186,10 +5223,47 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
       GROUP BY c.name, c.id ORDER BY c.name
     `);
 
+    // X-axis labels come from the companies table (Company Management) so the
+    // chart always shows real, current company names. Requests are matched to a
+    // company through the user's company_id, falling back to a case-insensitive
+    // name match for legacy users without a company_id.
+    // Count all requests per company, then LEFT JOIN to all companies so companies
+    // with zero requests are always included. Requests whose client cannot be
+    // resolved to a registered company are shown as "Unknown".
     const byCompanyResult = await pool.query(`
-      SELECT COALESCE(NULLIF(u.company_name, ''), 'Unknown') as name, COUNT(r.id) as count FROM requests r
-      LEFT JOIN users u ON r.client_id = u.id
-      GROUP BY u.company_name ORDER BY count DESC
+      WITH user_company AS (
+        SELECT DISTINCT ON (u.id)
+               u.id AS user_id,
+               COALESCE(
+                 u.company_id,
+                 (SELECT c.id FROM companies c
+                   WHERE LOWER(c.name) = LOWER(NULLIF(TRIM(u.company_name), ''))
+                   ORDER BY c.created_at ASC NULLS LAST, c.id ASC
+                   LIMIT 1)
+               ) AS company_id
+        FROM users u
+        ORDER BY u.id
+      ),
+      company_request_counts AS (
+        SELECT uc.company_id, COUNT(r.id)::int AS count
+        FROM requests r
+        LEFT JOIN user_company uc ON uc.user_id = r.client_id
+        GROUP BY uc.company_id
+      ),
+      company_rows AS (
+        SELECT co.name, COALESCE(crc.count, 0)::int AS count
+        FROM companies co
+        LEFT JOIN company_request_counts crc ON crc.company_id = co.id
+      ),
+      unknown_row AS (
+        SELECT 'Unknown'::text AS name, COALESCE(SUM(crc.count), 0)::int AS count
+        FROM company_request_counts crc
+        WHERE crc.company_id IS NULL
+      )
+      SELECT name, count FROM company_rows
+      UNION ALL
+      SELECT name, count FROM unknown_row WHERE count > 0
+      ORDER BY count DESC, name ASC
     `);
 
     const totalUsersResult = await pool.query('SELECT COUNT(*) FROM users');

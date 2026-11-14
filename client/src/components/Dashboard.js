@@ -157,8 +157,27 @@ export default function Dashboard() {
   const shareLabel = t('common.ofTotal');
 
   useEffect(() => {
-    api.get(`/api/dashboard/stats?days=${rangeDays}`).then(setStats).catch(err => setError(t('common.failedToLoadDashboard') + ' ' + err.message));
-  }, [user, rangeDays]);
+    const loadStats = () => api.get(`/api/dashboard/stats?days=${rangeDays}`)
+      .then(setStats)
+      .catch(err => setError(t('common.failedToLoadDashboard') + ' ' + err.message));
+
+    loadStats();
+
+    // Keep both company charts current when the user returns to this page or
+    // switches back to the tab after changing company/request data elsewhere.
+    const handleFocus = () => loadStats();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadStats();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [user, rangeDays, t]);
 
   useEffect(() => {
     api.get('/api/requests').then(data => {
@@ -791,8 +810,8 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie data={(stats.byCompany || []).filter(c => c.count > 0)} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
-                    {(stats.byCompany || []).filter(c => c.count > 0).map((entry, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    {(stats.byCompany || []).map((entry, i) => ({ entry, i })).filter(({ entry }) => entry.count > 0).map(({ entry, i }) => (
+                      <Cell key={entry.name || i} fill={COLORS[i % COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip />
@@ -800,8 +819,8 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
             <div className="chart-legend">
-              {(stats.byCompany || []).filter(c => c.count > 0).map((c, i) => (
-                <div key={i} className="legend-item">
+              {(stats.byCompany || []).map((c, i) => (
+                <div key={c.name || i} className="legend-item">
                   <span className="legend-dot" style={{ background: COLORS[i % COLORS.length] }}></span>
                   <span className="legend-label">{c.name}</span>
                   <span className="legend-value">{c.count}</span>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck, Copy, Pencil, Trash2, Reply } from 'lucide-react';
+import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck, Copy, Pencil, Trash2, Reply, Code2, Headset, UsersRound, ChevronDown } from 'lucide-react';
 import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
@@ -24,7 +24,165 @@ function Avatar({ user, size = 40 }) {
   return <img src={url} alt={user?.name || ''} onError={() => setFailed(true)} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />;
 }
 
-const ROLE_LABELS = { admin: 'Admin', client: 'Client', developer: 'Developer', support: 'Escalation Team' };
+// Pastel, role-specific design tokens used by the left-hand directory panel.
+// Each role has a light and a dark variant so the panel stays readable in both themes.
+const ROLE_THEMES = {
+  admin: {
+    Icon: ShieldCheck,
+    description: 'Full system access and oversight',
+    light: {
+      gradient: 'linear-gradient(135deg, #F5F0FF 0%, #E6DBFC 100%)',
+      border: '#DFD2F7',
+      accent: '#6D28D9',
+      iconBg: 'rgba(255,255,255,0.76)',
+      countBg: 'rgba(255,255,255,0.88)',
+      rowHover: '#F8F4FF',
+      rowSelected: '#F1E9FF',
+      rowSelectedBorder: '#D9C8FA',
+    },
+    dark: {
+      gradient: 'linear-gradient(135deg, rgba(124,58,237,0.24) 0%, rgba(76,29,149,0.14) 100%)',
+      border: 'rgba(167,139,250,0.30)',
+      accent: '#C4B5FD',
+      iconBg: 'rgba(124,58,237,0.22)',
+      countBg: 'rgba(124,58,237,0.24)',
+      rowHover: 'rgba(124,58,237,0.10)',
+      rowSelected: 'rgba(124,58,237,0.17)',
+      rowSelectedBorder: 'rgba(167,139,250,0.36)',
+    },
+  },
+  developer: {
+    Icon: Code2,
+    description: 'Build and maintain solutions',
+    light: {
+      gradient: 'linear-gradient(135deg, #EFF7FF 0%, #DCEBFF 100%)',
+      border: '#D2E3FA',
+      accent: '#1D4ED8',
+      iconBg: 'rgba(255,255,255,0.78)',
+      countBg: 'rgba(255,255,255,0.88)',
+      rowHover: '#F2F8FF',
+      rowSelected: '#E8F2FF',
+      rowSelectedBorder: '#C7DFFC',
+    },
+    dark: {
+      gradient: 'linear-gradient(135deg, rgba(37,99,235,0.24) 0%, rgba(29,78,216,0.13) 100%)',
+      border: 'rgba(96,165,250,0.30)',
+      accent: '#93C5FD',
+      iconBg: 'rgba(37,99,235,0.22)',
+      countBg: 'rgba(37,99,235,0.24)',
+      rowHover: 'rgba(37,99,235,0.10)',
+      rowSelected: 'rgba(37,99,235,0.17)',
+      rowSelectedBorder: 'rgba(96,165,250,0.36)',
+    },
+  },
+  support: {
+    Icon: Headset,
+    description: 'Resolve escalated requests',
+    light: {
+      gradient: 'linear-gradient(135deg, #EAFAF3 0%, #D3F3E5 100%)',
+      border: '#C8EDDC',
+      accent: '#047857',
+      iconBg: 'rgba(255,255,255,0.78)',
+      countBg: 'rgba(255,255,255,0.88)',
+      rowHover: '#F0FCF7',
+      rowSelected: '#E3F8EF',
+      rowSelectedBorder: '#BEEAD7',
+    },
+    dark: {
+      gradient: 'linear-gradient(135deg, rgba(16,185,129,0.22) 0%, rgba(5,150,105,0.12) 100%)',
+      border: 'rgba(52,211,153,0.30)',
+      accent: '#6EE7B7',
+      iconBg: 'rgba(16,185,129,0.20)',
+      countBg: 'rgba(16,185,129,0.22)',
+      rowHover: 'rgba(16,185,129,0.09)',
+      rowSelected: 'rgba(16,185,129,0.16)',
+      rowSelectedBorder: 'rgba(52,211,153,0.36)',
+    },
+  },
+  client: {
+    Icon: UsersRound,
+    description: 'Requesters and customers',
+    light: {
+      gradient: 'linear-gradient(135deg, #FFF5EC 0%, #FFE4D0 100%)',
+      border: '#F7DCC2',
+      accent: '#C2410C',
+      iconBg: 'rgba(255,255,255,0.78)',
+      countBg: 'rgba(255,255,255,0.88)',
+      rowHover: '#FFF8F2',
+      rowSelected: '#FFF0E3',
+      rowSelectedBorder: '#F6D3B4',
+    },
+    dark: {
+      gradient: 'linear-gradient(135deg, rgba(249,115,22,0.20) 0%, rgba(194,65,12,0.12) 100%)',
+      border: 'rgba(251,146,60,0.30)',
+      accent: '#FDBA74',
+      iconBg: 'rgba(249,115,22,0.18)',
+      countBg: 'rgba(249,115,22,0.20)',
+      rowHover: 'rgba(249,115,22,0.08)',
+      rowSelected: 'rgba(249,115,22,0.15)',
+      rowSelectedBorder: 'rgba(251,146,60,0.34)',
+    },
+  },
+  group: {
+    Icon: MessageCircleMore,
+    description: 'Team conversation',
+    light: {
+      gradient: 'linear-gradient(135deg, #F5F8FD 0%, #E9F0FA 100%)',
+      border: '#E0E8F4',
+      accent: '#3B5B8C',
+      iconBg: 'rgba(255,255,255,0.80)',
+      countBg: 'rgba(255,255,255,0.90)',
+      rowHover: '#F5F8FD',
+      rowSelected: '#ECF2FB',
+      rowSelectedBorder: '#D3E1F3',
+    },
+    dark: {
+      gradient: 'linear-gradient(135deg, rgba(71,85,105,0.24) 0%, rgba(51,65,85,0.14) 100%)',
+      border: 'rgba(148,163,184,0.28)',
+      accent: '#CBD5E1',
+      iconBg: 'rgba(148,163,184,0.16)',
+      countBg: 'rgba(148,163,184,0.18)',
+      rowHover: 'rgba(148,163,184,0.08)',
+      rowSelected: 'rgba(148,163,184,0.15)',
+      rowSelectedBorder: 'rgba(148,163,184,0.32)',
+    },
+  },
+  user: {
+    Icon: UsersRound,
+    description: 'Other platform members',
+    light: {
+      gradient: 'linear-gradient(135deg, #F7F9FC 0%, #EDF2F9 100%)',
+      border: '#E3EAF4',
+      accent: '#516784',
+      iconBg: 'rgba(255,255,255,0.80)',
+      countBg: 'rgba(255,255,255,0.90)',
+      rowHover: '#F7FAFE',
+      rowSelected: '#EEF4FB',
+      rowSelectedBorder: '#D8E4F2',
+    },
+    dark: {
+      gradient: 'linear-gradient(135deg, rgba(100,116,139,0.22) 0%, rgba(71,85,105,0.12) 100%)',
+      border: 'rgba(148,163,184,0.24)',
+      accent: '#CBD5E1',
+      iconBg: 'rgba(100,116,139,0.18)',
+      countBg: 'rgba(100,116,139,0.20)',
+      rowHover: 'rgba(148,163,184,0.07)',
+      rowSelected: 'rgba(148,163,184,0.13)',
+      rowSelectedBorder: 'rgba(148,163,184,0.28)',
+    },
+  },
+};
+
+function sectionThemeKey(section) {
+  const key = String(section?.key || '');
+  if (section?.special || key === 'adm' || key === 'admin-support') return 'admin';
+  if (key === 'dev') return 'developer';
+  if (key === 'esc') return 'support';
+  if (key === 'cli') return 'client';
+  if (key.startsWith('grp-')) return 'group';
+  return 'user';
+}
+
 
 const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|bmp|svg|avif|heic|heif|ico|tiff?|jfif)$/i;
 const VIDEO_EXT_RE = /\.(mp4|m4v|webm|ogg|ogv|mov|mkv|avi|3gp|wmv|flv)$/i;
@@ -117,6 +275,7 @@ export default function CommentManagement() {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [collapsedGroups, setCollapsedGroups] = useState({});
   const [selectedUser, setSelectedUser] = useState(null);
   const [attachments, setAttachments] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -156,17 +315,25 @@ export default function CommentManagement() {
     return () => { if (content) content.style.overflow = prev; };
   }, []);
 
+  const fetchDirectory = useCallback(async () => {
+    const [u, g] = await Promise.all([
+      api.get('/api/users').catch(() => []),
+      api.get('/api/groups').catch(() => []),
+    ]);
+    return {
+      users: Array.isArray(u) ? u : (u?.users || []),
+      groups: Array.isArray(g) ? g : (g?.groups || []),
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [u, g] = await Promise.all([
-          api.get('/api/users').catch(() => []),
-          api.get('/api/groups').catch(() => []),
-        ]);
+        const data = await fetchDirectory();
         if (cancelled) return;
-        setUsers(Array.isArray(u) ? u : (u?.users || []));
-        setGroups(Array.isArray(g) ? g : (g?.groups || []));
+        setUsers(data.users);
+        setGroups(data.groups);
       } catch (e) {
         if (!cancelled) setError(e?.message || 'Failed to load');
       } finally {
@@ -174,7 +341,29 @@ export default function CommentManagement() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [fetchDirectory]);
+
+  // Keep the directory in sync with users/groups edited elsewhere in the app.
+  useEffect(() => {
+    let cancelled = false;
+    const refreshDirectory = async () => {
+      try {
+        const data = await fetchDirectory();
+        if (cancelled) return;
+        setUsers(data.users);
+        setGroups(data.groups);
+      } catch (e) { /* keep the last known directory */ }
+    };
+    const onFocus = () => { refreshDirectory(); };
+    const onVisibility = () => { if (document.visibilityState === 'visible') refreshDirectory(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [fetchDirectory]);
 
   const sections = buildSections(role, user, users, groups, t);
   sections.sort((a, b) => {
@@ -571,6 +760,17 @@ export default function CommentManagement() {
 
   const totalUnread = Object.values(unreadMap).reduce((a, b) => a + (b || 0), 0);
 
+  const directorySections = filteredSections
+    .map((s) => ({
+      ...s,
+      visibleItems: s.items.filter((it) => filter !== 'unread' || (unreadMap[it.type + ':' + it.id] || 0) > 0),
+    }))
+    .filter((s) => filter !== 'unread' || s.visibleItems.length > 0);
+
+  const toggleGroup = useCallback((key) => {
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
   if (loading) return <div className="page-container"><div className="loading-screen"><div className="spinner"></div></div></div>;
   if (error) return <div className="page-container"><div className="empty-state">{error}</div></div>;
 
@@ -585,6 +785,29 @@ export default function CommentManagement() {
         .cm-root .cm-shell { overflow: hidden; min-height: 0; }
         .cm-root .cm-left, .cm-root .cm-right { min-height: 0; overflow: hidden; }
         .cm-root .cm-messages { overflow-y: auto; overflow-x: hidden; min-height: 0; }
+
+        .cm-root .cm-directory { scrollbar-width: thin; scrollbar-color: rgba(148,163,184,0.45) transparent; }
+        .cm-root .cm-directory::-webkit-scrollbar { width: 6px; }
+        .cm-root .cm-directory::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.38); border-radius: 999px; }
+        .cm-root .cm-role-header { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px 10px; border-radius: 14px; border: 1px solid transparent; cursor: pointer; text-align: left; font-family: inherit; transition: box-shadow 0.18s ease, filter 0.18s ease; }
+        .cm-root .cm-role-header:hover { transform: none !important; box-shadow: 0 3px 10px rgba(15,23,42,0.07) !important; filter: saturate(1.04); }
+        .cm-root .cm-role-header:active { transform: none !important; box-shadow: none !important; }
+        .cm-root .cm-role-icon { width: 34px; height: 34px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55); }
+        .cm-root .cm-role-count { min-width: 26px; height: 26px; padding: 0 7px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 700; flex-shrink: 0; }
+        .cm-root .cm-role-chevron { flex-shrink: 0; transition: transform 0.2s ease; }
+        .cm-root .cm-role-chevron.collapsed { transform: rotate(-90deg); }
+        .cm-root .cm-group-body { padding: 4px 2px 8px; }
+        .cm-root .cm-user-row { display: flex; align-items: center; gap: 10px; padding: 8px 9px; margin: 2px 0; border-radius: 11px; border: 1px solid transparent; border-left: 3px solid transparent; cursor: pointer; transition: background 0.16s ease, border-color 0.16s ease; }
+        .cm-root .cm-user-row:hover { background: var(--cm-row-hover) !important; border-color: var(--cm-row-selected-border); }
+        .cm-root .cm-user-row.is-selected { background: var(--cm-row-selected) !important; border-left-color: var(--cm-row-accent) !important; border-color: var(--cm-row-selected-border); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); }
+        .cm-root .cm-user-row.is-selected:hover { background: var(--cm-row-selected) !important; }
+        .cm-root .cm-unread-pill { min-width: 19px; height: 19px; padding: 0 6px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; line-height: 1; flex-shrink: 0; }
+
+        @media (max-width: 900px) {
+          .cm-root .cm-shell { flex-direction: column !important; }
+          .cm-root .cm-left { width: 100% !important; max-height: 42%; }
+          .cm-root .cm-right { flex: 1 1 auto !important; min-height: 0; }
+        }
       `}</style>
       <div style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'center', gap: 12, background: dark ? 'linear-gradient(90deg, rgba(37,99,235,0.12), rgba(99,102,241,0.08))' : 'linear-gradient(90deg, rgba(37,99,235,0.08), rgba(99,102,241,0.05))', borderRadius: 12, margin: '12px 12px 0' }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: T.btn, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
@@ -597,83 +820,111 @@ export default function CommentManagement() {
       </div>
       <div className="cm-shell" style={{ display: 'flex', gap: 12, padding: 12, height: 'calc(100vh - 180px)', background: T.bg, overflow: 'hidden', minHeight: 0 }}>
         {/* Left panel */}
-        <div className="cm-left" style={{ display: 'flex', flexDirection: 'column', background: T.panel, borderRadius: 16, border: '1px solid ' + T.border, overflow: 'hidden', width: 300, flexShrink: 0, minHeight: 0 }}>
-          <div style={{ padding: 16, borderBottom: '1px solid ' + T.border, background: T.surface }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h2 style={{ margin: 0, fontSize: 18, color: T.text }}>Conversations</h2>
-              <button className="cm-new-btn" title="New conversation" style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: T.accent, color: '#fff', cursor: 'pointer' }}>+</button>
+        <div className="cm-left" style={{ display: 'flex', flexDirection: 'column', background: T.panel, borderRadius: 16, border: '1px solid ' + T.border, overflow: 'hidden', width: 320, flexShrink: 0, minHeight: 0 }}>
+          <div style={{ padding: '14px 14px 12px', borderBottom: '1px solid ' + T.border, background: dark ? 'linear-gradient(180deg, rgba(37,99,235,0.10), rgba(17,28,46,0))' : 'linear-gradient(180deg, #FBFDFF 0%, #F5F9FF 100%)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <h2 style={{ margin: 0, fontSize: 17, lineHeight: 1.25, color: T.text, fontWeight: 700 }}>Conversations</h2>
+                <div style={{ fontSize: 11.5, color: T.muted, marginTop: 2 }}>Browse your team by role</div>
+              </div>
+              <button className="cm-new-btn" title="New conversation" style={{ width: 32, height: 32, borderRadius: 9, border: 'none', background: T.btn, color: '#fff', cursor: 'pointer', flexShrink: 0, fontSize: 18, lineHeight: 1 }}>+</button>
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
               {['all', 'unread', 'mentions'].map((f) => (
-                <button key={f} onClick={() => setFilter(f)} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid ' + T.border, background: filter === f ? T.accent : T.panel, color: filter === f ? T.panel : T.text2, cursor: 'pointer', fontSize: 12, textTransform: 'capitalize' }}>
-                  {f} {f === 'all' ? `(${flatItems.length})` : f === 'unread' ? `(${totalUnread})` : ''}
+                <button key={f} onClick={() => setFilter(f)} style={{ padding: '5px 10px', borderRadius: 999, border: '1px solid ' + (filter === f ? T.accent : T.border), background: filter === f ? T.accent : (dark ? 'rgba(255,255,255,0.04)' : '#FFFFFF'), color: filter === f ? '#FFFFFF' : T.text2, cursor: 'pointer', fontSize: 11.5, fontWeight: 600, textTransform: 'capitalize' }}>
+                  {f}{f === 'all' ? ` (${flatItems.length})` : f === 'unread' ? ` (${totalUnread})` : ''}
                 </button>
               ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.panel, borderRadius: 8, padding: '6px 10px', border: '1px solid ' + T.border, transition: 'border-color 0.2s, box-shadow 0.2s' }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.boxShadow = '0 0 0 3px ' + (dark ? 'rgba(59,130,246,0.15)' : 'rgba(8,102,245,0.12)'); }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = 'none'; }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: dark ? T.input : '#FFFFFF', borderRadius: 10, padding: '7px 10px', border: '1px solid ' + T.border, transition: 'border-color 0.2s, box-shadow 0.2s' }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.boxShadow = '0 0 0 3px ' + (dark ? 'rgba(59,130,246,0.15)' : 'rgba(8,102,245,0.12)'); }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = 'none'; }}>
               <Icon name="search" size={14} />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('messages.searchConversations')} style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13, background: 'transparent', color: T.text }} />
             </div>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
-            {filteredSections.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: T.muted }}>{t('messages.noConversations')}</div>}
-            {filteredSections.map((section) => {
-              const isAdminSection = !!section.special || section.key === 'admin-support';
-              return (
-              <div key={section.key} style={{ marginBottom: isAdminSection ? 12 : 8 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: isAdminSection ? T.accent : T.text2, padding: '8px 4px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {isAdminSection && <ShieldCheck size={14} color={T.accent} />}
-                  {section.title} ({section.items.length})
+          <div className="cm-directory" style={{ flex: 1, overflowY: 'auto', padding: '10px 8px 12px' }}>
+            {directorySections.length === 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '36px 16px', textAlign: 'center', color: T.muted }}>
+                <div style={{ width: 42, height: 42, borderRadius: 12, background: dark ? 'rgba(148,163,184,0.12)' : '#F1F5FB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UsersRound size={20} color={T.muted} />
                 </div>
-                {isAdminSection && <div style={{ height: 1, background: T.border, margin: '0 4px 8px', opacity: 0.6 }} />}
-                {section.items.map((it) => {
-                  const key = it.type + ':' + it.id;
-                  const isActive = selectedUser && selectedUser.type === it.type && selectedUser.id === it.id;
-                  const unread = unreadMap[key] || 0;
-                  if (filter === 'unread' && unread === 0) return null;
-                  if (isAdminSection) {
-                    return (
-                      <div key={key} data-conv onClick={() => openConversation(it)} style={{ display: 'flex', gap: 10, padding: 12, borderRadius: 12, cursor: 'pointer', marginBottom: 6, alignItems: 'center', transition: 'all 0.2s', background: isActive ? (dark ? 'rgba(59,130,246,0.18)' : 'rgba(8,102,245,0.12)') : (dark ? 'rgba(59,130,246,0.08)' : 'rgba(8,102,245,0.05)'), border: '1px solid ' + (isActive ? T.accent : (dark ? 'rgba(59,130,246,0.35)' : 'rgba(8,102,245,0.25)')), boxShadow: isActive ? '0 4px 12px rgba(37,99,235,0.18)' : 'none' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37,99,235,0.15)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = isActive ? '0 4px 12px rgba(37,99,235,0.18)' : 'none'; }}>
-                        <div style={{ position: 'relative' }}>
-                          <Avatar user={{ name: it.name, avatar: it.avatar }} size={44} />
-                          <div style={{ position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: '50%', background: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid ' + T.panel }}>
-                            <ShieldCheck size={11} color="#fff" />
-                          </div>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontWeight: 700, fontSize: 15, color: T.text }}>{it.name}</span>
-                            <span style={{ fontSize: 11, color: T.muted }}>{it.time}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                            <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: '#2563EB', padding: '2px 6px', borderRadius: 6, letterSpacing: 0.5 }}>ADMIN</span>
-                            <span style={{ fontSize: 11, color: T.text2 }}>Support</span>
-                          </div>
-                          <div style={{ fontSize: 12, color: unread > 0 ? T.accent : T.muted, fontWeight: unread > 0 ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{unread > 0 ? (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 80 }}><span style={{ background: 'linear-gradient(90deg,#2563EB,#6366F1)', color: '#fff', fontWeight: 600, padding: '1px 8px', borderRadius: 999 }}>{t('messages.newMessage')}</span><span style={{ background: 'linear-gradient(90deg,#2563EB,#6366F1)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999, letterSpacing: 0.3, minWidth: 20, textAlign: 'center' }}>{unread}</span></span>) : (it.last || '')}</div>
-                        </div>
-
-                      </div>
-                    );
-                  }
-                  return (
-                    <div key={key} data-conv onClick={() => openConversation(it)} style={{ display: 'flex', gap: 10, padding: 10, borderRadius: 10, cursor: 'pointer', background: isActive ? T.hover : 'transparent', marginBottom: 4, alignItems: 'center', transition: 'background 0.2s' }}>
-                      <Avatar user={{ name: it.name, avatar: it.avatar }} size={40} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 600, fontSize: 14, color: T.text }}>{it.name}</span>
-                          <span style={{ fontSize: 11, color: T.muted }}>{it.time}</span>
-                        </div>
-                        <div style={{ fontSize: 11, color: T.accent }}>{t('role.' + (it.role === 'support' ? 'escalationTeam' : it.role)) || it.role}</div>
-                        <div style={{ fontSize: 12, color: unread > 0 ? T.accent : T.muted, fontWeight: unread > 0 ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{unread > 0 ? (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 80 }}><span style={{ background: 'linear-gradient(90deg,#2563EB,#6366F1)', color: '#fff', fontWeight: 600, padding: '1px 8px', borderRadius: 999 }}>{t('messages.newMessage')}</span><span style={{ background: 'linear-gradient(90deg,#2563EB,#6366F1)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999, letterSpacing: 0.3, minWidth: 20, textAlign: 'center' }}>{unread}</span></span>) : (it.last || '')}</div>
-                      </div>
-
-                    </div>
-                  );
-                })}
-                {isAdminSection && <div style={{ height: 1, background: T.border, margin: '8px 4px 0', opacity: 0.4 }} />}
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{t('messages.noConversations')}</div>
               </div>
+            )}
+            {directorySections.map((section) => {
+              const themeKey = sectionThemeKey(section);
+              const palette = ROLE_THEMES[themeKey];
+              const theme = palette[dark ? 'dark' : 'light'];
+              const ThemeIcon = palette.Icon;
+              const isCollapsed = !search.trim() && !!collapsedGroups[section.key];
+              const visibleItems = section.visibleItems;
+              const totalItems = themeKey === 'group' ? (section.count || section.items.length) : section.items.length;
+              return (
+                <div key={section.key} style={{ marginBottom: 6 }}>
+                  <button
+                    type="button"
+                    className="cm-role-header"
+                    aria-expanded={!isCollapsed}
+                    aria-label={`${section.title} group`}
+                    onClick={() => toggleGroup(section.key)}
+                    style={{ background: theme.gradient, borderColor: theme.border, color: T.text }}
+                  >
+                    <span className="cm-role-icon" style={{ background: theme.iconBg }}>
+                      <ThemeIcon size={17} strokeWidth={2.1} color={theme.accent} />
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: T.text, letterSpacing: 0.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{section.title}</span>
+                      <span style={{ display: 'block', fontSize: 10.5, color: dark ? T.text2 : '#5B6B85', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{section.key === 'admin-support' ? 'Administrators ready to assist' : palette.description}</span>
+                    </span>
+                    <span className="cm-role-count" style={{ background: theme.countBg, color: theme.accent, boxShadow: 'inset 0 0 0 1px ' + (dark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.05)') }}>{totalItems}</span>
+                    <ChevronDown size={15} color={theme.accent} className={'cm-role-chevron' + (isCollapsed ? ' collapsed' : '')} />
+                  </button>
+                  {!isCollapsed && (
+                    <div className="cm-group-body">
+                      {visibleItems.length === 0 && <div style={{ padding: '9px 10px', fontSize: 11.5, color: T.muted }}>No members to show</div>}
+                      {visibleItems.map((it) => {
+                        const key = it.type + ':' + it.id;
+                        const isActive = selectedUser && selectedUser.type === it.type && selectedUser.id === it.id;
+                        const unread = unreadMap[key] || 0;
+                        const isGroup = it.type === 'group';
+                        const roleLabel = isGroup ? 'Group chat' : (t('role.' + (it.role === 'support' ? 'escalationTeam' : it.role)) || it.role);
+                        const online = isGroup ? true : !!it.online;
+                        const statusLabel = isGroup ? `${it.members?.length || 0} members` : (online ? t('common.online') : t('common.offline'));
+                        return (
+                          <div
+                            key={key}
+                            data-conv
+                            className={'cm-user-row' + (isActive ? ' is-selected' : '')}
+                            onClick={() => openConversation(it)}
+                            style={{
+                              '--cm-row-hover': theme.rowHover,
+                              '--cm-row-selected': theme.rowSelected,
+                              '--cm-row-accent': theme.accent,
+                              '--cm-row-selected-border': theme.rowSelectedBorder,
+                            }}
+                          >
+                            <div style={{ position: 'relative', flexShrink: 0 }}>
+                              <Avatar user={{ name: it.name, avatar: it.avatar }} size={38} />
+                              <span style={{ position: 'absolute', bottom: 0, right: 0, width: 9, height: 9, borderRadius: '50%', background: online ? '#10B981' : (dark ? '#64748B' : '#CBD5E1'), border: '2px solid ' + (isActive ? theme.rowSelected : T.panel), boxSizing: 'content-box' }} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 650, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
+                                {it.time ? <span style={{ fontSize: 10.5, color: T.muted, flexShrink: 0 }}>{it.time}</span> : null}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, minWidth: 0 }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: online ? '#10B981' : (dark ? '#64748B' : '#94A3B8'), flexShrink: 0 }} />
+                                <span style={{ fontSize: 10.5, fontWeight: 600, color: theme.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{roleLabel}</span>
+                                <span style={{ fontSize: 10.5, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>· {statusLabel}</span>
+                                {unread > 0 && <span className="cm-unread-pill" style={{ marginLeft: 'auto', background: theme.accent, color: dark ? '#0B1220' : '#FFFFFF' }}>{unread}</span>}
+                              </div>
+                              {it.last ? <div style={{ fontSize: 11, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{it.last}</div> : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -1051,20 +1302,21 @@ function buildSections(role, me, users, groups, t) {
   const byRole = (r) => users.filter((u) => u.role === r && u.id !== me?.id);
   const sections = [];
   if (role === 'admin') {
+    sections.push({ key: 'adm', title: t('role.administrators'), count: byRole('admin').length, items: byRole('admin').map(toItem('direct')) });
     sections.push({ key: 'dev', title: t('role.developers'), count: byRole('developer').length, items: byRole('developer').map(toItem('direct')) });
     sections.push({ key: 'esc', title: t('role.escalationTeam'), count: byRole('support').length, items: byRole('support').map(toItem('direct')) });
     sections.push({ key: 'cli', title: t('role.client') + 's', count: byRole('client').length, items: byRole('client').map(toItem('direct')) });
     sections.push({ key: 'usr', title: t('common.users') || 'Users', count: users.filter((u) => !['admin','developer','support','client'].includes(u.role) && u.id !== me?.id).length, items: users.filter((u) => !['admin','developer','support','client'].includes(u.role) && u.id !== me?.id).map(toItem('direct')) });
   } else if (role === 'client') {
     const admins = byRole('admin');
-    sections.push({ key: 'adm', title: t('role.admin'), count: admins.length, items: admins.map(toItem('direct')) });
+    sections.push({ key: 'adm', title: t('role.administrators'), count: admins.length, items: admins.map(toItem('direct')) });
   } else if (role === 'developer') {
     const adminItems = byRole('admin').map(toItem('direct')).map((it) => ({ ...it, specialAdmin: true }));
     const sameGroupDevs = users.filter((u) => u.role === 'developer' && u.id !== me?.id && sharesGroup(u, me, groups));
     const esc = byRole('support');
     const myGroups = groups.filter((g) => isMember(g, me?.id));
     const groupSections = myGroups.map((g) => ({ key: 'grp-' + g.id, title: g.name, count: (g.members || []).length, items: [{ id: g.id, type: 'group', name: g.name, role: 'Group Chat', members: (g.members || []).map((mid) => users.find((u) => u.id === mid)).filter(Boolean), avatar: null, last: '', time: '', online: true, specialAdmin: false }] }));
-    if (adminItems.length) sections.push({ key: 'admin-support', title: 'ADMIN SUPPORT', special: true, count: adminItems.length, items: adminItems });
+    if (adminItems.length) sections.push({ key: 'admin-support', title: 'Admin Support', special: true, count: adminItems.length, items: adminItems });
     groupSections.forEach((s) => sections.push(s));
     if (sameGroupDevs.length) sections.push({ key: 'dev', title: t('role.developers'), count: sameGroupDevs.length, items: sameGroupDevs.map(toItem('direct')) });
     if (esc.length) sections.push({ key: 'esc', title: t('role.escalationTeam'), count: esc.length, items: esc.map(toItem('direct')) });
@@ -1072,9 +1324,9 @@ function buildSections(role, me, users, groups, t) {
     const adminItems = byRole('admin').map(toItem('direct')).map((it) => ({ ...it, specialAdmin: true }));
     const esc = byRole('support').filter((u) => u.id !== me?.id);
     const devs = byRole('developer');
-    if (adminItems.length) sections.push({ key: 'admin-support', title: 'ADMIN SUPPORT', special: true, count: adminItems.length, items: adminItems });
-    if (esc.length) sections.push({ key: 'esc', title: 'Escalation Team', count: esc.length, items: esc.map(toItem('direct')) });
-    if (devs.length) sections.push({ key: 'dev', title: 'Developers', count: devs.length, items: devs.map(toItem('direct')) });
+    if (adminItems.length) sections.push({ key: 'admin-support', title: 'Admin Support', special: true, count: adminItems.length, items: adminItems });
+    if (esc.length) sections.push({ key: 'esc', title: t('role.escalationTeam'), count: esc.length, items: esc.map(toItem('direct')) });
+    if (devs.length) sections.push({ key: 'dev', title: t('role.developers'), count: devs.length, items: devs.map(toItem('direct')) });
   }
   sections.forEach((s) => {
     s.items = s.items.map((it) => ({

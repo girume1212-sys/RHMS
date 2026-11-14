@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, API_BASE } from '../api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -31,9 +31,31 @@ export default function Reports() {
   const [perfRole, setPerfRole] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  useEffect(() => {
-    api.get('/api/reports/summary').then(setReport);
+  const loadReport = useCallback(() => {
+    return api.get('/api/reports/summary')
+      .then(setReport)
+      .catch(() => {});
   }, []);
+
+  // Refresh the report whenever the page is opened, focused again, or the tab
+  // becomes visible so company additions, renames, deletions and request-count
+  // changes are reflected automatically.
+  useEffect(() => {
+    loadReport();
+
+    const handleFocus = () => loadReport();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadReport();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [loadReport]);
 
   if (!report) return <div className="loading-screen"><div className="spinner"></div></div>;
 
@@ -179,9 +201,9 @@ export default function Reports() {
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={(report.byCompany || []).map(c => ({ ...c, count: Number(c.count) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
+              <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickFormatter={(value) => value && value.length > 14 ? `${value.slice(0, 14)}...` : value} />
               <YAxis stroke="#9ca3af" fontSize={12} />
-              <Tooltip />
+              <Tooltip labelFormatter={(label, payload) => (payload && payload[0] && payload[0].payload && payload[0].payload.name) ? payload[0].payload.name : label} />
               <Bar dataKey="count" fill="#06B6D4" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
