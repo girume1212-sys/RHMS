@@ -8555,10 +8555,15 @@ body:not(.dark-mode) .lang-selector-login .lang-selector-item.active {
 }
 .data-table thead th.sortable .sort-icon {
   display: inline-block;
-  width: 14px;
-  height: 14px;
-margin-left: 6px;
-   vertical-align: middle;
+  width: 24px;
+  min-width: 24px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  font-size: 12px;
+  margin-left: 6px;
+  vertical-align: middle;
+  overflow: hidden;
 }
 .data-table thead th.sortable .sort-icon:hover {
   opacity: 1;

@@ -44,7 +44,8 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
       ON CONFLICT DO NOTHING
     `);
     await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) REFERENCES companies(id) ON DELETE SET NULL`);
-    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_company_id ON groups(company_id) WHERE company_id IS NOT NULL`);
+    await pool.query(`DROP INDEX IF EXISTS idx_groups_company_id`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_groups_company_id ON groups(company_id) WHERE company_id IS NOT NULL`);
     await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS client_deleted BOOLEAN NOT NULL DEFAULT FALSE`);
     console.log('user_groups table and groups ready');
@@ -5487,10 +5488,6 @@ app.post('/api/groups', authMiddleware, roleMiddleware('admin'), async (req, res
   try {
     const { name, description, color, company_id } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
-    if (company_id) {
-      const existing = await pool.query('SELECT id, name FROM groups WHERE company_id = $1 LIMIT 1', [company_id]);
-      if (existing.rows.length > 0) return res.status(400).json({ error: 'This company is already assigned to another support group' });
-    }
     const id = uuidv4();
     const result = await pool.query(
       'INSERT INTO groups (id, name, description, color, company_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
@@ -5507,10 +5504,6 @@ app.put('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (req, 
   try {
     const { name, description, color, company_id } = req.body;
     const companyProvided = Object.prototype.hasOwnProperty.call(req.body, 'company_id');
-    if (companyProvided && company_id) {
-      const existing = await pool.query('SELECT id FROM groups WHERE company_id = $1 AND id <> $2 LIMIT 1', [company_id, req.params.id]);
-      if (existing.rows.length > 0) return res.status(400).json({ error: 'This company is already assigned to another support group' });
-    }
     const result = companyProvided
       ? await pool.query(
           'UPDATE groups SET name = COALESCE($1, name), description = COALESCE($2, description), color = COALESCE($3, color), company_id = $4 WHERE id = $5 RETURNING *',
