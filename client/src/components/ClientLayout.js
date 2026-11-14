@@ -49,6 +49,36 @@ export default function ClientLayout() {
   const seenIds = useRef(new Set());
   const initialSeenLoaded = useRef(false);
   const audioUnlocked = useRef(false);
+  const bellButtonRef = useRef(null);
+  const mailButtonRef = useRef(null);
+  const [tailOffsets, setTailOffsets] = useState({ bell: 168, mail: 118 });
+
+  // Measure the header icons so each toast tail can point straight at its icon.
+  const measureToastAnchors = useCallback(() => {
+    const getOffset = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      if (!rect.width && !rect.height) return null;
+      const centerFromRight = window.innerWidth - (rect.left + rect.width / 2);
+      return Math.max(24, Math.round(centerFromRight - 20));
+    };
+    setTailOffsets(prev => {
+      const bell = getOffset(bellButtonRef.current);
+      const mail = getOffset(mailButtonRef.current);
+      if (bell == null && mail == null) return prev;
+      return { bell: bell ?? prev.bell, mail: mail ?? prev.mail };
+    });
+  }, []);
+
+  useEffect(() => {
+    measureToastAnchors();
+    const timer = setTimeout(measureToastAnchors, 250);
+    window.addEventListener('resize', measureToastAnchors);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', measureToastAnchors);
+    };
+  }, [measureToastAnchors, sidebarOpen, user?.name, t]);
 
   
   useEffect(() => {
@@ -161,7 +191,13 @@ const totalIncomingComments = commentNotes.length;
   const shownMsgs = commentNotes.filter(n => msgFilter === 'read' ? n.is_read : !n.is_read);
 
   const getNotificationIcon = useCallback((type) => {
-    const icons = { status_change: 'refresh', assigned: 'user', comment: 'comment', request_created: 'requests', request_deleted: 'delete', default: 'bell' };
+    const icons = {
+      status_change: 'refresh', claimed: 'refresh',
+      assigned: 'user', assignment: 'user', group_assigned: 'user', group_removed: 'user',
+      comment: 'comment', message: 'mail',
+      request_created: 'requests', request_deleted: 'delete',
+      default: 'bell'
+    };
     return icons[type] || icons.default;
   }, []);
 
@@ -173,6 +209,22 @@ const totalIncomingComments = commentNotes.length;
     if (lower.includes('assigned') || lower.includes('assign')) return 'assignment';
     return 'default';
   }, []);
+
+  // Notifications about comments/messages belong to the mail icon; everything else to the bell.
+  const isMailToast = useCallback((n) => {
+    if (n.type) return n.type === 'comment' || n.type === 'message';
+    const msg = (n.message || '').toLowerCase();
+    return msg.includes('comment') || msg.includes('message') || msg.includes('replied');
+  }, []);
+
+  const getBubbleType = useCallback((n) => {
+    const raw = n.type || getNotificationType(n.message);
+    if (raw === 'comment' || raw === 'message') return 'comment';
+    if (raw === 'status' || raw === 'status_change' || raw === 'claimed') return 'status';
+    if (raw === 'assignment' || raw === 'assigned' || raw === 'group_assigned' || raw === 'group_removed') return 'assignment';
+    if (raw === 'request' || raw === 'request_created' || raw === 'request_deleted' || raw === 'manual_assignment_needed') return 'request';
+    return 'default';
+  }, [getNotificationType]);
 
   const removeBubble = useCallback((id) => {
     dismissedIds.current.add(id);
@@ -463,28 +515,35 @@ const totalIncomingComments = commentNotes.length;
         </div>
       </aside>
 
-      {}
-      {bubbleNotifications.map((n, i) => (
-        <div
-          key={n.id}
-          className={`notification-bubble bubble-type-${n.type || getNotificationType(n.message)} bubble-incoming`}
-          style={{ top: `${72 + i * 70}px`, right: '20px' }}
-          onClick={() => { if (n.notificationId) markNotificationRead(n.notificationId); if (n.requestId) navigate(`/client/requests/${n.requestId}`); removeBubble(n.id); }}
-        >
-          <div className="bubble-pill">
-            <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>
-            <div className="bubble-pill-icon">
-              <Icon name={getNotificationIcon(n.type)} size={16} />
+      <div className="notification-bubble-stack" aria-live="polite">
+        {bubbleNotifications.map((n) => {
+          const channel = isMailToast(n) ? 'mail' : 'bell';
+          const bubbleType = getBubbleType(n);
+          return (
+            <div
+              key={n.id}
+              className={`notification-bubble bubble-type-${bubbleType} bubble-incoming`}
+              style={{ '--tail-right': `${tailOffsets[channel]}px` }}
+              onClick={() => { if (n.notificationId) markNotificationRead(n.notificationId); if (n.requestId) navigate(`/client/requests/${n.requestId}`); removeBubble(n.id); }}
+            >
+              <div className="bubble-pill">
+                <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>
+                <div className="bubble-pill-icon">
+                  <Icon name={getNotificationIcon(n.type || getNotificationType(n.message))} size={16} />
+                </div>
+                <div className="bubble-pill-body">
+                  <div className="bubble-pill-title">
+                    {n.requestId ? `${getNotifTitle(n.type)} · ${t('common.requestShort')} #${n.requestId}` : getNotifTitle(n.type)}
+                  </div>
+                  {n.userName && <div className="bubble-pill-sender">From: {n.userName}</div>}
+                  <div className="bubble-pill-text">{translateNotification(n.message, n, t)}</div>
+                  <div className="bubble-pill-time">{n.timestamp ? new Date(n.timestamp).toLocaleTimeString() : ''}</div>
+                </div>
+              </div>
             </div>
-              <div className="bubble-pill-body">
-              <div className="bubble-pill-title">{n.requestId ? `${t('common.requestShort')} #${n.requestId}` : t('common.notifications')}</div>
-              {n.userName && <div className="bubble-pill-sender">From: {n.userName}</div>}
-              <div className="bubble-pill-text">{translateNotification(n.message, n, t)}</div>
-              <div className="bubble-pill-time">{n.timestamp ? new Date(n.timestamp).toLocaleTimeString() : ''}</div>
-            </div>
-          </div>
-        </div>
-      ))}
+          );
+        })}
+      </div>
       <div className="toast-container">
         {toasts.map(t => (
           <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)} />
@@ -519,7 +578,7 @@ const totalIncomingComments = commentNotes.length;
               {darkMode ? <><span className="toggle-icon"><Icon name="sun" /></span><span className="theme-toggle-label">{t('common.brightMode')}</span></> : <><span className="toggle-icon"><Icon name="moon" /></span><span className="theme-toggle-label">{t('common.darkMode')}</span></>}
             </button>
             <div className="notification-container" style={{ position: 'relative' }}>
-              <button className="theme-toggle" onClick={openNotifications} title={t('common.notifications')} style={{ position: 'relative' }}>
+              <button ref={bellButtonRef} className="theme-toggle" onClick={openNotifications} title={t('common.notifications')} style={{ position: 'relative' }}>
                 <span className="toggle-icon"><Icon name="bell" /></span>
                 {unreadBell > 0 && (
                   <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
@@ -571,7 +630,7 @@ const totalIncomingComments = commentNotes.length;
               )}
             </div>
             <div className="notification-container" style={{ position: 'relative' }}>
-              <button className="theme-toggle" onClick={openMessages} title={t('topbar.messages')} style={{ position: 'relative' }}>
+              <button ref={mailButtonRef} className="theme-toggle" onClick={openMessages} title={t('topbar.messages')} style={{ position: 'relative' }}>
                 <span className="toggle-icon"><Icon name="mail" /></span>
                 {unreadCommentTotal > 0 && (
                   <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>

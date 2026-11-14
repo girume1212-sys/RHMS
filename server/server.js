@@ -610,6 +610,19 @@ async function maintenanceMiddleware(req, res, next) {
 };
 
 
+function broadcastNotification(userId, message, data = {}) {
+  const clients = sseClients.get(userId);
+  if (!clients || clients.size === 0) return;
+  const payload = JSON.stringify({ message, data, timestamp: new Date().toISOString() });
+  for (const client of clients) {
+    try {
+      client.write(`data: ${payload}\n\n`);
+    } catch (e) {
+      clients.delete(client);
+    }
+  }
+}
+
 async function persistNotification(userId, message, data = {}) {
   const id = uuidv4();
   try {
@@ -627,29 +640,21 @@ async function persistNotification(userId, message, data = {}) {
   }
 }
 
-async function notifyAdmins(message, data = {}) {
+async function notifyAdmins(message, data = {}, options = {}) {
   const actorId = data.userId ? String(data.userId) : null;
-  // Identify recipients on the backend and exclude the actor
+  const excluded = new Set([actorId, ...(options.exclude || [])].filter(Boolean).map(String));
+  // Identify recipients on the backend and exclude the actor (and any explicit exclusions)
   let recipients = [];
   try {
     const r = await pool.query('SELECT id FROM users WHERE role = $1 OR role = $2 OR role = $3', ['admin', 'support', 'developer']);
-    recipients = r.rows.map(row => row.id).filter(id => !actorId || String(id) !== actorId);
+    recipients = r.rows.map(row => row.id).filter(id => !excluded.has(String(id)));
   } catch (e) { recipients = []; }
 
   for (const userId of recipients) {
     const nid = await persistNotification(userId, message, data);
-    const payload = JSON.stringify({ message, data: { ...data, notificationId: nid }, timestamp: new Date().toISOString() });
-    const clients = sseClients.get(userId);
-    if (clients) {
-      for (const client of clients) {
-        try {
-          client.write(`data: ${payload}\n\n`);
-        } catch (e) {
-          clients.delete(client);
-        }
-      }
-    }
+    broadcastNotification(userId, message, { ...data, notificationId: nid });
   }
+  return recipients;
 }
 
 async function notifyAll(message, data = {}) {
@@ -662,38 +667,16 @@ async function notifyAll(message, data = {}) {
 
   for (const userId of recipients) {
     const nid = await persistNotification(userId, message, data);
-    const payload = JSON.stringify({ message, data: { ...data, notificationId: nid }, timestamp: new Date().toISOString() });
-    const clients = sseClients.get(userId);
-    if (clients) {
-      for (const client of clients) {
-        try {
-          client.write(`data: ${payload}\n\n`);
-        } catch (e) {
-          clients.delete(client);
-        }
-      }
-    }
+    broadcastNotification(userId, message, { ...data, notificationId: nid });
   }
 }
 
 async function notifyUser(userId, message, data = {}) {
   // Never notify the actor for their own action
-  if (userId && data.userId && String(userId) === String(data.userId)) return;
+  if (userId && data.userId && String(userId) === String(data.userId)) return null;
   const nid = await persistNotification(userId, message, data);
-  const clients = sseClients.get(userId);
-  console.log('[RHMS-TOAST-SOCKET] broadcast to', userId, 'clients:', clients ? clients.size : 0, 'type:', data?.type);
-  if (clients) {
-    const payload = JSON.stringify({ message, data: { ...data, notificationId: nid }, timestamp: new Date().toISOString() });
-    for (const client of clients) {
-      try {
-        client.write(`data: ${payload}\n\n`);
-        console.log('[RHMS-TOAST-SOCKET] write success to', userId);
-      } catch (e) {
-        clients.delete(client);
-        console.log('[RHMS-TOAST-SOCKET] write failed', e.message);
-      }
-    }
-  }
+  broadcastNotification(userId, message, { ...data, notificationId: nid });
+  return nid;
 }
 
 
@@ -3996,8 +3979,9 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       }
       const statusName = newStatusName;
       const clientId = existing.rows[0].client_id;
-      notifyAdmins(`Request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
-      if (clientId && clientId !== req.user.id && notifSettings.notifyClientStatusChange !== false) {
+      const statusRecipients = await notifyAdmins(`Request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
+      const statusNotified = new Set((statusRecipients || []).map(String));
+      if (clientId && clientId !== req.user.id && !statusNotified.has(String(clientId)) && notifSettings.notifyClientStatusChange !== false) {
         await notifyUser(clientId, `Your request #${req.params.id} status changed to ${statusName}`, { type: 'status_change', requestId: req.params.id, status: statusName, userId: req.user.id, userName: req.user.name });
       }
       
@@ -4023,11 +4007,13 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       await logRequestActivity('assigned', { id: req.params.id }, req.user, req, { assigneeName: assigneeResult.rows[0]?.name || 'Unknown', assigneeId: assignedTo });
       const assigneeName = assigneeResult.rows[0]?.name || 'Unknown';
       const clientId = existing.rows[0].client_id;
-      notifyAdmins(`Request #${req.params.id} assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
-      if (notifSettings.notifyDeveloperAssignment !== false) {
+      const assignRecipients = await notifyAdmins(`Request #${req.params.id} assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
+      const assignNotified = new Set((assignRecipients || []).map(String));
+      if (notifSettings.notifyDeveloperAssignment !== false && assignedTo !== req.user.id && !assignNotified.has(String(assignedTo))) {
+        assignNotified.add(String(assignedTo));
         await notifyUser(assignedTo, `You have been assigned to Request #${req.params.id}`, { type: 'assigned', requestId: req.params.id, userId: req.user.id, userName: req.user.name });
       }
-      if (clientId && clientId !== req.user.id) {
+      if (clientId && clientId !== req.user.id && !assignNotified.has(String(clientId))) {
         await notifyUser(clientId, `Your request #${req.params.id} has been assigned to ${assigneeName}`, { type: 'assigned', requestId: req.params.id, assignee: assigneeName, userId: req.user.id, userName: req.user.name });
       }
       
@@ -4206,13 +4192,16 @@ app.post('/api/requests/:id/comments', authMiddleware, async (req, res) => {
     console.log('[RHMS-TOAST-BACKEND] comment created on', req.params.id, 'by', req.user.id, 'clientId=', existing.rows[0].client_id, 'assignedTo=', existing.rows[0].assigned_to);
     const preview = (content || '').slice(0, 120);
     const data = { type: 'comment', requestId: req.params.id, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview };
-    await notifyAdmins(`New comment on Request #${req.params.id} by ${req.user.name}`, data);
-    
-    if (clientId && clientId !== req.user.id) {
+    const adminRecipients = await notifyAdmins(`New comment on Request #${req.params.id} by ${req.user.name}`, data);
+    const notified = new Set((adminRecipients || []).map(String));
+
+    if (clientId && clientId !== req.user.id && !notified.has(String(clientId))) {
+      notified.add(String(clientId));
       await notifyUser(clientId, `New comment on your request #${req.params.id} by ${req.user.name}`, data);
     }
-    
-    if (assignedTo && assignedTo !== req.user.id) {
+
+    if (assignedTo && assignedTo !== req.user.id && !notified.has(String(assignedTo))) {
+      notified.add(String(assignedTo));
       await notifyUser(assignedTo, `New comment on Request #${req.params.id} by ${req.user.name}`, data);
     }
 
@@ -6279,12 +6268,15 @@ app.post('/api/notifications', authMiddleware, roleMiddleware('admin', 'support'
     if (!user_id || !message) return res.status(400).json({ error: 'user_id and message are required' });
     const id = uuidv4();
     const result = await pool.query(
-      `INSERT INTO notifications (id, user_id, type, title, message, request_id, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-      [id, user_id, type || 'info', title || null, message, request_id || null]
+      `INSERT INTO notifications (id, user_id, type, title, message, request_id, actor_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+      [id, user_id, type || 'info', title || null, message, request_id || null, String(req.user.id)]
     );
     await logActivity({ type: 'notification_sent', message: `Notification sent: ${title || message}`, userId: req.user.id, entityType: 'notification', entityId: id, requestId: request_id || null, req });
-    await notifyUser(user_id, message, { type: type || 'info', title, requestId: request_id, userId: req.user.id, userName: req.user.name });
+    // Broadcast the notification we just inserted instead of persisting a second copy.
+    if (String(user_id) !== String(req.user.id)) {
+      broadcastNotification(user_id, message, { type: type || 'info', title, requestId: request_id, userId: req.user.id, userName: req.user.name, notificationId: id });
+    }
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);

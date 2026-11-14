@@ -50,6 +50,36 @@ export default function Layout() {
   const eventSourceRef = useRef(null);
   const audioUnlocked = useRef(false);
   const notificationAudio = useRef(null);
+  const bellButtonRef = useRef(null);
+  const mailButtonRef = useRef(null);
+  const [tailOffsets, setTailOffsets] = useState({ bell: 168, mail: 118 });
+
+  // Measure the header icons so each toast tail can point straight at its icon.
+  const measureToastAnchors = useCallback(() => {
+    const getOffset = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      if (!rect.width && !rect.height) return null;
+      const centerFromRight = window.innerWidth - (rect.left + rect.width / 2);
+      return Math.max(24, Math.round(centerFromRight - 20));
+    };
+    setTailOffsets(prev => {
+      const bell = getOffset(bellButtonRef.current);
+      const mail = getOffset(mailButtonRef.current);
+      if (bell == null && mail == null) return prev;
+      return { bell: bell ?? prev.bell, mail: mail ?? prev.mail };
+    });
+  }, []);
+
+  useEffect(() => {
+    measureToastAnchors();
+    const timer = setTimeout(measureToastAnchors, 250);
+    window.addEventListener('resize', measureToastAnchors);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', measureToastAnchors);
+    };
+  }, [measureToastAnchors, sidebarOpen, user?.name, t]);
 
   
   useEffect(() => {
@@ -168,9 +198,31 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
   }, []);
 
   const getNotificationIcon = useCallback((type) => {
-    const icons = { request: 'requests', comment: 'comment', status: 'refresh', assignment: 'user', default: 'bell' };
+    const icons = {
+      request: 'requests', request_created: 'requests', request_deleted: 'delete',
+      comment: 'comment', message: 'mail',
+      status: 'refresh', status_change: 'refresh', claimed: 'refresh',
+      assignment: 'user', assigned: 'user', group_assigned: 'user', group_removed: 'user',
+      default: 'bell'
+    };
     return icons[type] || icons.default;
   }, []);
+
+  // Notifications about comments/messages belong to the mail icon; everything else to the bell.
+  const isMailToast = useCallback((n) => {
+    if (n.type) return n.type === 'comment' || n.type === 'message';
+    const msg = (n.message || '').toLowerCase();
+    return msg.includes('comment') || msg.includes('message') || msg.includes('replied');
+  }, []);
+
+  const getBubbleType = useCallback((n) => {
+    const raw = n.type || getNotificationType(n.message);
+    if (raw === 'comment' || raw === 'message') return 'comment';
+    if (raw === 'status' || raw === 'status_change' || raw === 'claimed') return 'status';
+    if (raw === 'assignment' || raw === 'assigned' || raw === 'group_assigned' || raw === 'group_removed') return 'assignment';
+    if (raw === 'request' || raw === 'request_created' || raw === 'request_deleted' || raw === 'manual_assignment_needed') return 'request';
+    return 'default';
+  }, [getNotificationType]);
 
   const removeBubble = useCallback((id) => {
     dismissedIds.current.add(id);
@@ -508,27 +560,35 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
           )}
         </div>
       </aside>
-      {bubbleNotifications.map((n, i) => (
-        <div
-          key={n.id}
-          className={`notification-bubble bubble-type-${n.type || getNotificationType(n.message)} bubble-incoming`}
-          style={{ top: `${72 + i * 70}px`, right: '20px' }}
-          onClick={() => { if (n.notificationId) markNotificationRead(n.notificationId); if (n.requestId) navigate(`/requests/${n.requestId}`); removeBubble(n.id); }}
-        >
-          <div className="bubble-pill">
-            <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>
-            <div className="bubble-pill-icon">
-              <Icon name={getNotificationIcon(n.type || getNotificationType(n.message))} size={16} />
+      <div className="notification-bubble-stack" aria-live="polite">
+        {bubbleNotifications.map((n) => {
+          const channel = isMailToast(n) ? 'mail' : 'bell';
+          const bubbleType = getBubbleType(n);
+          return (
+            <div
+              key={n.id}
+              className={`notification-bubble bubble-type-${bubbleType} bubble-incoming`}
+              style={{ '--tail-right': `${tailOffsets[channel]}px` }}
+              onClick={() => { if (n.notificationId) markNotificationRead(n.notificationId); if (n.requestId) navigate(`/requests/${n.requestId}`); removeBubble(n.id); }}
+            >
+              <div className="bubble-pill">
+                <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>
+                <div className="bubble-pill-icon">
+                  <Icon name={getNotificationIcon(n.type || getNotificationType(n.message))} size={16} />
+                </div>
+                <div className="bubble-pill-body">
+                  <div className="bubble-pill-title">
+                    {n.requestId ? `${getNotifTitle(n.type)} · ${t('common.requestShort')} #${n.requestId}` : getNotifTitle(n.type)}
+                  </div>
+                  {n.userName && <div className="bubble-pill-sender">From: {n.userName}</div>}
+                  <div className="bubble-pill-text">{translateNotification(n.message, n, t)}</div>
+                  <div className="bubble-pill-time">{n.timestamp ? new Date(n.timestamp).toLocaleTimeString() : ''}</div>
+                </div>
+              </div>
             </div>
-            <div className="bubble-pill-body">
-              <div className="bubble-pill-title">{n.requestId ? `${t('common.requestShort')} #${n.requestId}` : t('common.notification')}</div>
-              {n.userName && <div className="bubble-pill-sender">From: {n.userName}</div>}
-              <div className="bubble-pill-text">{translateNotification(n.message, n, t)}</div>
-              <div className="bubble-pill-time">{n.timestamp ? new Date(n.timestamp).toLocaleTimeString() : ''}</div>
-            </div>
-          </div>
-        </div>
-      ))}
+          );
+        })}
+      </div>
       <div className="toast-container">
         {toasts.map(t => (
           <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)} />
@@ -561,7 +621,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
               {darkMode ? <><span className="toggle-icon"><Icon name="sun" /></span><span className="theme-toggle-label">{t('topbar.bright')}</span></> : <><span className="toggle-icon"><Icon name="moon" /></span><span className="theme-toggle-label">{t('topbar.dark')}</span></>}
             </button>
             <div className="topbar-icon-container">
-              <button className="topbar-icon" title={t('topbar.notifications')} onClick={openNotifications}>
+              <button ref={bellButtonRef} className="topbar-icon" title={t('topbar.notifications')} onClick={openNotifications}>
                 <Icon name="bell" />
                 {unreadBell > 0 && <span className="badge">{unreadBell > 99 ? '99+' : unreadBell}</span>}
               </button>
@@ -608,7 +668,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
               )}
             </div>
             <div className="topbar-icon-container">
-              <button className="topbar-icon" title={t('topbar.messages')} onClick={openMessages}>
+              <button ref={mailButtonRef} className="topbar-icon" title={t('topbar.messages')} onClick={openMessages}>
                 <Icon name="mail" />
                 {unreadCommentTotal > 0 && <span className="badge">{unreadCommentTotal > 99 ? '99+' : unreadCommentTotal}</span>}
               </button>
