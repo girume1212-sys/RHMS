@@ -4559,18 +4559,18 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
          GROUP BY uc.company_id
        ),
        company_rows AS (
-         SELECT co.name, COALESCE(crc.count, 0)::int AS count
+         SELECT co.id, co.name, COALESCE(crc.count, 0)::int AS count
          FROM companies co
          LEFT JOIN company_request_counts crc ON crc.company_id = co.id
        ),
        unknown_row AS (
-         SELECT 'Unknown'::text AS name, COALESCE(SUM(crc.count), 0)::int AS count
+         SELECT NULL::varchar AS id, 'Unknown'::text AS name, COALESCE(SUM(crc.count), 0)::int AS count
          FROM company_request_counts crc
          WHERE crc.company_id IS NULL
        )
-       SELECT name, count FROM company_rows
+       SELECT id, name, count FROM company_rows
        UNION ALL
-       SELECT name, count FROM unknown_row WHERE count > 0
+       SELECT id, name, count FROM unknown_row WHERE count > 0
        ORDER BY count DESC, name ASC`, params
     );
     const byCompany = companyCounts.rows.map(r => ({ ...r, name: r.name, count: Number(r.count) || 0 }));
@@ -5251,18 +5251,18 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
         GROUP BY uc.company_id
       ),
       company_rows AS (
-        SELECT co.name, COALESCE(crc.count, 0)::int AS count
+        SELECT co.id, co.name, COALESCE(crc.count, 0)::int AS count
         FROM companies co
         LEFT JOIN company_request_counts crc ON crc.company_id = co.id
       ),
       unknown_row AS (
-        SELECT 'Unknown'::text AS name, COALESCE(SUM(crc.count), 0)::int AS count
+        SELECT NULL::varchar AS id, 'Unknown'::text AS name, COALESCE(SUM(crc.count), 0)::int AS count
         FROM company_request_counts crc
         WHERE crc.company_id IS NULL
       )
-      SELECT name, count FROM company_rows
+      SELECT id, name, count FROM company_rows
       UNION ALL
-      SELECT name, count FROM unknown_row WHERE count > 0
+      SELECT id, name, count FROM unknown_row WHERE count > 0
       ORDER BY count DESC, name ASC
     `);
 
