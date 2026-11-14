@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck, Copy, Pencil, Trash2, Reply } from 'lucide-react';
 import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
+import { showStatusToast } from '../notify';
 import Icon from './Icon';
 
 function initials(name) {
@@ -65,6 +67,45 @@ function attachmentUrl(a) {
   return (API_BASE || '') + path;
 }
 
+// Text used by the message context menu's Copy action. Falls back to the
+// attachment file names for attachment-only messages so it never copies ''.
+function messageCopyText(m) {
+  const content = String(m?.content || '').trim();
+  if (content) return content;
+  if (Array.isArray(m?.attachments) && m.attachments.length > 0) {
+    return m.attachments
+      .map((a) => attachmentName(normalizeAttachment(a)))
+      .filter(Boolean)
+      .join('\n');
+  }
+  return '';
+}
+
+async function copyToClipboard(value) {
+  const text = String(value ?? '');
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* fall through to the legacy path */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 export default function CommentManagement() {
   const { user, darkMode } = useAuth();
   const { t } = useTranslation();
@@ -93,7 +134,9 @@ export default function CommentManagement() {
   const [activity, setActivity] = useState({});  const [replyTo, setReplyTo] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
-  const [contextMsg, setContextMsg] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [acceptType, setAcceptType] = useState('*/*');
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -102,6 +145,7 @@ export default function CommentManagement() {
   const textareaRef = useRef(null);
   const attachRef = useRef(null);
   const emojiRef = useRef(null);
+  const contextMenuRef = useRef(null);
 
   const role = user?.role || 'client';
 
@@ -149,6 +193,8 @@ export default function CommentManagement() {
     setAttachments([]);
     setReplyTo(null);
     setEditingId(null);
+    setContextMenu(null);
+    setDeleteTarget(null);
     setMsgLoading(true);
     try {
       const data = await api.get(`/api/messages?conversationType=${conv.type}&conversationId=${encodeURIComponent(conv.id)}`);
@@ -190,6 +236,55 @@ export default function CommentManagement() {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
+
+  // Keep the message context menu fully inside the viewport after it renders.
+  useLayoutEffect(() => {
+    if (!contextMenu || !contextMenuRef.current) return;
+    const rect = contextMenuRef.current.getBoundingClientRect();
+    const pad = 8;
+    let x = contextMenu.x;
+    let y = contextMenu.y;
+    if (x + rect.width + pad > window.innerWidth) x = Math.max(pad, window.innerWidth - rect.width - pad);
+    if (y + rect.height + pad > window.innerHeight) y = Math.max(pad, window.innerHeight - rect.height - pad);
+    if (x < pad) x = pad;
+    if (y < pad) y = pad;
+    if (x !== contextMenu.x || y !== contextMenu.y) {
+      setContextMenu((cur) => (cur ? { ...cur, x, y } : cur));
+    }
+  }, [contextMenu]);
+
+  // Close the context menu on outside click, Escape, or window resize.
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onOutside = (e) => {
+      if (contextMenuRef.current && contextMenuRef.current.contains(e.target)) return;
+      setContextMenu(null);
+    };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    const onResize = () => setContextMenu(null);
+    document.addEventListener('mousedown', onOutside, true);
+    document.addEventListener('touchstart', onOutside, true);
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('resize', onResize);
+    return () => {
+      document.removeEventListener('mousedown', onOutside, true);
+      document.removeEventListener('touchstart', onOutside, true);
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [contextMenu]);
+
+  // Escape closes the delete confirmation dialog.
+  useEffect(() => {
+    if (!deleteTarget) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape' && !deleting) setDeleteTarget(null);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [deleteTarget, deleting]);
 
   // Realtime reordering based on incoming messages (SSE)
   useEffect(() => {
@@ -407,25 +502,61 @@ export default function CommentManagement() {
     } catch {}
   };
 
+  const openMessageMenu = useCallback((e, message) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const x = e?.clientX ?? 0;
+    const y = e?.clientY ?? 0;
+    setContextMenu({ msg: message, x, y });
+  }, []);
+
   const handleEdit = async (msgId) => {
+    const nextContent = editText.trim();
+    if (!nextContent) {
+      showStatusToast('Message text cannot be empty', 'error');
+      return;
+    }
     try {
       const res = await api.put(`/api/messages/${msgId}`, { content: editText });
       setMessages((prev) => prev.map((m) => (m.id === msgId ? res : m)));
       setEditingId(null);
       setEditText('');
-    } catch {}
+      showStatusToast('Message updated');
+    } catch (e) {
+      showStatusToast(e?.message || 'Could not update the message', 'error');
+    }
   };
 
-  const handleDelete = async (msgId) => {
-    if (!window.confirm('Delete this message?')) return;
+  const requestDelete = (message) => {
+    setContextMenu(null);
+    setDeleteTarget(message);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
     try {
-      await api.delete(`/api/messages/${msgId}`);
-      setMessages((prev) => prev.filter((m) => m.id !== msgId));
-    } catch {}
+      await api.delete(`/api/messages/${deleteTarget.id}`);
+      setMessages((prev) => prev.filter((m) => m.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      showStatusToast('Message deleted');
+    } catch (e) {
+      showStatusToast(e?.message || 'Could not delete the message', 'error');
+    } finally {
+      setDeleting(false);
+    }
   };
 
-  const handleCopy = (content) => {
-    try { navigator.clipboard.writeText(content); } catch {}
+  const handleCopy = async (message) => {
+    const value = messageCopyText(message);
+    if (!value) {
+      showStatusToast('This message has no text to copy', 'error');
+      return;
+    }
+    const ok = await copyToClipboard(value);
+    showStatusToast(ok ? 'Message copied to clipboard' : 'Could not copy the message', ok ? 'success' : 'error');
   };
 
   const flatItems = sections.flatMap((s) => s.items);
@@ -596,7 +727,7 @@ export default function CommentManagement() {
                               </div>
                             </div>
                           ) : (
-                            <div style={{ position: 'relative', background: own ? (dark ? '#DBEAFE22' : '#EAF2FF') : (dark ? '#F1F5F922' : '#F3F4F6'), color: own ? (dark ? '#E2E8F0' : '#1E3A8A') : (dark ? '#E2E8F0' : '#1F2937'), padding: '10px 14px', borderRadius: 18, border: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : (dark ? '1px solid #475569' : '1px solid #E5E7EB'), boxShadow: own ? '0 4px 12px rgba(37,99,235,0.14)' : '0 4px 12px rgba(0,0,0,0.08)', backdropFilter: 'blur(2px)' }} onContextMenu={(e) => { e.preventDefault(); setContextMsg(m); }}>
+                            <div style={{ position: 'relative', background: own ? (dark ? '#DBEAFE22' : '#EAF2FF') : (dark ? '#F1F5F922' : '#F3F4F6'), color: own ? (dark ? '#E2E8F0' : '#1E3A8A') : (dark ? '#E2E8F0' : '#1F2937'), padding: '10px 14px', borderRadius: 18, border: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : (dark ? '1px solid #475569' : '1px solid #E5E7EB'), boxShadow: own ? '0 4px 12px rgba(37,99,235,0.14)' : '0 4px 12px rgba(0,0,0,0.08)', backdropFilter: 'blur(2px)' }} onContextMenu={(e) => openMessageMenu(e, m)}>
                               {/* tail */}
                               <span style={{ position: 'absolute', bottom: -7, [own ? 'right' : 'left']: 16, width: 14, height: 14, background: 'inherit', transform: 'rotate(45deg)', borderRadius: 3, borderRight: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : 'none', borderBottom: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : 'none', borderLeft: !own ? (dark ? '1px solid #475569' : '1px solid #E5E7EB') : 'none', borderTop: !own ? (dark ? '1px solid #475569' : '1px solid #E5E7EB') : 'none', zIndex: 0, boxShadow: own ? '2px 2px 6px rgba(37,99,235,0.08)' : '2px 2px 6px rgba(0,0,0,0.05)' }} />
                               <div style={{ position: 'relative', zIndex: 1 }}>
@@ -671,22 +802,6 @@ export default function CommentManagement() {
                             </div>
                           )}
                           {own && <div style={{ fontSize: 11, color: '#3B82F6', textAlign: 'right', marginTop: 2, display: 'flex', justifyContent: 'flex-end', gap: 4, alignItems: 'center' }}>{m.read ? <><span>✓✓</span><span>Seen</span></> : <span>✓</span>}</div>}
-                          {/* context menu */}
-                          {contextMsg?.id === m.id && (
-                            <div style={{ position: 'absolute', zIndex: 10, background: T.panel, border: '1px solid ' + T.border, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, marginTop: 4 }}>
-                              {[
-                                { label: 'Reply', action: () => { setReplyTo(m); setContextMsg(null); } },
-                                { label: 'Copy', action: () => { handleCopy(m.content); setContextMsg(null); } },
-                                { label: 'React 👍', action: () => { handleReaction(m.id, '👍'); setContextMsg(null); } },
-                                ...(own ? [
-                                  { label: 'Edit', action: () => { setEditingId(m.id); setEditText(m.content); setContextMsg(null); } },
-                                  { label: 'Delete', action: () => { handleDelete(m.id); setContextMsg(null); } },
-                                ] : []),
-                              ].map((a) => (
-                                <button key={a.label} onClick={a.action} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>{a.label}</button>
-                              ))}
-                            </div>
-                          )}
                         </div>
                         {own && <Avatar user={{ name: m.sender_name, avatar: m.sender_avatar }} size={32} />}
                       </div>
@@ -847,6 +962,85 @@ export default function CommentManagement() {
           )}
           <a href={previewMedia.url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', bottom: 24, right: 24, padding: '8px 14px', borderRadius: 8, background: '#fff', color: '#111', textDecoration: 'none', fontWeight: 600 }}>Download</a>
         </div>
+      )}
+      {contextMenu && createPortal(
+        (() => {
+          const msg = contextMenu.msg;
+          const own = msg?.sender_id === user?.id;
+          const canModify = own || role === 'admin';
+          const copyValue = messageCopyText(msg);
+          const actions = [
+            { key: 'copy', label: 'Copy', icon: <Copy size={16} />, disabled: !copyValue, onClick: () => { setContextMenu(null); handleCopy(msg); } },
+            { key: 'reply', label: 'Reply', icon: <Reply size={16} />, onClick: () => { setReplyTo(msg); setContextMenu(null); } },
+            { key: 'react', label: 'React 👍', icon: <Smile size={16} />, onClick: () => { handleReaction(msg.id, '👍'); setContextMenu(null); } },
+            ...(canModify ? [
+              { key: 'divider', divider: true },
+              { key: 'edit', label: 'Edit', icon: <Pencil size={16} />, onClick: () => { setEditingId(msg.id); setEditText(msg.content || ''); setContextMenu(null); } },
+              { key: 'delete', label: 'Delete', icon: <Trash2 size={16} />, danger: true, onClick: () => requestDelete(msg) },
+            ] : []),
+          ];
+          return (
+            <div
+              ref={contextMenuRef}
+              role="menu"
+              aria-label="Message actions"
+              onContextMenu={(e) => e.preventDefault()}
+              style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 4000, minWidth: 200, maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100vh - 16px)', overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box', background: T.panel, border: '1px solid ' + T.border, borderRadius: 12, boxShadow: dark ? '0 18px 44px rgba(0,0,0,0.55)' : '0 18px 44px rgba(15,23,42,0.18)', padding: 6, userSelect: 'none' }}
+            >
+              <div style={{ padding: '4px 10px 6px', fontSize: 10, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase', color: T.muted }}>Message actions</div>
+              {actions.map((a) => a.divider ? (
+                <div key={a.key} style={{ height: 1, background: T.border, margin: '4px 6px' }} />
+              ) : (
+                <button
+                  key={a.key}
+                  type="button"
+                  role="menuitem"
+                  disabled={a.disabled}
+                  onClick={a.onClick}
+                  onMouseEnter={(e) => { if (a.disabled) return; e.currentTarget.style.background = a.danger ? (dark ? 'rgba(239,68,68,0.14)' : '#FEF2F2') : T.hover; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 10px', border: 'none', background: 'transparent', borderRadius: 8, cursor: a.disabled ? 'not-allowed' : 'pointer', color: a.danger ? '#EF4444' : T.text, fontSize: 13, fontWeight: 500, textAlign: 'left', opacity: a.disabled ? 0.45 : 1, transition: 'background 0.12s ease' }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, color: a.danger ? '#EF4444' : (dark ? '#93C5FD' : '#2563EB') }}>{a.icon}</span>
+                  <span>{a.label}</span>
+                </button>
+              ))}
+            </div>
+          );
+        })(),
+        document.body
+      )}
+      {deleteTarget && createPortal(
+        <div
+          onClick={() => { if (!deleting) setDeleteTarget(null); }}
+          style={{ position: 'fixed', inset: 0, background: dark ? 'rgba(2,6,23,0.72)' : 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4001, padding: 20 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cm-delete-title"
+            style={{ width: '100%', maxWidth: 380, background: T.panel, border: '1px solid ' + T.border, borderRadius: 14, padding: 20, boxShadow: '0 24px 60px rgba(0,0,0,0.35)' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: dark ? 'rgba(239,68,68,0.16)' : '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Trash2 size={18} color="#EF4444" />
+              </div>
+              <div id="cm-delete-title" style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Delete message?</div>
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.5, color: T.text2, marginBottom: 18, wordBreak: 'break-word' }}>
+              {String(deleteTarget.content || '').trim()
+                ? `“${String(deleteTarget.content).trim().slice(0, 140)}${String(deleteTarget.content).trim().length > 140 ? '…' : ''}” will be permanently removed. `
+                : 'This attachment message will be permanently removed. '}
+              This action cannot be undone.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={deleting} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: deleting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>
+              <button type="button" onClick={handleDelete} disabled={deleting} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', cursor: deleting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: deleting ? 0.7 : 1 }}>{deleting ? 'Deleting…' : 'Delete'}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
 

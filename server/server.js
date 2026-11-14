@@ -6441,7 +6441,7 @@ app.get('/api/messages', authMiddleware, async (req, res) => {
        [type, conversationId, req.user.id]
      );
      const result = await pool.query(
-       `SELECT m.id, m.conversation_type, m.conversation_id, m.sender_id, m.content, m.attachments, m.delivered, m.created_at,
+       `SELECT m.id, m.conversation_type, m.conversation_id, m.sender_id, m.content, m.attachments, m.reply_to, m.reactions, m.edited_at, m.delivered, m.created_at,
               u.name AS sender_name, u.avatar AS sender_avatar, u.role AS sender_role,
                EXISTS (SELECT 1 FROM message_read_tracking r WHERE r.conversation_type = m.conversation_type AND r.conversation_id = m.conversation_id AND r.user_id <> m.sender_id AND r.last_read_at >= m.created_at) AS read
        FROM messages m LEFT JOIN users u ON m.sender_id = u.id
