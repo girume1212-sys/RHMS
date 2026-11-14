@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, API_BASE } from '../api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded } from '../i18n/translateServer';
@@ -14,6 +14,56 @@ const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
   if (avatar.startsWith('http')) return avatar;
   return `${API_BASE}${avatar}`;
+};
+
+const PRIORITY_COLORS = {
+  low: '#3B82F6',
+  medium: '#F59E0B',
+  high: '#EF4444',
+  critical: '#DC2626',
+};
+
+const getPriorityColor = (priority) => {
+  if (priority?.color) return priority.color;
+  const key = (priority?.name || '').toLowerCase();
+  return PRIORITY_COLORS[key] || '#6B7280';
+};
+
+const STATUS_COLORS = {
+  new: '#3B82F6',
+  assigned: '#8B5CF6',
+  'in progress': '#F59E0B',
+  'waiting for client': '#F97316',
+  resolved: '#10B981',
+  closed: '#6B7280',
+  rejected: '#DC2626',
+  escalated: '#EF4444',
+  'on hold': '#EDB007',
+};
+
+const getStatusColor = (status) => {
+  if (status?.color) return status.color;
+  const key = (status?.name || '').toLowerCase();
+  return STATUS_COLORS[key] || '#6B7280';
+};
+
+const CATEGORY_COLORS = {
+  hardware: '#3B82F6',
+  software: '#10B981',
+  network: '#F59E0B',
+  security: '#EF4444',
+  email: '#8B5CF6',
+  account: '#06B6D4',
+  data: '#EC4899',
+  other: '#6B7280',
+};
+
+const CATEGORY_PALETTE = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#EC4899', '#6B7280'];
+
+const getCategoryColor = (category, index = 0) => {
+  if (category?.color) return category.color;
+  const key = (category?.name || '').toLowerCase();
+  return CATEGORY_COLORS[key] || CATEGORY_PALETTE[index % CATEGORY_PALETTE.length];
 };
 
 export default function Reports() {
@@ -177,7 +227,11 @@ export default function Reports() {
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
               <YAxis stroke="#9ca3af" fontSize={12} />
               <Tooltip />
-              <Bar dataKey="count" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" radius={[0, 0, 0, 0]}>
+                {(report.byStatus || []).map((s, i) => (
+                  <Cell key={i} fill={getStatusColor(s)} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -189,7 +243,11 @@ export default function Reports() {
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
               <YAxis stroke="#9ca3af" fontSize={12} />
               <Tooltip />
-              <Bar dataKey="count" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" radius={[0, 0, 0, 0]}>
+                {(report.byPriority || []).map((p, i) => (
+                  <Cell key={i} fill={getPriorityColor(p)} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -216,7 +274,11 @@ export default function Reports() {
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
               <YAxis stroke="#9ca3af" fontSize={12} />
               <Tooltip />
-              <Bar dataKey="count" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" radius={[0, 0, 0, 0]}>
+                {(report.byCategory || []).map((c, i) => (
+                  <Cell key={i} fill={getCategoryColor(c, i)} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>

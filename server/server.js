@@ -375,6 +375,7 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS reactions TEXT DEFAULT '[]'`);
     await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP WITH TIME ZONE`);
     await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE`);
+    try { await migrateLegacyMessageAudio(); } catch (e) { console.error('voice migration failed:', e.message); }
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sessions (
@@ -531,7 +532,16 @@ const sseClients = new Map();
 app.use(cors());
 app.use(express.json());
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const PRIVATE_AUDIO_DIR = path.join(__dirname, 'private_uploads', 'audio');
+const AUDIO_FILE_EXT_RE = /\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|wma|webm|weba)$/i;
+try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch (e) {}
+try { fs.mkdirSync(PRIVATE_AUDIO_DIR, { recursive: true }); } catch (e) {}
+
+// Audio files are deliberately stored outside the public /uploads tree. They
+// are only served by the authenticated attachment route below.
+app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/private_uploads', (req, res) => res.status(404).json({ error: 'Not found' }));
 app.use(express.static(path.join(__dirname, '../client/build')));
 
 
@@ -548,13 +558,65 @@ app.use('/api', maintenanceMiddleware);
 
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename: (req, file, cb) => {
+    const safeName = path.basename(String(file.originalname || 'file')).replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${uuidv4()}-${safeName}`);
+  }
+});
+const voiceStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, PRIVATE_AUDIO_DIR),
+  filename: (req, file, cb) => {
+    const safeName = path.basename(String(file.originalname || 'voice-message.webm')).replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${uuidv4()}-${safeName}`);
+  }
 });
 const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }
 });
+
+// Older messages may reference audio files that were written to the public
+// uploads directory. Move those files into private storage and rewrite the
+// attachment path so playback continues through the authenticated endpoint.
+async function migrateLegacyMessageAudio() {
+  const result = await pool.query("SELECT id, attachments FROM messages WHERE attachments LIKE '%/uploads/%'");
+  for (const row of result.rows) {
+    let attachments = [];
+    try { attachments = JSON.parse(row.attachments || '[]'); } catch (e) { continue; }
+    if (!Array.isArray(attachments)) continue;
+    let changed = false;
+    for (const att of attachments) {
+      if (!att || typeof att !== 'object') continue;
+      const attPath = String(att.path || att.url || '');
+      if (!attPath.startsWith('/uploads/')) continue;
+      const attType = String(att.type || att.mimeType || att.mimetype || '').toLowerCase();
+      const attName = String(att.name || path.basename(attPath));
+      const isAudio = attType.startsWith('audio/')
+        || (!attType.startsWith('video/') && AUDIO_FILE_EXT_RE.test(attName))
+        || /voice-message/i.test(attName);
+      if (!isAudio) continue;
+      const fileName = path.basename(attPath);
+      const source = path.join(UPLOADS_DIR, fileName);
+      const destination = path.join(PRIVATE_AUDIO_DIR, fileName);
+      try {
+        if (fs.existsSync(source)) {
+          if (fs.existsSync(destination)) fs.unlinkSync(source);
+          else fs.renameSync(source, destination);
+        }
+        if (fs.existsSync(destination)) {
+          att.path = `private://audio/${fileName}`;
+          changed = true;
+        }
+      } catch (e) {
+        console.error('voice migration file move failed:', e.message);
+      }
+    }
+    if (changed) {
+      await pool.query('UPDATE messages SET attachments = $1 WHERE id = $2', [JSON.stringify(attachments), row.id]);
+    }
+  }
+}
 
 const authMiddleware = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -619,6 +681,26 @@ function broadcastNotification(userId, message, data = {}) {
       client.write(`data: ${payload}\n\n`);
     } catch (e) {
       clients.delete(client);
+    }
+  }
+}
+
+// Inform every connected client when a user's presence changes. Online status
+// is derived from active SSE connections, so this stays accurate on connect,
+// disconnect and automatic reconnects.
+function broadcastPresence(userId, online) {
+  const payload = JSON.stringify({
+    type: 'presence',
+    data: { type: 'presence', userId: String(userId), online: !!online },
+    timestamp: new Date().toISOString(),
+  });
+  for (const clients of sseClients.values()) {
+    for (const client of clients) {
+      try {
+        client.write(`data: ${payload}\n\n`);
+      } catch (e) {
+        clients.delete(client);
+      }
     }
   }
 }
@@ -1746,10 +1828,13 @@ app.get('/api/notifications/stream', async (req, res) => {
   res.write(`data: ${JSON.stringify({ message: 'Connected', timestamp: new Date().toISOString() })}\n\n`);
 
   const userId = req.user.id;
+  const existing = sseClients.get(userId);
+  const firstConnection = !existing || existing.size === 0;
   if (!sseClients.has(userId)) {
     sseClients.set(userId, new Set());
   }
   sseClients.get(userId).add(res);
+  if (firstConnection) broadcastPresence(userId, true);
 
   
   pool.query('SELECT COUNT(*) FROM activity_log WHERE created_at > NOW() - INTERVAL \'24 hours\'')
@@ -1771,6 +1856,7 @@ app.get('/api/notifications/stream', async (req, res) => {
       clients.delete(res);
       if (clients.size === 0) {
         sseClients.delete(userId);
+        broadcastPresence(userId, false);
       }
     }
   });
@@ -2804,6 +2890,9 @@ app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support', 'develo
     query += ` ORDER BY u.created_at DESC`;
     const result = await pool.query(query, params);
     const users = result.rows.map(u => mapUser(u));
+    for (const u of users) {
+      u.online = sseClients.has(String(u.id));
+    }
     try {
       const groupResult = await pool.query(`
         SELECT ug.user_id, g.id AS group_id, g.name AS group_name, g.color AS group_color
@@ -4349,7 +4438,62 @@ app.post('/api/upload', authMiddleware, async (req, res, next) => {
       }
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       await logActivity({ type: 'file_uploaded', message: `File uploaded: ${req.file.originalname}`, userId: req.user.id, entityType: 'file', details: { filename: req.file.filename, size: req.file.size, mimetype: req.file.mimetype }, req });
-      res.json({ filename: req.file.filename, path: `/uploads/${req.file.filename}` });
+      res.json({
+        filename: req.file.filename,
+        path: `/uploads/${req.file.filename}`,
+        size: req.file.size,
+        type: req.file.mimetype || '',
+        private: false,
+      });
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Voice recordings are private user content. They are written outside the
+// public /uploads directory and can only be retrieved through the authorized
+// message-attachment route.
+app.post('/api/upload/voice', authMiddleware, async (req, res) => {
+  try {
+    const sizeResult = await pool.query("SELECT value FROM system_settings WHERE key = 'maxUploadSize'");
+    const maxMB = sizeResult.rows.length > 0 ? parseInt(sizeResult.rows[0].value) || 10 : 10;
+    const maxBytes = maxMB * 1024 * 1024;
+    const m = multer({
+      storage: voiceStorage,
+      limits: { fileSize: maxBytes },
+      fileFilter: (req, file, cb) => {
+        const mime = String(file.mimetype || '').toLowerCase();
+        const byExtension = AUDIO_FILE_EXT_RE.test(String(file.originalname || ''));
+        if (!mime.startsWith('audio/') && !(byExtension && !mime.startsWith('video/'))) {
+          return cb(new Error('Only voice recordings are allowed'));
+        }
+        cb(null, true);
+      },
+    });
+    m.single('file')(req, res, async (err) => {
+      try {
+        if (err) {
+          if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `File too large. Maximum size is ${maxMB}MB` });
+          return res.status(400).json({ error: err.message });
+        }
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        try {
+          await logActivity({ type: 'voice_message_uploaded', message: 'Voice message recorded', userId: req.user.id, entityType: 'file', details: { filename: req.file.filename, size: req.file.size, mimetype: req.file.mimetype }, req });
+        } catch (logErr) {
+          console.error('voice upload log failed:', logErr.message);
+        }
+        res.json({
+          filename: req.file.filename,
+          path: `private://audio/${req.file.filename}`,
+          size: req.file.size,
+          type: req.file.mimetype || 'audio/webm',
+          private: true,
+        });
+      } catch (innerErr) {
+        console.error('voice upload failed:', innerErr);
+        if (!res.headersSent) res.status(500).json({ error: 'Server error' });
+      }
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -5207,20 +5351,20 @@ app.get('/api/reports/summary', authMiddleware, roleMiddleware('admin', 'support
     const total = parseInt(totalResult.rows[0].count);
 
     const byStatusResult = await pool.query(`
-      SELECT s.name, COUNT(r.id) as count FROM statuses s
+      SELECT s.name, s.color, COUNT(r.id) as count FROM statuses s
       LEFT JOIN requests r ON r.status_id = s.id
       WHERE LOWER(s.name) <> 'reopened'
-      GROUP BY s.name, s.id ORDER BY s.id
+      GROUP BY s.name, s.id, s.color ORDER BY s.id
     `);
     const byPriorityResult = await pool.query(`
-      SELECT p.name, COUNT(r.id) as count FROM priorities p
+      SELECT p.name, p.color, COUNT(r.id) as count FROM priorities p
       LEFT JOIN requests r ON r.priority_id = p.id
-      GROUP BY p.name, p.id ORDER BY p.id
+      GROUP BY p.name, p.id, p.color ORDER BY p.id
     `);
     const byCategoryResult = await pool.query(`
-      SELECT c.name, COUNT(r.id) as count FROM categories c
+      SELECT c.name, c.color, COUNT(r.id) as count FROM categories c
       LEFT JOIN requests r ON r.category_id = c.id
-      GROUP BY c.name, c.id ORDER BY c.name
+      GROUP BY c.name, c.id, c.color ORDER BY c.name
     `);
 
     // X-axis labels come from the companies table (Company Management) so the
@@ -6554,7 +6698,16 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
     row.reactions = (() => { try { return JSON.parse(row.reactions || '[]'); } catch { return []; } })();
     // notify recipients
     try {
-      const attachmentPreview = attachmentList.length === 1 ? 'Sent an attachment' : `Sent ${attachmentList.length} attachments`;
+      const firstAttachment = attachmentList[0] || {};
+      const attachmentType = String(firstAttachment.type || firstAttachment.mimeType || '').toLowerCase();
+      const attachmentFileName = String(firstAttachment.name || firstAttachment.path || '');
+      const isVoiceAttachment = attachmentList.length === 1 && (
+        attachmentType.startsWith('audio/') ||
+        /\.(webm|weba|mp3|wav|ogg|oga|m4a|aac|flac|opus|wma)$/i.test(attachmentFileName)
+      );
+      const attachmentPreview = isVoiceAttachment
+        ? 'Sent a voice message'
+        : (attachmentList.length === 1 ? 'Sent an attachment' : `Sent ${attachmentList.length} attachments`);
       const messagePreview = messageContent.trim() ? messageContent.slice(0, 80) : attachmentPreview;
       if (type === 'direct') {
         await notifyUser(otherId, `New message from ${req.user.name}`, { type: 'message', conversationType: type, conversationId: otherId, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview: messagePreview });
@@ -6569,6 +6722,68 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Authenticated voice/audio streaming. The browser cannot attach a bearer
+// token to <audio src>, so the client fetches this endpoint with its normal
+// Authorization header and plays the resulting blob. Access is granted only
+// when the user is allowed to view the owning conversation.
+app.get('/api/messages/:id/attachments/:index/audio', authMiddleware, async (req, res) => {
+  try {
+    const messageId = String(req.params.id || '');
+    const index = Number(req.params.index);
+    if (!messageId || !Number.isInteger(index) || index < 0) return res.status(400).json({ error: 'Invalid attachment' });
+    const result = await pool.query(
+      'SELECT id, conversation_type, conversation_id, attachments FROM messages WHERE id = $1',
+      [messageId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Message not found' });
+    const message = result.rows[0];
+    if (!(await canAccessConversation(req.user, message.conversation_type, message.conversation_id))) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    let attachments = [];
+    try { attachments = JSON.parse(message.attachments || '[]'); } catch (e) { attachments = []; }
+    if (!Array.isArray(attachments) || !attachments[index]) return res.status(404).json({ error: 'Attachment not found' });
+    const att = attachments[index];
+    const attType = String(att.type || att.mimeType || att.mimetype || '').toLowerCase();
+    const attPath = String(att.path || att.url || '');
+    const attName = String(att.name || path.basename(attPath));
+    const isAudio = attPath.startsWith('private://audio/')
+      || attType.startsWith('audio/')
+      || (!attType && AUDIO_FILE_EXT_RE.test(attName));
+    if (!isAudio) return res.status(400).json({ error: 'Not an audio attachment' });
+
+    let filePath = null;
+    if (attPath.startsWith('private://audio/')) {
+      filePath = path.join(PRIVATE_AUDIO_DIR, path.basename(attPath.slice('private://audio/'.length)));
+    } else if (attPath.startsWith('/uploads/')) {
+      filePath = path.join(UPLOADS_DIR, path.basename(attPath));
+    }
+    if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      return res.status(404).json({ error: 'Audio file not found' });
+    }
+
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeByExt = {
+      '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.oga': 'audio/ogg',
+      '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac', '.opus': 'audio/opus',
+      '.wma': 'audio/x-ms-wma', '.webm': 'audio/webm', '.weba': 'audio/webm',
+    };
+    const contentType = attType.startsWith('audio/') ? attType : (mimeByExt[ext] || 'application/octet-stream');
+    const downloadName = path.basename(attName || filePath).replace(/[^\x20-\x7E]/g, '_').replace(/["\\\r\n]/g, '_');
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${downloadName}"`);
+    res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.sendFile(filePath, (err) => {
+      if (err && !res.headersSent) res.status(404).end();
+    });
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -6609,7 +6824,67 @@ app.get('/api/messages/unread-count', authMiddleware, async (req, res) => {
       `SELECT COUNT(*)::int AS c FROM messages WHERE conversation_type = $1 AND conversation_id = $2 AND sender_id <> $3 AND created_at > $4`,
       [type, conversationId, req.user.id, lastRead]
     );
-    res.json({ count: countRes.rows[0]?.c || 0 });
+    const lastRes = await pool.query(
+      `SELECT m.content, m.attachments, m.sender_id, m.created_at, u.name AS sender_name
+       FROM messages m LEFT JOIN users u ON m.sender_id = u.id
+       WHERE m.conversation_type = $1 AND m.conversation_id = $2
+       ORDER BY m.created_at DESC, m.id DESC
+       LIMIT 1`,
+      [type, conversationId]
+    );
+    const latest = lastRes.rows[0];
+    const lastMessage = latest ? {
+      content: latest.content || '',
+      attachments: (() => { try { return JSON.parse(latest.attachments || '[]'); } catch { return []; } })(),
+      senderId: latest.sender_id,
+      senderName: latest.sender_name,
+      createdAt: latest.created_at,
+    } : null;
+    res.json({ count: countRes.rows[0]?.c || 0, lastMessage });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Returns users the current user has an existing direct conversation with.
+// Used by the comment panel to show only real conversations (e.g. clients who
+// have messaged an admin) without exposing users who never started a chat.
+app.get('/api/messages/conversation-peers', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT
+         CASE
+           WHEN split_part(m.conversation_id, ':', 1) = $1::text THEN split_part(m.conversation_id, ':', 2)
+           ELSE split_part(m.conversation_id, ':', 1)
+         END AS peer_id
+       FROM messages m
+       WHERE m.conversation_type = 'direct'
+         AND m.conversation_id LIKE '%' || $1::text || '%'`,
+      [req.user.id]
+    );
+    const peerIds = [];
+    for (const row of result.rows) {
+      const pid = row.peer_id;
+      if (!pid) continue;
+      const cid = directConvKey(req.user.id, pid);
+      if (!(await canAccessConversation(req.user, 'direct', pid))) continue;
+      // ensure this is actually a participant pair with current user
+      if (cid.indexOf(String(req.user.id)) === -1) continue;
+      peerIds.push(String(pid));
+    }
+    if (peerIds.length === 0) return res.json([]);
+    const usersRes = await pool.query(
+      `SELECT id, name, email, role, avatar, company_name, company_id, language, approved, client_approved, moderated, created_at
+       FROM users WHERE id::text = ANY($1::text[])`,
+      [peerIds]
+    );
+    const peers = usersRes.rows.map((u) => {
+      const mu = mapUser(u);
+      mu.online = sseClients.has(String(mu.id));
+      return mu;
+    });
+    res.json(peers);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

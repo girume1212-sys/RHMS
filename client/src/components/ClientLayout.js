@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
@@ -172,15 +172,15 @@ export default function ClientLayout() {
   }, [refreshNotifications]);
 
   
-  const bellNotes = allNotifications.filter(n => n.type !== 'comment');
-  const commentNotes = allNotifications.filter(n => n.type === 'comment');
+  const bellNotes = allNotifications.filter(n => n.type !== 'comment' && n.type !== 'message');
+  const commentNotes = allNotifications.filter(n => n.type === 'comment' || n.type === 'message');
   const unreadBell = bellNotes.filter(n => !n.is_read).length;
   const unreadMsgs = commentNotes.filter(n => !n.is_read).length;
 
   const markAllCommentNotificationsRead = useCallback(() => {
     const unread = commentNotes.filter(n => !n.is_read);
     if (unread.length === 0) return;
-    setAllNotifications(prev => prev.map(n => n.type === 'comment' ? { ...n, is_read: true } : n));
+    setAllNotifications(prev => prev.map(n => (n.type === 'comment' || n.type === 'message') ? { ...n, is_read: true } : n));
     unread.forEach(n => api.put(`/api/notifications/${n.id}/read`).catch(() => refreshNotifications()));
   }, [commentNotes, refreshNotifications]);
 const totalIncomingComments = commentNotes.length;
@@ -433,6 +433,10 @@ const totalIncomingComments = commentNotes.length;
     const next = !showMessages;
     setShowMessages(next);
     setShowNotifications(false);
+    if (next) {
+      refreshNotifications();
+      refreshUnreadCommentTotal();
+    }
   };
 
   
@@ -527,13 +531,13 @@ const totalIncomingComments = commentNotes.length;
               onClick={() => { if (n.notificationId) markNotificationRead(n.notificationId); if (n.requestId) navigate(`/client/requests/${n.requestId}`); removeBubble(n.id); }}
             >
               <div className="bubble-pill">
-                <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>
+                <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>âœ•</button>
                 <div className="bubble-pill-icon">
                   <Icon name={getNotificationIcon(n.type || getNotificationType(n.message))} size={16} />
                 </div>
                 <div className="bubble-pill-body">
                   <div className="bubble-pill-title">
-                    {n.requestId ? `${getNotifTitle(n.type)} · ${t('common.requestShort')} #${n.requestId}` : getNotifTitle(n.type)}
+                    {n.requestId ? `${getNotifTitle(n.type)} Â· ${t('common.requestShort')} #${n.requestId}` : getNotifTitle(n.type)}
                   </div>
                   {n.userName && <div className="bubble-pill-sender">From: {n.userName}</div>}
                   <div className="bubble-pill-text">{translateNotification(n.message, n, t)}</div>
@@ -551,7 +555,7 @@ const totalIncomingComments = commentNotes.length;
       </div>
       {statusToast && (
         <div className={`status-toast status-toast-${statusToast.type}`}>
-          <span className="status-toast-icon">{statusToast.type === 'success' ? '✓' : statusToast.type === 'error' ? '✕' : 'ℹ'}</span>
+          <span className="status-toast-icon">{statusToast.type === 'success' ? 'âœ“' : statusToast.type === 'error' ? 'âœ•' : 'â„¹'}</span>
           <span className="status-toast-message">{statusToast.message}</span>
         </div>
       )}
@@ -581,7 +585,7 @@ const totalIncomingComments = commentNotes.length;
               <button ref={bellButtonRef} className="theme-toggle" onClick={openNotifications} title={t('common.notifications')} style={{ position: 'relative' }}>
                 <span className="toggle-icon"><Icon name="bell" /></span>
                 {unreadBell > 0 && (
-                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#E53935', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                     {unreadBell > 99 ? '99+' : unreadBell}
                   </span>
                 )}
@@ -633,7 +637,7 @@ const totalIncomingComments = commentNotes.length;
               <button ref={mailButtonRef} className="theme-toggle" onClick={openMessages} title={t('topbar.messages')} style={{ position: 'relative' }}>
                 <span className="toggle-icon"><Icon name="mail" /></span>
                 {unreadCommentTotal > 0 && (
-                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#E53935', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                     {unreadCommentTotal > 99 ? '99+' : unreadCommentTotal}
                   </span>
                 )}
@@ -645,7 +649,7 @@ const totalIncomingComments = commentNotes.length;
                     {commentNotes.some(n => !n.is_read) && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>{t('common.markAllRead')}</span>}
                   </div>
                   <div className="notif-filter-tabs">
-                    <button className={`notif-filter-btn left${msgFilter === 'unread' ? ' active' : ''}`} onClick={() => setMsgFilter('unread')}>{t('common.unread')} ({unreadMsgs})</button>
+                    <button className={`notif-filter-btn left${msgFilter === 'unread' ? ' active' : ''}`} onClick={() => setMsgFilter('unread')}>{t('common.unread')} ({unreadCommentTotal})</button>
                     <button className={`notif-filter-btn right${msgFilter === 'read' ? ' active' : ''}`} onClick={() => setMsgFilter('read')}>{t('common.read')} ({commentNotes.filter(n => n.is_read).length})</button>
                   </div>
                   {shownMsgs.length === 0 ? (
@@ -653,10 +657,10 @@ const totalIncomingComments = commentNotes.length;
                   ) : (
                     <div className="dropdown-panel-list">
                       {shownMsgs.slice(0, 10).map((m) => (
-                        <div key={m.id} className={`dropdown-panel-item${m.is_read ? '' : ' notif-unread'}`} onClick={() => { markNotificationRead(m.id); navigate('/client/comments'); setShowMessages(false); }}>
-                          <div className="dropdown-panel-icon"><Icon name="comment" size={16} /></div>
+                        <div key={m.id} className={`dropdown-panel-item${m.is_read ? '' : ' notif-unread'}`} style={{ borderLeft: m.is_read ? '3px solid transparent' : '3px solid #EF4444' }} onClick={() => { markNotificationRead(m.id); navigate('/client/comments'); setShowMessages(false); }}>
+                          <div className="dropdown-panel-icon"><Icon name={m.type === 'message' ? 'mail' : 'comment'} size={16} /></div>
                           <div className="dropdown-panel-content">
-                            <p><strong>{m.userName || t('common.unknown')}</strong> {t('common.commentedOn')} <strong>#{m.requestId}</strong></p>
+                            <p><strong>{m.userName || t('common.unknown')}</strong>{m.requestId ? <> {t('common.commentedOn')} <strong>#{m.requestId}</strong></> : ` ${m.type === 'message' ? t('topbar.messages') : t('common.newComment')}`}</p>
                             <p className="dropdown-panel-message">{translateNotification(m.message, m, t)}</p>
                             <span className="dropdown-panel-time">{m.timestamp ? new Date(m.timestamp).toLocaleString() : ''}</span>
                           </div>
@@ -686,7 +690,7 @@ const totalIncomingComments = commentNotes.length;
                   )}
                 </div>
                 <span>{user?.name}</span>
-                <span className="dropdown-arrow">▾</span>
+                <span className="dropdown-arrow">â–¾</span>
               </button>
               {showUserMenu && (
                 <div className="user-dropdown">

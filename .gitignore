@@ -117,6 +117,7 @@ Thumbs.db
 # Uploads (user-generated content)
 server/uploads/*
 !server/uploads/.gitkeep
+server/private_uploads/*
 
 # OS files
 .DS_Store?

@@ -221,14 +221,20 @@ export default function Dashboard() {
 
   const weekData = useMemo(() => {
     const rows = stats?.dailyData || [];
+    const maxPoints = { daily: 14, weekly: 8, monthly: 6 }[overviewGranularity] || 14;
     if (overviewGranularity === 'daily') {
-      return rows.map(d => ({
-        date: d.date,
-        day: d.day,
-        created: Number(d.created) || 0,
-        resolved: Number(d.resolved) || 0,
-        closed: Number(d.closed) || 0
-      }));
+      return rows.slice(-maxPoints).map(d => {
+        const [y, m, day] = String(d.day).split('-').map(Number);
+        const label = new Date(y, (m || 1) - 1, day || 1)
+          .toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return {
+          date: label,
+          day: d.day,
+          created: Number(d.created) || 0,
+          resolved: Number(d.resolved) || 0,
+          closed: Number(d.closed) || 0
+        };
+      });
     }
     const bucket = {};
     rows.forEach(d => {
@@ -253,7 +259,7 @@ export default function Dashboard() {
       bucket[key].resolved += Number(d.resolved) || 0;
       bucket[key].closed += Number(d.closed) || 0;
     });
-    return Object.keys(bucket).sort().map(k => bucket[k]);
+    return Object.keys(bucket).sort().slice(-maxPoints).map(k => bucket[k]);
   }, [stats?.dailyData, overviewGranularity]);
 
   const weekTotals = useMemo(() => weekData.reduce((acc, d) => ({
@@ -739,13 +745,13 @@ export default function Dashboard() {
               <div className="chart-empty">{t('common.noData')}</div>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
-                <AreaChart data={weekData} margin={{ top: 16, right: 20, left: 0, bottom: 30 }}>
+                <AreaChart data={weekData} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
                   <defs>
                     {WEEK_SERIES.map(s => (
                       <linearGradient key={s.key} id={`weekLineFill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={s.color} stopOpacity={0.35} />
-                        <stop offset="70%" stopColor={s.color} stopOpacity={0.12} />
-                        <stop offset="100%" stopColor={s.color} stopOpacity={0.02} />
+                        <stop offset="0%" stopColor={s.color} stopOpacity={0.6} />
+                        <stop offset="65%" stopColor={s.color} stopOpacity={0.32} />
+                        <stop offset="100%" stopColor={s.color} stopOpacity={0.1} />
                       </linearGradient>
                     ))}
                   </defs>
@@ -758,8 +764,8 @@ export default function Dashboard() {
                     axisLine={{ stroke: '#e5e7eb' }}
                     angle={-20}
                     textAnchor="end"
-                    interval={weekData.length > 15 ? Math.floor(weekData.length / 8) : 0}
-                    height={80}
+                    interval={weekData.length > 9 ? 1 : 0}
+                    height={60}
                     tick={{ fill: '#4b5563', fontSize: 12, fontWeight: 600 }}
                   />
                   <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} allowDecimals={false} width={40} tick={{ fill: '#6b7280', fontSize: 12 }} />
@@ -778,8 +784,8 @@ export default function Dashboard() {
                       stroke={s.color}
                       strokeWidth={2.5}
                       fill={`url(#weekLineFill-${s.key})`}
-                      dot={{ r: 4.5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
-                      activeDot={{ r: 7, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                      dot={{ r: 3.5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                      activeDot={{ r: 6, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
                       connectNulls
                       isAnimationActive={false}
                     />
@@ -1043,7 +1049,7 @@ export default function Dashboard() {
                         <ResponsiveContainer width="100%" height={530}>
                           <AreaChart
                             data={escChartData}
-                            margin={{ top: 24, right: 28, left: 60, bottom: 100 }}
+                            margin={{ top: 24, right: 24, left: 8, bottom: 100 }}
                           >
                             <defs>
                               <linearGradient id="escPerfLine" x1="0" y1="0" x2="1" y2="0">
@@ -1071,7 +1077,7 @@ export default function Dashboard() {
                             />
                             <YAxis
                               yAxisId="right"
-                              orientation="right"
+                              orientation="left"
                               stroke="#94A3B8"
                               fontSize={12}
                               tickLine={false}
@@ -1084,8 +1090,8 @@ export default function Dashboard() {
                               tickFormatter={value => `${value}%`}
                               label={{
                                 value: t('dashboard.successRateAxis'),
-                                angle: 90,
-                                position: 'insideRight',
+                                angle: -90,
+                                position: 'insideLeft',
                                 offset: 12,
                                 className: 'esc-axis-label perf-neon-axis'
                               }}
@@ -1187,7 +1193,7 @@ export default function Dashboard() {
                         <ResponsiveContainer width="100%" height={530}>
                           <AreaChart
                             data={devChartData}
-                            margin={{ top: 24, right: 28, left: 60, bottom: 100 }}
+                            margin={{ top: 24, right: 24, left: 8, bottom: 100 }}
                             onClick={(state) => {
                               
                               const name = state?.activePayload?.[0]?.payload?.name;
@@ -1222,7 +1228,7 @@ export default function Dashboard() {
                             />
                             <YAxis
                               yAxisId="right"
-                              orientation="right"
+                              orientation="left"
                               stroke="#94A3B8"
                               fontSize={12}
                               tickLine={false}
@@ -1235,8 +1241,8 @@ export default function Dashboard() {
                               tickFormatter={value => `${value}%`}
                               label={{
                                 value: t('dashboard.successRateAxis'),
-                                angle: 90,
-                                position: 'insideRight',
+                                angle: -90,
+                                position: 'insideLeft',
                                 offset: 12,
                                 className: 'esc-axis-label perf-neon-axis'
                               }}

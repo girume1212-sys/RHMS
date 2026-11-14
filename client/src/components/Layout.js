@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
@@ -169,15 +169,15 @@ export default function Layout() {
 
 
   
-  const bellNotes = allNotifications.filter(n => n.type !== 'comment');
-  const commentNotes = allNotifications.filter(n => n.type === 'comment');
+  const bellNotes = allNotifications.filter(n => n.type !== 'comment' && n.type !== 'message');
+  const commentNotes = allNotifications.filter(n => n.type === 'comment' || n.type === 'message');
   const unreadBell = bellNotes.filter(n => !n.is_read).length;
   const unreadMsgs = commentNotes.filter(n => !n.is_read).length;
 
   const markAllCommentNotificationsRead = useCallback(() => {
     const unread = commentNotes.filter(n => !n.is_read);
     if (unread.length === 0) return;
-    setAllNotifications(prev => prev.map(n => n.type === 'comment' ? { ...n, is_read: true } : n));
+    setAllNotifications(prev => prev.map(n => (n.type === 'comment' || n.type === 'message') ? { ...n, is_read: true } : n));
     unread.forEach(n => api.put(`/api/notifications/${n.id}/read`).catch(() => refreshNotifications()));
   }, [commentNotes, refreshNotifications]);
 const totalIncomingComments = commentNotes.length;
@@ -486,6 +486,10 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
     const next = !showMessages;
     setShowMessages(next);
     setShowNotifications(false);
+    if (next) {
+      refreshNotifications();
+      refreshUnreadCommentTotal();
+    }
   };
 
   const getNotifTitle = (type) => {
@@ -572,13 +576,13 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
               onClick={() => { if (n.notificationId) markNotificationRead(n.notificationId); if (n.requestId) navigate(`/requests/${n.requestId}`); removeBubble(n.id); }}
             >
               <div className="bubble-pill">
-                <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>
+                <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>âœ•</button>
                 <div className="bubble-pill-icon">
                   <Icon name={getNotificationIcon(n.type || getNotificationType(n.message))} size={16} />
                 </div>
                 <div className="bubble-pill-body">
                   <div className="bubble-pill-title">
-                    {n.requestId ? `${getNotifTitle(n.type)} · ${t('common.requestShort')} #${n.requestId}` : getNotifTitle(n.type)}
+                    {n.requestId ? `${getNotifTitle(n.type)} Â· ${t('common.requestShort')} #${n.requestId}` : getNotifTitle(n.type)}
                   </div>
                   {n.userName && <div className="bubble-pill-sender">From: {n.userName}</div>}
                   <div className="bubble-pill-text">{translateNotification(n.message, n, t)}</div>
@@ -596,7 +600,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
       </div>
       {statusToast && (
         <div className={`status-toast status-toast-${statusToast.type}`}>
-          <span className="status-toast-icon">{statusToast.type === 'success' ? '✓' : statusToast.type === 'error' ? '✕' : 'ℹ'}</span>
+          <span className="status-toast-icon">{statusToast.type === 'success' ? 'âœ“' : statusToast.type === 'error' ? 'âœ•' : 'â„¹'}</span>
           <span className="status-toast-message">{statusToast.message}</span>
         </div>
       )}
@@ -623,7 +627,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
             <div className="topbar-icon-container">
               <button ref={bellButtonRef} className="topbar-icon" title={t('topbar.notifications')} onClick={openNotifications}>
                 <Icon name="bell" />
-                {unreadBell > 0 && <span className="badge">{unreadBell > 99 ? '99+' : unreadBell}</span>}
+                {unreadBell > 0 && <span className="badge" style={{ background: '#E53935', color: '#fff' }}>{unreadBell > 99 ? '99+' : unreadBell}</span>}
               </button>
               {showNotifications && (
                 <div className="dropdown-panel notification-panel">
@@ -670,7 +674,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
             <div className="topbar-icon-container">
               <button ref={mailButtonRef} className="topbar-icon" title={t('topbar.messages')} onClick={openMessages}>
                 <Icon name="mail" />
-                {unreadCommentTotal > 0 && <span className="badge">{unreadCommentTotal > 99 ? '99+' : unreadCommentTotal}</span>}
+                {unreadCommentTotal > 0 && <span className="badge" style={{ background: '#E53935', color: '#fff' }}>{unreadCommentTotal > 99 ? '99+' : unreadCommentTotal}</span>}
               </button>
               {showMessages && (
                 <div className="dropdown-panel">
@@ -679,16 +683,16 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
                     {commentNotes.some(n => !n.is_read) && <span style={{ fontSize: '12px', color: '#3B82F6', cursor: 'pointer' }} onClick={markAllRead}>{t('common.markAllRead')}</span>}
                   </div>
                   <div className="notif-filter-tabs">
-                    <button className={`notif-filter-btn left${msgFilter === 'unread' ? ' active' : ''}`} onClick={() => setMsgFilter('unread')}>{t('common.unread')} ({unreadMsgs})</button>
+                    <button className={`notif-filter-btn left${msgFilter === 'unread' ? ' active' : ''}`} onClick={() => setMsgFilter('unread')}>{t('common.unread')} ({unreadCommentTotal})</button>
                     <button className={`notif-filter-btn right${msgFilter === 'read' ? ' active' : ''}`} onClick={() => setMsgFilter('read')}>{t('common.read')} ({commentNotes.filter(n => n.is_read).length})</button>
                   </div>
                   <div className="dropdown-panel-list">
                     {shownMsgs.length === 0 && <div className="dropdown-panel-empty">{t('topbar.noMessages')}</div>}
                     {shownMsgs.slice(0, 10).map((m) => (
-                      <div key={m.id} className={`dropdown-panel-item${m.is_read ? '' : ' notif-unread'}`} onClick={() => { markNotificationRead(m.id); navigate(user?.role === 'client' ? '/client/comments' : '/comments'); setShowMessages(false); }}>
-                        <div className="dropdown-panel-icon"><Icon name="comment" size={16} /></div>
+                      <div key={m.id} className={`dropdown-panel-item${m.is_read ? '' : ' notif-unread'}`} style={{ borderLeft: m.is_read ? '3px solid transparent' : '3px solid #EF4444' }} onClick={() => { markNotificationRead(m.id); navigate(user?.role === 'client' ? '/client/comments' : '/comments'); setShowMessages(false); }}>
+                        <div className="dropdown-panel-icon"><Icon name={m.type === 'message' ? 'mail' : 'comment'} size={16} /></div>
                         <div className="dropdown-panel-content">
-                          <p><strong>{m.userName || t('common.unknown')}</strong> {t('common.commentedOn')} <strong>#{m.requestId}</strong></p>
+                          <p><strong>{m.userName || t('common.unknown')}</strong>{m.requestId ? <> {t('common.commentedOn')} <strong>#{m.requestId}</strong></> : ` ${m.type === 'message' ? t('topbar.messages') : t('common.newComment')}`}</p>
                           <p className="dropdown-panel-message">{translateNotification(m.message, m, t)}</p>
                           <span className="dropdown-panel-time">{m.timestamp ? new Date(m.timestamp).toLocaleString() : ''}</span>
                         </div>
@@ -717,7 +721,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
                   )}
                 </div>
                 <span>{user?.name}</span>
-                <span className="dropdown-arrow">▾</span>
+                <span className="dropdown-arrow">â–¾</span>
               </button>
               {showUserMenu && (
                 <div className="user-dropdown">

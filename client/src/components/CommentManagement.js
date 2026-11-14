@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck, Copy, Pencil, Trash2, Reply, Code2, Headset, UsersRound, ChevronDown } from 'lucide-react';
+import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck, Copy, Pencil, Trash2, Reply, Code2, Headset, UsersRound, ChevronDown, Mic, Play, Pause, Square, X } from 'lucide-react';
 import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
@@ -186,6 +186,7 @@ function sectionThemeKey(section) {
 
 const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|bmp|svg|avif|heic|heif|ico|tiff?|jfif)$/i;
 const VIDEO_EXT_RE = /\.(mp4|m4v|webm|ogg|ogv|mov|mkv|avi|3gp|wmv|flv)$/i;
+const AUDIO_EXT_RE = /\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|wma|webm|weba)$/i;
 
 function attachmentName(a) {
   if (!a) return 'file';
@@ -211,10 +212,18 @@ function isImageAttachment(a) {
   return IMAGE_EXT_RE.test(attachmentName(a));
 }
 
+function isAudioAttachment(a) {
+  const mime = attachmentMime(a);
+  if (mime.startsWith('audio/')) return true;
+  if (mime.startsWith('video/')) return false;
+  return AUDIO_EXT_RE.test(attachmentName(a));
+}
+
 function isVideoAttachment(a) {
   const mime = attachmentMime(a);
   if (mime.startsWith('video/')) return true;
   if (mime.startsWith('audio/')) return false;
+  if (AUDIO_EXT_RE.test(attachmentName(a))) return false;
   return VIDEO_EXT_RE.test(attachmentName(a));
 }
 
@@ -223,6 +232,159 @@ function attachmentUrl(a) {
   if (!path) return '#';
   if (/^(https?:|blob:|data:)/i.test(path)) return path;
   return (API_BASE || '') + path;
+}
+
+// Short label used in the left-hand conversation preview when the latest
+// message contains only attachments (no text body).
+function previewAttachmentLabel(atts) {
+  if (!Array.isArray(atts) || atts.length === 0) return '';
+  const list = atts.map(normalizeAttachment).filter(Boolean);
+  if (!list.length) return 'Attachment';
+  const first = list[0];
+  let label = 'Attachment';
+  if (isImageAttachment(first)) label = 'Photo';
+  else if (isVideoAttachment(first)) label = 'Video';
+  else if (isAudioAttachment(first)) label = 'Voice message';
+  else if (attachmentName(first)) label = attachmentName(first);
+  return list.length > 1 ? `${label} (+${list.length - 1})` : label;
+}
+
+function buildPreviewText(lastMessage, currentUserId) {
+  if (!lastMessage) return '';
+  const content = String(lastMessage.content || '').trim();
+  const atts = Array.isArray(lastMessage.attachments) ? lastMessage.attachments : [];
+  let body = content || previewAttachmentLabel(atts);
+  if (!body) return '';
+  const own = lastMessage.senderId != null && String(lastMessage.senderId) === String(currentUserId);
+  return own ? `You: ${body}` : body;
+}
+
+function previewTimeLabel(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatClock(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+// Compact inline audio player used for both recorded previews and received
+// voice messages. Supports play/pause, seeking and duration display.
+function AudioPlayer({ src, duration, dark, T, maxWidth = 300 }) {
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [current, setCurrent] = useState(0);
+  const [total, setTotal] = useState(Number(duration) || 0);
+  const [resolvedSrc, setResolvedSrc] = useState('');
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => { setTotal(Number(duration) || 0); }, [duration]);
+  useEffect(() => () => {
+    const el = audioRef.current;
+    if (el) { try { el.pause(); } catch (e) {} }
+  }, []);
+
+  // Audio endpoints require authentication, but <audio> cannot send an
+  // Authorization header. Fetch the protected audio with the normal bearer
+  // token, then play it from a short-lived object URL.
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = '';
+    setPlaying(false);
+    setCurrent(0);
+    setLoadError('');
+    if (!src) { setResolvedSrc(''); return () => {}; }
+    if (!/^\/api\//.test(src)) { setResolvedSrc(src); return () => {}; }
+    setResolvedSrc('');
+    const token = localStorage.getItem('rhms_token');
+    const controller = new AbortController();
+    fetch(`${API_BASE || ''}${src}`, { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: controller.signal })
+      .then((res) => {
+        if (res.status === 401) throw new Error('Session expired. Please sign in again.');
+        if (res.status === 403) throw new Error('You do not have access to this voice message.');
+        if (!res.ok) throw new Error('Unable to load voice message.');
+        return res.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setResolvedSrc(objectUrl);
+      })
+      .catch((err) => {
+        if (!cancelled && err?.name !== 'AbortError') setLoadError(err?.message || 'Unable to load voice message.');
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (objectUrl) { try { URL.revokeObjectURL(objectUrl); } catch (e) {} }
+    };
+  }, [src]);
+
+  if (loadError) {
+    return (
+      <div style={{ width: '100%', maxWidth, padding: '7px 9px', borderRadius: 12, background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', border: '1px solid ' + T.border }}>
+        <div style={{ fontSize: 11, color: '#DC2626' }}>{loadError}</div>
+      </div>
+    );
+  }
+
+  const toggle = () => {
+    const el = audioRef.current;
+    if (!el || !resolvedSrc) return;
+    if (el.paused) {
+      el.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    } else {
+      el.pause();
+      setPlaying(false);
+    }
+  };
+
+  const seek = (e) => {
+    const el = audioRef.current;
+    if (!el || !total) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    el.currentTime = ratio * total;
+    setCurrent(ratio * total);
+  };
+
+  const pct = total > 0 ? Math.min(100, (current / total) * 100) : 0;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', maxWidth, padding: '7px 9px', borderRadius: 12, background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', border: '1px solid ' + T.border }}>
+      <button type="button" onClick={toggle} disabled={!resolvedSrc} title={!resolvedSrc ? 'Loading voice message…' : (playing ? 'Pause' : 'Play')} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: T.accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: resolvedSrc ? 'pointer' : 'default', opacity: resolvedSrc ? 1 : 0.55, flexShrink: 0, padding: 0 }}>
+        {playing ? <Pause size={14} /> : <Play size={14} style={{ marginLeft: 1 }} />}
+      </button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div onClick={seek} style={{ height: 4, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.16)' : 'rgba(15,23,42,0.12)', cursor: 'pointer', overflow: 'hidden' }}>
+          <div style={{ width: pct + '%', height: '100%', background: T.accent, borderRadius: 999, transition: playing ? 'width 0.2s linear' : 'none' }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: T.muted, marginTop: 3 }}>
+          <span>{formatClock(current)}</span>
+          <span>{formatClock(total)}</span>
+        </div>
+      </div>
+      <audio
+        ref={audioRef}
+        src={resolvedSrc || undefined}
+        preload="metadata"
+        onLoadedMetadata={(e) => {
+          const d = e.currentTarget.duration;
+          if (Number.isFinite(d) && d > 0) setTotal(d);
+        }}
+        onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
+        onEnded={() => { setPlaying(false); setCurrent(0); }}
+        style={{ display: 'none' }}
+      />
+    </div>
+  );
 }
 
 // Text used by the message context menu's Copy action. Falls back to the
@@ -271,6 +433,7 @@ export default function CommentManagement() {
   const T = dark ? { bg:'#0B1220', panel:'#111C2E', surface:'#16243A', bubbleIn:'#1B2A41', border:'#263750', text:'#E6EDF7', text2:'#9AAAC0', muted:'#71829B', accent:'#3B82F6', purple:'#6366F1', btn:'linear-gradient(90deg,#2563EB,#6366F1)', out:'linear-gradient(90deg,#1D4ED8,#4F46E5)', hover:'#1C2B45', input:'#0F1A2B', green:'#22C55E' } : { bg:'#F8FAFF', panel:'#FFFFFF', surface:'#EFF4FF', bubbleIn:'#E9EDFA', border:'#D7E3FF', text:'#102B65', text2:'#38558D', muted:'#6b7280', accent:'#0866F5', purple:'#6366F1', btn:'linear-gradient(90deg,#0875F9,#2563EB)', out:'linear-gradient(90deg,#0875F9,#2563EB)', hover:'#EAF1FF', input:'#FFFFFF', green:'#10B981' };
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [conversationPeers, setConversationPeers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
@@ -289,7 +452,14 @@ export default function CommentManagement() {
   const [msgLoading, setMsgLoading] = useState(false);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioLevels, setAudioLevels] = useState([]);
+  const [recordedAudio, setRecordedAudio] = useState(null);
+  const [sendingVoice, setSendingVoice] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
   const [unreadMap, setUnreadMap] = useState({});
+  const [previews, setPreviews] = useState({});
   const [activity, setActivity] = useState({});  const [replyTo, setReplyTo] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
@@ -305,8 +475,50 @@ export default function CommentManagement() {
   const attachRef = useRef(null);
   const emojiRef = useRef(null);
   const contextMenuRef = useRef(null);
+  const selectedConvRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordTimerRef = useRef(null);
+  const recordStartRef = useRef(0);
+  const recCancelRef = useRef(false);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const waveformTimerRef = useRef(null);
+  const voiceStartRef = useRef(false);
 
   const role = user?.role || 'client';
+
+  const cleanupRecorder = useCallback(() => {
+    if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null; }
+    if (waveformTimerRef.current) { clearInterval(waveformTimerRef.current); waveformTimerRef.current = null; }
+    if (audioContextRef.current) { try { audioContextRef.current.close(); } catch (e) {} audioContextRef.current = null; }
+    analyserRef.current = null;
+    if (mediaStreamRef.current) {
+      try { mediaStreamRef.current.getTracks().forEach((track) => track.stop()); } catch (e) {}
+      mediaStreamRef.current = null;
+    }
+    mediaRecorderRef.current = null;
+  }, []);
+
+  // Stop the microphone and release resources if the section unmounts.
+  useEffect(() => () => {
+    const rec = mediaRecorderRef.current;
+    recCancelRef.current = true;
+    if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) {} }
+    cleanupRecorder();
+  }, [cleanupRecorder]);
+
+  // Release the recorded audio object URL when it is replaced or discarded.
+  useEffect(() => () => {
+    if (recordedAudio?.url) { try { URL.revokeObjectURL(recordedAudio.url); } catch (e) {} }
+  }, [recordedAudio]);
+
+  // Track the open conversation so real-time events can auto-read it without
+  // re-subscribing the SSE connection on every selection change.
+  useEffect(() => {
+    selectedConvRef.current = selectedUser ? selectedUser.type + ':' + selectedUser.id : null;
+  }, [selectedUser]);
 
   useEffect(() => {
     const content = document.querySelector('.content');
@@ -316,13 +528,20 @@ export default function CommentManagement() {
   }, []);
 
   const fetchDirectory = useCallback(async () => {
-    const [u, g] = await Promise.all([
+    const [u, g, p] = await Promise.all([
       api.get('/api/users').catch(() => []),
       api.get('/api/groups').catch(() => []),
+      api.get('/api/messages/conversation-peers').catch(() => []),
     ]);
+    const usersList = Array.isArray(u) ? u : (u?.users || []);
+    const peersList = Array.isArray(p) ? p : [];
+    const byId = new Map();
+    usersList.forEach((x) => { if (x && x.id != null) byId.set(String(x.id), x); });
+    peersList.forEach((x) => { if (x && x.id != null && !byId.has(String(x.id))) byId.set(String(x.id), x); });
     return {
-      users: Array.isArray(u) ? u : (u?.users || []),
+      users: Array.from(byId.values()),
       groups: Array.isArray(g) ? g : (g?.groups || []),
+      peers: peersList,
     };
   }, []);
 
@@ -334,6 +553,7 @@ export default function CommentManagement() {
         if (cancelled) return;
         setUsers(data.users);
         setGroups(data.groups);
+        setConversationPeers(data.peers || []);
       } catch (e) {
         if (!cancelled) setError(e?.message || 'Failed to load');
       } finally {
@@ -352,6 +572,7 @@ export default function CommentManagement() {
         if (cancelled) return;
         setUsers(data.users);
         setGroups(data.groups);
+        setConversationPeers(data.peers || []);
       } catch (e) { /* keep the last known directory */ }
     };
     const onFocus = () => { refreshDirectory(); };
@@ -365,7 +586,12 @@ export default function CommentManagement() {
     };
   }, [fetchDirectory]);
 
-  const sections = buildSections(role, user, users, groups, t);
+  const sections = buildSections(role, user, users, groups, t, {
+    conversationPeers,
+    previews,
+    unreadMap,
+    activity,
+  });
   sections.sort((a, b) => {
     const aAct = Math.max(0, ...a.items.map((it) => activity[it.id] || 0));
     const bAct = Math.max(0, ...b.items.map((it) => activity[it.id] || 0));
@@ -416,6 +642,26 @@ export default function CommentManagement() {
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
     if (nearBottom && messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Keep the selected conversation's preview in sync with its message list so
+  // sending, editing, deleting or polling a message updates the left panel.
+  useEffect(() => {
+    if (!selectedUser || messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    const key = selectedUser.type + ':' + selectedUser.id;
+    setPreviews((prev) => {
+      const next = {
+        content: last.content || '',
+        attachments: Array.isArray(last.attachments) ? last.attachments : [],
+        senderId: last.sender_id,
+        senderName: last.sender_name,
+        createdAt: last.created_at,
+      };
+      const cur = prev[key];
+      if (cur && cur.createdAt === next.createdAt && cur.content === next.content && cur.senderId === next.senderId) return prev;
+      return { ...prev, [key]: next };
+    });
+  }, [messages, selectedUser]);
 
   useEffect(() => {
     const onClick = (e) => {
@@ -485,11 +731,25 @@ export default function CommentManagement() {
     } catch (e) {
       return;
     }
+    // Re-sync presence after (re)connecting in case events were missed while
+    // the stream was down.
+    es.onopen = () => {
+      fetchDirectory()
+        .then((data) => { setUsers(data.users); setGroups(data.groups); setConversationPeers(data.peers || []); })
+        .catch(() => {});
+    };
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (!data || data.type === 'init' || data.message === 'Connected') return;
         const d = data.data || {};
+        if (d.type === 'presence') {
+          if (d.userId != null) {
+            const pid = String(d.userId);
+            setUsers((prev) => prev.map((u) => (String(u.id) === pid ? { ...u, online: !!d.online } : u)));
+          }
+          return;
+        }
         if (d.type !== 'message') return;
         if (d.userId && String(d.userId) === String(user.id)) return; // skip own
         const ts = data.timestamp ? new Date(data.timestamp).getTime() : Date.now();
@@ -502,16 +762,49 @@ export default function CommentManagement() {
           if (nextTs === prevTs) return prev;
           return { ...prev, [convId]: nextTs };
         });
-        // refresh unread badge for this conversation
+        const previewKey = convType + ':' + convId;
+        // Optimistically show the incoming message immediately, then reconcile
+        // with the authoritative latest record + unread count from the server.
+        if (d.preview) {
+          setPreviews((prev) => ({
+            ...prev,
+            [previewKey]: {
+              content: d.preview,
+              attachments: [],
+              senderId: d.userId,
+              senderName: d.userName,
+              createdAt: data.timestamp || new Date().toISOString(),
+            },
+          }));
+        }
+        if (convType === 'direct' && d.userId && role === 'admin') {
+          setUsers((prev) => {
+            if (prev.some((u) => String(u.id) === String(d.userId))) return prev;
+            return [...prev, { id: d.userId, name: d.userName || 'User', role: d.userRole || 'client', avatar: d.userAvatar || null }];
+          });
+          setConversationPeers((prev) => {
+            if (prev.some((u) => String(u.id) === String(d.userId))) return prev;
+            return [...prev, { id: d.userId, name: d.userName || 'User', role: d.userRole || 'client', avatar: d.userAvatar || null }];
+          });
+        }
         api.get(`/api/messages/unread-count?conversationType=${convType}&conversationId=${encodeURIComponent(convId)}`)
           .then((r) => {
-            setUnreadMap((m) => ({ ...m, [convType + ':' + convId]: r?.count || 0 }));
+            const isOpen = selectedConvRef.current === previewKey;
+            setUnreadMap((m) => ({ ...m, [previewKey]: isOpen ? 0 : (r?.count || 0) }));
+            if (r?.lastMessage) {
+              setPreviews((prev) => ({ ...prev, [previewKey]: r.lastMessage }));
+            }
+            if (isOpen) {
+              api.put('/api/messages/read', { conversationType: convType, conversationId: convId })
+                .then(() => { try { window.dispatchEvent(new Event('rhms:unread-changed')); } catch {} })
+                .catch(() => {});
+            }
           })
           .catch(() => {});
       } catch (e) {}
     };
     return () => { try { es.close(); } catch (e) {} };
-  }, [user?.id]);
+  }, [user?.id, fetchDirectory]);
 
   // Fallback polling: keep reordering working even if SSE is unavailable
   useEffect(() => {
@@ -522,17 +815,25 @@ export default function CommentManagement() {
       for (const it of flat) {
         if (cancelled) return;
         try {
-          const data = await api.get(`/api/messages?conversationType=${it.type}&conversationId=${encodeURIComponent(it.id)}`);
-          if (!Array.isArray(data)) continue;
-          const incoming = data.filter((m) => m.sender_id !== user.id);
-          if (!incoming.length) continue;
-          const last = incoming[incoming.length - 1];
-          const ts = new Date(last.created_at).getTime() || Date.now();
-          setActivity((prev) => {
-            const prevTs = prev[it.id] || 0;
-            if (ts <= prevTs) return prev;
-            return { ...prev, [it.id]: Math.max(ts, prevTs + 1) };
-          });
+          const key = it.type + ':' + it.id;
+          const r = await api.get(`/api/messages/unread-count?conversationType=${it.type}&conversationId=${encodeURIComponent(it.id)}`);
+          if (cancelled || !r) continue;
+          const isOpen = selectedConvRef.current === key;
+          setUnreadMap((m) => ({ ...m, [key]: isOpen ? 0 : (r.count || 0) }));
+          const last = r.lastMessage;
+          if (!last) {
+            setPreviews((prev) => (prev[key] ? { ...prev, [key]: null } : prev));
+            continue;
+          }
+          setPreviews((prev) => ({ ...prev, [key]: last }));
+          if (String(last.senderId) !== String(user.id)) {
+            const ts = new Date(last.createdAt).getTime() || Date.now();
+            setActivity((prev) => {
+              const prevTs = prev[it.id] || 0;
+              if (ts <= prevTs) return prev;
+              return { ...prev, [it.id]: Math.max(ts, prevTs + 1) };
+            });
+          }
         } catch {}
       }
     };
@@ -574,8 +875,11 @@ export default function CommentManagement() {
       const flat = sections.flatMap((s) => s.items);
       for (const it of flat) {
         try {
+          const key = it.type + ':' + it.id;
           const r = await api.get(`/api/messages/unread-count?conversationType=${it.type}&conversationId=${encodeURIComponent(it.id)}`);
-          if (!cancelled) setUnreadMap((m) => ({ ...m, [it.type + ':' + it.id]: r?.count || 0 }));
+          if (cancelled) continue;
+          setUnreadMap((m) => ({ ...m, [key]: r?.count || 0 }));
+          if (r?.lastMessage) setPreviews((prev) => ({ ...prev, [key]: r.lastMessage }));
         } catch {}
       }
     })();
@@ -598,18 +902,23 @@ export default function CommentManagement() {
     openConversation(target);
   }, [loading, sections.length, selectedUser, openConversation]);
 
-  const uploadAttachments = async (files) => {
+  const uploadAttachments = async (files, endpoint = '/api/upload') => {
     const uploaded = [];
     for (let i = 0; i < files.length; i++) {
       const fd = new FormData();
       fd.append('file', files[i]);
       try {
-        const res = await api.upload('/api/upload', fd);
-        uploaded.push({ name: files[i].name, path: res.path, size: files[i].size, type: files[i].type || '' });
-      } catch (e) { console.error(e); }
+        const fileType = String(files[i].type || '').toLowerCase();
+        const isAudioFile = fileType.startsWith('audio/') || (!fileType.startsWith('video/') && AUDIO_EXT_RE.test(String(files[i].name || '')));
+        const uploadUrl = endpoint === '/api/upload/voice' ? endpoint : (isAudioFile ? '/api/upload/voice' : endpoint);
+        const res = await api.upload(uploadUrl, fd);
+        uploaded.push({ name: files[i].name, path: res.path, size: files[i].size || res.size || 0, type: res.type || files[i].type || '', private: !!res.private });
+      } catch (e) {
+        console.error(e);
+        throw e;
+      }
       setUploadProgress(Math.round(((i + 1) / files.length) * 100));
     }
-    setUploadProgress(0);
     return uploaded;
   };
 
@@ -645,6 +954,173 @@ export default function CommentManagement() {
       console.error(e);
     } finally {
       setSending(false);
+    }
+  };
+
+  const finalizeVoiceRecording = (mimeType) => {
+    const startedAt = recordStartRef.current || Date.now();
+    const elapsed = Math.max(0, Date.now() - startedAt);
+    const cancelled = recCancelRef.current;
+    const chunks = audioChunksRef.current;
+    audioChunksRef.current = [];
+    recCancelRef.current = false;
+    cleanupRecorder();
+    setRecording(false);
+    setAudioLevels([]);
+    if (cancelled) {
+      setRecordingTime(0);
+      return;
+    }
+    const type = mimeType || chunks[0]?.type || 'audio/webm';
+    const blob = new Blob(chunks, { type });
+    if (!blob.size || elapsed < 500) {
+      setRecordingTime(0);
+      setVoiceError('Recording is too short. Please try again.');
+      return;
+    }
+    const ext = /ogg/i.test(type) ? 'ogg' : /mp4|m4a|aac/i.test(type) ? 'm4a' : 'webm';
+    const url = URL.createObjectURL(blob);
+    setRecordedAudio({
+      blob,
+      url,
+      type,
+      duration: Math.max(1, Math.round(elapsed / 1000)),
+      name: `voice-message-${Date.now()}.${ext}`,
+    });
+    setRecordingTime(Math.max(1, Math.round(elapsed / 1000)));
+    setVoiceError('');
+  };
+
+  const startVoiceRecording = async () => {
+    if (!selectedUser || sendingVoice || voiceStartRef.current) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof window.MediaRecorder === 'undefined') {
+      setVoiceError('Voice recording is not supported in this browser.');
+      return;
+    }
+    voiceStartRef.current = true;
+    if (recordedAudio) deleteRecordedVoice();
+    setVoiceError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+      const mimeType = candidates.find((m) => {
+        try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; }
+      });
+      let recorder;
+      try {
+        recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      } catch (e) {
+        recorder = new MediaRecorder(stream);
+      }
+      audioChunksRef.current = [];
+      recCancelRef.current = false;
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => finalizeVoiceRecording(recorder.mimeType || mimeType);
+      recorder.onerror = () => {
+        recCancelRef.current = true;
+        setVoiceError('Recording failed. Please try again.');
+        try { recorder.stop(); } catch (e) {}
+      };
+      recorder.start(250);
+      mediaRecorderRef.current = recorder;
+      recordStartRef.current = Date.now();
+      setRecordingTime(0);
+      setAudioLevels(Array.from({ length: 24 }, () => 4));
+      setRecording(true);
+      voiceStartRef.current = false;
+      recordTimerRef.current = setInterval(() => {
+        setRecordingTime(Math.floor((Date.now() - recordStartRef.current) / 1000));
+      }, 250);
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) {
+          const ctx = new Ctx();
+          const source = ctx.createMediaStreamSource(stream);
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 64;
+          analyser.smoothingTimeConstant = 0.75;
+          source.connect(analyser);
+          audioContextRef.current = ctx;
+          analyserRef.current = analyser;
+          const bins = new Uint8Array(analyser.frequencyBinCount);
+          waveformTimerRef.current = setInterval(() => {
+            try {
+              analyser.getByteFrequencyData(bins);
+              setAudioLevels(Array.from(bins.slice(0, 24)).map((v) => Math.max(4, Math.round((v / 255) * 26))));
+            } catch (e) {}
+          }, 120);
+        }
+      } catch (e) {}
+    } catch (err) {
+      voiceStartRef.current = false;
+      cleanupRecorder();
+      setRecording(false);
+      setRecordingTime(0);
+      const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+      setVoiceError(denied
+        ? 'Microphone permission denied. Allow microphone access in your browser and try again.'
+        : (err?.message || 'Unable to access the microphone.'));
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null; }
+    try {
+      if (recorder.state !== 'inactive') recorder.stop();
+    } catch (e) {
+      cleanupRecorder();
+      setRecording(false);
+    }
+  };
+
+  const discardVoiceRecording = () => {
+    recCancelRef.current = true;
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      try { recorder.stop(); } catch (e) { cleanupRecorder(); setRecording(false); }
+    } else {
+      cleanupRecorder();
+      setRecording(false);
+      setRecordingTime(0);
+      setAudioLevels([]);
+    }
+  };
+
+  const deleteRecordedVoice = () => {
+    setRecordedAudio(null);
+    setRecordingTime(0);
+    setVoiceError('');
+  };
+
+  const sendRecordedVoice = async () => {
+    if (!recordedAudio || !selectedUser || sendingVoice) return;
+    setSendingVoice(true);
+    setVoiceError('');
+    try {
+      const file = new File([recordedAudio.blob], recordedAudio.name, { type: recordedAudio.type || recordedAudio.blob?.type || 'audio/webm' });
+      const uploaded = await uploadAttachments([file], '/api/upload/voice');
+      if (!uploaded.length) throw new Error('Voice message upload failed. Please try again.');
+      const att = { ...uploaded[0], type: recordedAudio.type || recordedAudio.blob?.type || uploaded[0].type || 'audio/webm', duration: recordedAudio.duration };
+      const created = await api.post('/api/messages', {
+        conversationType: selectedUser.type,
+        conversationId: selectedUser.id,
+        content: '',
+        attachments: [att],
+        replyTo: replyTo?.id || null,
+      });
+      setMessages((prev) => [...prev, created]);
+      setReplyTo(null);
+      deleteRecordedVoice();
+      await api.put('/api/messages/read', { conversationType: selectedUser.type, conversationId: selectedUser.id });
+    } catch (e) {
+      setVoiceError(e?.message || 'Failed to send voice message.');
+    } finally {
+      setSendingVoice(false);
     }
   };
 
@@ -758,7 +1234,7 @@ export default function CommentManagement() {
     }),
   })).filter((s) => s.items.length > 0);
 
-  const totalUnread = Object.values(unreadMap).reduce((a, b) => a + (b || 0), 0);
+  const totalUnread = flatItems.reduce((a, it) => a + (unreadMap[it.type + ':' + it.id] || 0), 0);
 
   const directorySections = filteredSections
     .map((s) => ({
@@ -802,6 +1278,8 @@ export default function CommentManagement() {
         .cm-root .cm-user-row.is-selected { background: var(--cm-row-selected) !important; border-left-color: var(--cm-row-accent) !important; border-color: var(--cm-row-selected-border); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); }
         .cm-root .cm-user-row.is-selected:hover { background: var(--cm-row-selected) !important; }
         .cm-root .cm-unread-pill { min-width: 19px; height: 19px; padding: 0 6px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; line-height: 1; flex-shrink: 0; }
+        .cm-root .cm-rec-dot { animation: cmRecPulse 1.1s ease-in-out infinite; }
+        @keyframes cmRecPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.82); } }
 
         @media (max-width: 900px) {
           .cm-root .cm-shell { flex-direction: column !important; }
@@ -889,6 +1367,10 @@ export default function CommentManagement() {
                         const roleLabel = isGroup ? 'Group chat' : (t('role.' + (it.role === 'support' ? 'escalationTeam' : it.role)) || it.role);
                         const online = isGroup ? true : !!it.online;
                         const statusLabel = isGroup ? `${it.members?.length || 0} members` : (online ? t('common.online') : t('common.offline'));
+                        const preview = previews[key];
+                        const previewBody = buildPreviewText(preview, user?.id);
+                        const previewStamp = previewTimeLabel(preview?.createdAt);
+                        const showNewMessage = unread > 0 && !isActive;
                         return (
                           <div
                             key={key}
@@ -909,15 +1391,76 @@ export default function CommentManagement() {
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 650, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
-                                {it.time ? <span style={{ fontSize: 10.5, color: T.muted, flexShrink: 0 }}>{it.time}</span> : null}
+                                {(previewStamp || it.time) ? <span style={{ fontSize: 10.5, color: T.muted, flexShrink: 0 }}>{previewStamp || it.time}</span> : null}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, minWidth: 0 }}>
                                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: online ? '#10B981' : (dark ? '#64748B' : '#94A3B8'), flexShrink: 0 }} />
-                                <span style={{ fontSize: 10.5, fontWeight: 600, color: theme.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{roleLabel}</span>
-                                <span style={{ fontSize: 10.5, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>· {statusLabel}</span>
-                                {unread > 0 && <span className="cm-unread-pill" style={{ marginLeft: 'auto', background: theme.accent, color: dark ? '#0B1220' : '#FFFFFF' }}>{unread}</span>}
+                                {isGroup ? (
+                                  <>
+                                    <span style={{ fontSize: 10.5, fontWeight: 600, color: theme.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{roleLabel}</span>
+                                    <span style={{ fontSize: 10.5, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>· {statusLabel}</span>
+                                  </>
+                                ) : (
+                                  <span style={{ fontSize: 10.5, fontWeight: 600, color: online ? '#10B981' : T.muted, whiteSpace: 'nowrap' }}>{statusLabel}</span>
+                                )}
+                                {showNewMessage && (
+                                  <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                    <span
+                                      className="cm-new-message"
+                                      style={{
+                                        padding: '1px 7px',
+                                        borderRadius: 6,
+                                        background: '#2563EB',
+                                        color: '#FFFFFF',
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        lineHeight: 1.3,
+                                        whiteSpace: 'nowrap',
+                                        pointerEvents: 'none',
+                                      }}
+                                    >
+                                      New message
+                                    </span>
+                                    <span
+                                      className="cm-unread-pill"
+                                      style={{
+                                        minWidth: 16,
+                                        height: 16,
+                                        padding: '0 5px',
+                                        borderRadius: 999,
+                                        background: '#2563EB',
+                                        color: '#FFFFFF',
+                                        fontSize: 9.5,
+                                        fontWeight: 800,
+                                        pointerEvents: 'none',
+                                      }}
+                                    >
+                                      {unread}
+                                    </span>
+                                  </span>
+                                )}
                               </div>
-                              {it.last ? <div style={{ fontSize: 11, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{it.last}</div> : null}
+                              {(previewBody || it.last) ? (
+                                <div
+                                  title={previewBody || it.last}
+                                  style={{
+                                    marginTop: 3,
+                                    marginLeft: -7,
+                                    padding: '2px 7px',
+                                    borderRadius: 7,
+                                    fontSize: 11,
+                                    lineHeight: 1.35,
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    color: T.muted,
+                                    fontWeight: 400,
+                                    background: 'transparent',
+                                  }}
+                                >
+                                  {previewBody || it.last}
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                         );
@@ -993,10 +1536,19 @@ export default function CommentManagement() {
                                   <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, alignItems: own ? 'flex-end' : 'flex-start' }}>
                                     {(() => {
                                       const all = m.attachments.map(normalizeAttachment).filter(Boolean);
-                                      const media = all.filter((a) => isImageAttachment(a) || isVideoAttachment(a));
-                                      const docs = all.filter((a) => !isImageAttachment(a) && !isVideoAttachment(a));
+                                      const indexed = all.map((a, index) => ({ a, index }));
+                                      const audios = indexed.filter(({ a }) => isAudioAttachment(a));
+                                      const media = all.filter((a) => !isAudioAttachment(a) && (isImageAttachment(a) || isVideoAttachment(a)));
+                                      const docs = all.filter((a) => !isAudioAttachment(a) && !isImageAttachment(a) && !isVideoAttachment(a));
                                       return (
                                         <>
+                                          {audios.length > 0 && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', alignItems: own ? 'flex-end' : 'flex-start' }}>
+                                              {audios.map(({ a, index }) => (
+                                                <AudioPlayer key={index} src={`/api/messages/${encodeURIComponent(m.id)}/attachments/${index}/audio`} duration={a.duration} dark={dark} T={T} maxWidth={280} />
+                                              ))}
+                                            </div>
+                                          )}
                                           {media.length > 0 && (
                                             <div style={{ display: 'grid', gridTemplateColumns: media.length > 1 ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: 4, maxWidth: 300, borderRadius: 8, overflow: 'hidden' }}>
                                               {media.map((a, i) => {
@@ -1068,6 +1620,38 @@ export default function CommentManagement() {
                   <div style={{ fontSize: 12, color: T.text2, marginBottom: 6, padding: '4px 8px', background: T.surface, borderRadius: 6, display: 'flex', justifyContent: 'space-between' }}>
                     <span>Replying to: {replyTo.content?.slice(0, 40)}</span>
                     <button onClick={() => setReplyTo(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>✕</button>
+                  </div>
+                )}
+                {recording && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, border: '1px solid ' + T.border, background: T.surface, marginBottom: 8, flexWrap: 'wrap' }}>
+                    <span className="cm-rec-dot" style={{ width: 9, height: 9, borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 0 3px rgba(239,68,68,0.18)', flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#EF4444' }}>Recording</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{formatClock(recordingTime)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 26, flex: 1, minWidth: 90 }}>
+                      {audioLevels.map((h, i) => (
+                        <span key={i} style={{ width: 3, height: h, borderRadius: 2, background: dark ? '#60A5FA' : '#2563EB', opacity: 0.85 }} />
+                      ))}
+                    </div>
+                    <button type="button" onClick={discardVoiceRecording} title="Cancel recording" style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, color: T.text2, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={15} /></button>
+                    <button type="button" onClick={stopVoiceRecording} title="Stop recording" style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}><Square size={12} fill="currentColor" /> Stop</button>
+                  </div>
+                )}
+                {recordedAudio && !recording && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, border: '1px solid ' + T.border, background: T.surface, marginBottom: 8, flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 230px', minWidth: 0 }}>
+                      <AudioPlayer src={recordedAudio.url} duration={recordedAudio.duration} dark={dark} T={T} maxWidth={260} />
+                    </div>
+                    <span style={{ fontSize: 11, color: T.muted, fontWeight: 600 }}>Voice message</span>
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button type="button" onClick={deleteRecordedVoice} title="Delete recording" style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, color: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Trash2 size={15} /></button>
+                      <button type="button" onClick={sendRecordedVoice} disabled={sendingVoice} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: T.accent, color: '#fff', cursor: sendingVoice ? 'not-allowed' : 'pointer', opacity: sendingVoice ? 0.6 : 1, fontSize: 12, fontWeight: 700 }}>{sendingVoice ? 'Sending…' : 'Send Voice'}</button>
+                    </div>
+                  </div>
+                )}
+                {voiceError && (
+                  <div style={{ fontSize: 11.5, color: '#DC2626', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>{voiceError}</span>
+                    <button type="button" onClick={() => setVoiceError('')} style={{ border: 'none', background: 'transparent', color: '#DC2626', cursor: 'pointer', padding: 0, display: 'flex' }}><X size={13} /></button>
                   </div>
                 )}
                 {attachments.length > 0 && (
@@ -1186,8 +1770,17 @@ export default function CommentManagement() {
                          </div>
                        </div>
                      )}
-                   </div>
-                  <button onClick={send} disabled={sending || (!text.trim() && attachments.length === 0)} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: T.accent, color: '#fff', cursor: 'pointer', opacity: (sending || (!text.trim() && attachments.length === 0)) ? 0.5 : 1 }}>{t('messages.send')}</button>
+                    </div>
+                   <button
+                     type="button"
+                     onClick={recording ? stopVoiceRecording : startVoiceRecording}
+                     disabled={!selectedUser || sendingVoice}
+                     title={recording ? 'Stop recording' : 'Record voice message'}
+                     style={{ padding: 10, borderRadius: 10, border: '1px solid ' + (recording ? '#EF4444' : T.border), background: recording ? 'rgba(239,68,68,0.12)' : T.panel, cursor: (!selectedUser || sendingVoice) ? 'not-allowed' : 'pointer', opacity: (!selectedUser || sendingVoice) ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                   >
+                     <Mic size={18} color={recording ? '#EF4444' : T.text2} />
+                   </button>
+                   <button onClick={send} disabled={sending || (!text.trim() && attachments.length === 0)} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: T.accent, color: '#fff', cursor: 'pointer', opacity: (sending || (!text.trim() && attachments.length === 0)) ? 0.5 : 1 }}>{t('messages.send')}</button>
                 </div>
                 {showEmoji && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
@@ -1298,14 +1891,23 @@ export default function CommentManagement() {
   );
 }
 
-function buildSections(role, me, users, groups, t) {
+function buildSections(role, me, users, groups, t, ctx = {}) {
   const byRole = (r) => users.filter((u) => u.role === r && u.id !== me?.id);
+  const { conversationPeers = [], previews = {}, unreadMap = {}, activity = {} } = ctx;
+  const peerIdSet = new Set((conversationPeers || []).map((p) => String(p && p.id)));
+  const hasDirectConversation = (u) => {
+    const key = 'direct:' + u.id;
+    const p = previews[key];
+    const hasPreview = !!(p && ((p.content && String(p.content).trim()) || (Array.isArray(p.attachments) && p.attachments.length) || p.createdAt));
+    return peerIdSet.has(String(u.id)) || hasPreview || (unreadMap[key] || 0) > 0 || (activity[u.id] || 0) > 0;
+  };
   const sections = [];
   if (role === 'admin') {
     sections.push({ key: 'adm', title: t('role.administrators'), count: byRole('admin').length, items: byRole('admin').map(toItem('direct')) });
     sections.push({ key: 'dev', title: t('role.developers'), count: byRole('developer').length, items: byRole('developer').map(toItem('direct')) });
     sections.push({ key: 'esc', title: t('role.escalationTeam'), count: byRole('support').length, items: byRole('support').map(toItem('direct')) });
-    sections.push({ key: 'cli', title: t('role.client') + 's', count: byRole('client').length, items: byRole('client').map(toItem('direct')) });
+    const clientsWithConversation = byRole('client').filter(hasDirectConversation);
+    sections.push({ key: 'cli', title: t('role.client') + 's', count: clientsWithConversation.length, items: clientsWithConversation.map(toItem('direct')) });
     sections.push({ key: 'usr', title: t('common.users') || 'Users', count: users.filter((u) => !['admin','developer','support','client'].includes(u.role) && u.id !== me?.id).length, items: users.filter((u) => !['admin','developer','support','client'].includes(u.role) && u.id !== me?.id).map(toItem('direct')) });
   } else if (role === 'client') {
     const admins = byRole('admin');
