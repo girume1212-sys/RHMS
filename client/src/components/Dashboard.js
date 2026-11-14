@@ -12,6 +12,7 @@ import RequestCalendar from './RequestCalendar';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
 import { isCriticalUnworked } from '../utils/criticalIndicator';
+import { formatRequestId } from '../utils/format';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -906,7 +907,7 @@ export default function Dashboard() {
             <tbody>
               {paginatedRequests.map(r => (
                 <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row">
-                  <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
+                  <td><strong>{formatRequestId(r.id)}</strong></td>
                   <td><span className="truncate-cell">{r.subject}</span></td>
                   <td>
                     {r.assignee && r.status?.name !== 'New' ? (

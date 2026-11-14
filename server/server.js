@@ -6926,6 +6926,86 @@ app.get('/api/messages/unread-total', authMiddleware, async (req, res) => {
   }
 });
 
+app.get('/api/messages/unread-conversations', authMiddleware, async (req, res) => {
+  try {
+    const items = [];
+    const directRes = await pool.query(`SELECT DISTINCT conversation_id FROM messages WHERE conversation_type = 'direct'`);
+    for (const row of directRes.rows) {
+      const cid = row.conversation_id;
+      const parts = String(cid).split(':');
+      if (parts.length !== 2) continue;
+      if (!parts.includes(String(req.user.id))) continue;
+      const otherId = parts.find((p) => p !== String(req.user.id));
+      if (!(await canAccessConversation(req.user, 'direct', otherId))) continue;
+      const readRes = await pool.query(`SELECT last_read_at FROM message_read_tracking WHERE user_id = $1 AND conversation_type = $2 AND conversation_id = $3`, [req.user.id, 'direct', cid]);
+      const lastRead = readRes.rows[0]?.last_read_at || new Date(0).toISOString();
+      const unreadRes = await pool.query(
+        `SELECT m.id, m.content, m.attachments, m.sender_id, m.created_at, u.name AS sender_name, u.avatar AS sender_avatar, u.role AS sender_role
+         FROM messages m LEFT JOIN users u ON m.sender_id = u.id
+         WHERE m.conversation_type = $1 AND m.conversation_id = $2 AND m.sender_id <> $3 AND m.created_at > $4
+         ORDER BY m.created_at DESC, m.id DESC`,
+        ['direct', cid, req.user.id, lastRead]
+      );
+      const count = unreadRes.rows.length;
+      if (count === 0) continue;
+      const last = unreadRes.rows[0];
+      items.push({
+        type: 'message',
+        conversationType: 'direct',
+        conversationId: otherId,
+        count,
+        senderId: last.sender_id,
+        userName: last.sender_name,
+        senderRole: last.sender_role,
+        message: last.content || (Array.isArray(JSON.parse(last.attachments || '[]')) && JSON.parse(last.attachments || '[]').length ? 'Sent an attachment' : ''),
+        timestamp: last.created_at,
+        is_read: false,
+        id: `msg:${cid}:${last.id}`,
+      });
+    }
+    const groupRes = await pool.query(`SELECT DISTINCT conversation_id FROM messages WHERE conversation_type = 'group'`);
+    for (const row of groupRes.rows) {
+      const gid = row.conversation_id;
+      if (req.user.role !== 'admin') {
+        const mem = await pool.query('SELECT 1 FROM user_groups WHERE user_id = $1 AND group_id = $2', [req.user.id, gid]);
+        if (mem.rows.length === 0) continue;
+      }
+      const readRes = await pool.query(`SELECT last_read_at FROM message_read_tracking WHERE user_id = $1 AND conversation_type = $2 AND conversation_id = $3`, [req.user.id, 'group', gid]);
+      const lastRead = readRes.rows[0]?.last_read_at || new Date(0).toISOString();
+      const unreadRes = await pool.query(
+        `SELECT m.id, m.content, m.attachments, m.sender_id, m.created_at, u.name AS sender_name, u.role AS sender_role
+         FROM messages m LEFT JOIN users u ON m.sender_id = u.id
+         WHERE m.conversation_type = $1 AND m.conversation_id = $2 AND m.sender_id <> $3 AND m.created_at > $4
+         ORDER BY m.created_at DESC, m.id DESC`,
+        ['group', gid, req.user.id, lastRead]
+      );
+      const count = unreadRes.rows.length;
+      if (count === 0) continue;
+      const last = unreadRes.rows[0];
+      let gname = null;
+      try { const gr = await pool.query('SELECT name FROM groups WHERE id = $1', [gid]); gname = gr.rows[0]?.name || null; } catch (e) {}
+      items.push({
+        type: 'message',
+        conversationType: 'group',
+        conversationId: gid,
+        count,
+        senderId: last.sender_id,
+        userName: gname || last.sender_name,
+        senderRole: last.sender_role,
+        message: last.content || '',
+        timestamp: last.created_at,
+        is_read: false,
+        id: `msg:${gid}:${last.id}`,
+      });
+    }
+    items.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    res.json({ items });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.put('/api/messages/:id', authMiddleware, async (req, res) => {
   try {
     const { content } = req.body || {};

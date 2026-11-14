@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
+import { formatRequestId } from '../utils/format';
 import { api, API_BASE, isTokenExpired } from '../api';
 import GlobalSearch from './GlobalSearch';
 import LanguageSelector from './LanguageSelector';
@@ -36,6 +37,7 @@ export default function Layout() {
   const [allNotifications, setAllNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCommentTotal, setUnreadCommentTotal] = useState(0);
+  const [unreadConversations, setUnreadConversations] = useState([]);
   const dismissedIds = useRef(new Set());
   const addToast = useCallback((message, type = 'info') => {
     const id = Date.now() + Math.random();
@@ -149,6 +151,9 @@ export default function Layout() {
     api.get('/api/messages/unread-total').then(data => {
       setUnreadCommentTotal(data?.count || 0);
     }).catch(() => {});
+    api.get('/api/messages/unread-conversations').then(data => {
+      setUnreadConversations(Array.isArray(data?.items) ? data.items : []);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -172,7 +177,7 @@ export default function Layout() {
   const bellNotes = allNotifications.filter(n => n.type !== 'comment' && n.type !== 'message');
   const commentNotes = allNotifications.filter(n => n.type === 'comment' || n.type === 'message');
   const unreadBell = bellNotes.filter(n => !n.is_read).length;
-  const unreadMsgs = commentNotes.filter(n => !n.is_read).length;
+  const unreadMsgs = unreadConversations.reduce((a, c) => a + (c.count || 0), 0);
 
   const markAllCommentNotificationsRead = useCallback(() => {
     const unread = commentNotes.filter(n => !n.is_read);
@@ -180,12 +185,14 @@ export default function Layout() {
     setAllNotifications(prev => prev.map(n => (n.type === 'comment' || n.type === 'message') ? { ...n, is_read: true } : n));
     unread.forEach(n => api.put(`/api/notifications/${n.id}/read`).catch(() => refreshNotifications()));
   }, [commentNotes, refreshNotifications]);
-const totalIncomingComments = commentNotes.length;
+  const totalIncomingComments = commentNotes.length;
   
   const [notifFilter, setNotifFilter] = useState('unread');
   const [msgFilter, setMsgFilter] = useState('unread');
-const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.is_read);
-  const shownMsgs = commentNotes.filter(n => msgFilter === 'read' ? n.is_read : !n.is_read);
+  const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.is_read);
+  const shownMsgs = msgFilter === 'read'
+    ? commentNotes.filter(n => n.is_read)
+    : unreadConversations;
 
   const getNotificationType = useCallback((msg) => {
     if (!msg) return 'default';
@@ -487,6 +494,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
     setShowMessages(next);
     setShowNotifications(false);
     if (next) {
+      setMsgFilter('unread');
       refreshNotifications();
       refreshUnreadCommentTotal();
     }
@@ -576,13 +584,13 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
               onClick={() => { if (n.notificationId) markNotificationRead(n.notificationId); if (n.requestId) navigate(`/requests/${n.requestId}`); removeBubble(n.id); }}
             >
               <div className="bubble-pill">
-                <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>âœ•</button>
+                <button className="bubble-pill-close" onClick={(e) => { e.stopPropagation(); removeBubble(n.id); }}>✕</button>
                 <div className="bubble-pill-icon">
                   <Icon name={getNotificationIcon(n.type || getNotificationType(n.message))} size={16} />
                 </div>
                 <div className="bubble-pill-body">
                   <div className="bubble-pill-title">
-                    {n.requestId ? `${getNotifTitle(n.type)} Â· ${t('common.requestShort')} #${n.requestId}` : getNotifTitle(n.type)}
+                    {n.requestId ? `${getNotifTitle(n.type)} · ${t('common.requestShort')} #${n.requestId}` : getNotifTitle(n.type)}
                   </div>
                   {n.userName && <div className="bubble-pill-sender">From: {n.userName}</div>}
                   <div className="bubble-pill-text">{translateNotification(n.message, n, t)}</div>
@@ -600,7 +608,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
       </div>
       {statusToast && (
         <div className={`status-toast status-toast-${statusToast.type}`}>
-          <span className="status-toast-icon">{statusToast.type === 'success' ? 'âœ“' : statusToast.type === 'error' ? 'âœ•' : 'â„¹'}</span>
+          <span className="status-toast-icon">{statusToast.type === 'success' ? '✓' : statusToast.type === 'error' ? '✕' : 'ℹ'}</span>
           <span className="status-toast-message">{statusToast.message}</span>
         </div>
       )}
@@ -649,7 +657,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
                         <div className="dropdown-panel-content">
 <div className="dropdown-panel-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               {getNotifTitle(n.type)}
-                            {n.requestId && <span className="dropdown-panel-request">{t('common.requestPrefixLabel')}-{String(n.requestId).padStart(4, '0')}</span>}
+                            {n.requestId && <span className="dropdown-panel-request">{formatRequestId(n.requestId)}</span>}
                           </div>
                           <p className="dropdown-panel-message">{translateNotification(n.message, n, t)}</p>
                           <div className="dropdown-panel-meta">
@@ -688,24 +696,35 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
                   </div>
                   <div className="dropdown-panel-list">
                     {shownMsgs.length === 0 && <div className="dropdown-panel-empty">{t('topbar.noMessages')}</div>}
-                    {shownMsgs.slice(0, 10).map((m) => (
-                      <div key={m.id} className={`dropdown-panel-item${m.is_read ? '' : ' notif-unread'}`} style={{ borderLeft: m.is_read ? '3px solid transparent' : '3px solid #EF4444' }} onClick={() => { markNotificationRead(m.id); navigate(user?.role === 'client' ? '/client/comments' : '/comments'); setShowMessages(false); }}>
+                    {shownMsgs.slice(0, 10).map((m) => {
+                      const isUnreadConv = msgFilter === 'unread' || m.is_read === false;
+                      return (
+                      <div key={m.id} className={`dropdown-panel-item${isUnreadConv ? ' notif-unread' : ''}`} style={{ borderLeft: isUnreadConv ? '3px solid #EF4444' : '3px solid transparent' }} onClick={async () => {
+                        if (m.conversationType && m.conversationId != null) {
+                          try { localStorage.setItem('rhms_selected_conv', JSON.stringify({ type: m.conversationType, id: m.conversationId })); } catch {}
+                          try { await api.put('/api/messages/read', { conversationType: m.conversationType, conversationId: m.conversationId }); window.dispatchEvent(new Event('rhms:unread-changed')); } catch {}
+                        }
+                        if (!m.conversationType && m.id) markNotificationRead(m.id);
+                        navigate(user?.role === 'client' ? '/client/comments' : '/comments');
+                        setShowMessages(false);
+                        refreshUnreadCommentTotal();
+                      }}>
                         <div className="dropdown-panel-icon"><Icon name={m.type === 'message' ? 'mail' : 'comment'} size={16} /></div>
                         <div className="dropdown-panel-content">
-                          <p><strong>{m.userName || t('common.unknown')}</strong>{m.requestId ? <> {t('common.commentedOn')} <strong>#{m.requestId}</strong></> : ` ${m.type === 'message' ? t('topbar.messages') : t('common.newComment')}`}</p>
+                          <p><strong>{m.userName || t('common.unknown')}</strong>{m.requestId ? <> {t('common.commentedOn')} <strong>#{m.requestId}</strong></> : (m.count ? ` (${m.count} unread)` : '')}</p>
                           <p className="dropdown-panel-message">{translateNotification(m.message, m, t)}</p>
                           <span className="dropdown-panel-time">{m.timestamp ? new Date(m.timestamp).toLocaleString() : ''}</span>
                         </div>
                         <div className="dropdown-panel-read">
-                          {!m.is_read && <span className="notif-unread-dot" title={t('common.unread')} />}
-                          {!m.is_read ? (
-                            <button className="notif-read-btn" onClick={(e) => { e.stopPropagation(); markNotificationRead(m.id); }}>{t('common.markRead')}</button>
+                          {isUnreadConv && <span className="notif-unread-dot" title={t('common.unread')} />}
+                          {isUnreadConv ? (
+                            <button className="notif-read-btn" onClick={async (e) => { e.stopPropagation(); if (m.conversationType && m.conversationId != null) { try { await api.put('/api/messages/read', { conversationType: m.conversationType, conversationId: m.conversationId }); window.dispatchEvent(new Event('rhms:unread-changed')); } catch {} refreshUnreadCommentTotal(); } else { markNotificationRead(m.id); } }}>{t('common.markRead')}</button>
                           ) : (
                             <span className="notif-read-state">{t('common.read')}</span>
                           )}
                         </div>
                       </div>
-                    ))}
+                    ); })}
                   </div>
                 </div>
               )}
@@ -721,7 +740,7 @@ const shownBell = bellNotes.filter(n => notifFilter === 'read' ? n.is_read : !n.
                   )}
                 </div>
                 <span>{user?.name}</span>
-                <span className="dropdown-arrow">â–¾</span>
+                <span className="dropdown-arrow">▾</span>
               </button>
               {showUserMenu && (
                 <div className="user-dropdown">

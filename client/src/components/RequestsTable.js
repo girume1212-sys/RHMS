@@ -7,6 +7,7 @@ import { transSeeded } from '../i18n/translateServer';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
 import { isCriticalUnworked } from '../utils/criticalIndicator';
+import { formatRequestId } from '../utils/format';
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return null;
@@ -344,7 +345,7 @@ const RequestsTable = forwardRef(function RequestsTable({
                 )}
                 {paginated.map(r => (
                   <tr key={r.id} onClick={() => navigate(`${basePath}/requests/${r.id}`)} className="clickable-row" style={isReadOnly(r) ? { opacity: 0.75 } : {}}>
-                    <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
+                    <td><strong>{formatRequestId(r.id)}</strong></td>
                     <td><span className="truncate-cell">{r.subject}</span>{isReadOnly(r) && <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>({t('common.readOnly')})</span>}</td>
                     {!isClient && (
                       <td>

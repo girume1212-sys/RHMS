@@ -12,6 +12,7 @@ import PageNumbers from './PageNumbers';
 import Icon from './Icon';
 import { usePageBack } from '../utils/sidebarNav';
 import { isCriticalUnworked } from '../utils/criticalIndicator';
+import { formatRequestId } from '../utils/format';
 import { API_BASE } from '../api';
 
 const getAvatarUrl = (avatar) => {
@@ -413,7 +414,7 @@ if (statusName === 'New') {
             <tbody>
               {paginatedRequests.map(r => (
                 <tr key={r.id} onClick={() => navigate(`/requests/${r.id}`)} className="clickable-row" style={isReadOnly(r) ? { opacity: 0.75 } : {}}>
-                  <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
+                  <td><strong>{formatRequestId(r.id)}</strong></td>
                   <td><span className="truncate-cell">{r.subject}</span>{isReadOnly(r) && <span className="muted-text" style={{ marginLeft: 6, fontSize: 11, fontStyle: 'italic' }}>({t('common.readOnly')})</span>}</td>
                   <td>
                     {r.assignee && r.status?.name !== 'New' ? (

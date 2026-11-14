@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
@@ -7,6 +7,7 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded, translateActivityMessage } from '../i18n/translateServer';
 import Icon from './Icon';
+import { formatRequestId } from '../utils/format';
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -735,7 +736,7 @@ export default function RequestDetail() {
       <div className="page-header">
         <div>
           <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>{t('common.backToRequests')}</button>
-          <h1>{t('common.requestPrefixLabel')}{String(id).padStart(4, '0')}</h1>
+          <h1>{formatRequestId(id)}</h1>
         </div>
       </div>
       <div className="loading-screen"><div className="spinner"></div></div>
@@ -746,7 +747,7 @@ export default function RequestDetail() {
       <div className="page-header">
         <div>
           <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>{t('common.backToRequests')}</button>
-          <h1>{t('common.requestPrefixLabel')}{String(id).padStart(4, '0')}</h1>
+          <h1>{formatRequestId(id)}</h1>
         </div>
       </div>
       <div className="empty-state">{loadError}</div>
@@ -760,7 +761,7 @@ export default function RequestDetail() {
       <div className="page-header">
         <div>
           <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>{t('common.backToRequests')}</button>
-          <h1>{t('common.requestPrefixLabel')}{String(id).padStart(4, '0')}</h1>
+          <h1>{formatRequestId(id)}</h1>
         </div>
       </div>
       <div className="empty-state">{t('common.requestNotFound')}</div>
@@ -780,7 +781,7 @@ export default function RequestDetail() {
       <div className="page-header">
         <div>
           <button className="back-link" onClick={() => navigate(`${basePath}/requests`)}>← {t('common.backToRequests')}</button>
-          <h1>{t('common.requestPrefixLabel')}{String(request.id || '').padStart(4, '0')}</h1>
+          <h1>{formatRequestId(request.id)}</h1>
           <p>{request.subject}</p>
         </div>
       </div>

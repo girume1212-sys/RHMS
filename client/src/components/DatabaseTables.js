@@ -161,8 +161,8 @@ export default function DatabaseTables() {
                       <tr>
                         {tableData.columns.map(col => (
                           <th key={col.column_name} className="sortable">
-                            <span>{col.column_name} {getSortIcon(col.column_name)}</span>
-                          </th>
+                             <span>{col.column_name} {getSortIcon(col.column_name)}</span>
+                           </th>
                         ))}
                       </tr>
                     </thead>

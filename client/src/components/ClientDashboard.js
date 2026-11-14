@@ -12,6 +12,7 @@ import RequestCalendar from './RequestCalendar';
 import PageNumbers from './PageNumbers';
 import Icon from './Icon';
 import { usePageBack } from '../utils/sidebarNav';
+import { formatRequestId } from '../utils/format';
 
 export default function ClientDashboard() {
   const { t } = useTranslation();
@@ -279,7 +280,7 @@ export default function ClientDashboard() {
               )}
               {paginatedRequests.map((r) => (
                 <tr key={r.id} onClick={() => navigate(`/client/requests/${r.id}`)} className="clickable-row">
-                  <td><strong>{t('common.requestPrefixLabel')}{String(r.id).padStart(4, '0')}</strong></td>
+                  <td><strong>{formatRequestId(r.id)}</strong></td>
                   <td><span className="truncate-cell">{r.subject}</span></td>
                   <td>
                     {r.groups && r.groups.length > 0 ? (
