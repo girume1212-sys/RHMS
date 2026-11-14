@@ -855,6 +855,7 @@ const mapUser = (u) => ({
   role: u.role,
   avatar: u.avatar,
   companyName: u.company_name || '',
+  companyId: u.company_id || null,
   language: u.language || 'en',
   approved: u.approved || false,
   clientApproved: u.client_approved !== false,
@@ -862,6 +863,34 @@ const mapUser = (u) => ({
   moderated: u.moderated || false,
   createdAt: u.created_at
 });
+
+async function resolveCompanyIdByName(companyName) {
+  const name = String(companyName || '').trim();
+  if (!name) return null;
+  try {
+    const existing = await pool.query(
+      'SELECT id FROM companies WHERE LOWER(name) = LOWER($1) ORDER BY created_at ASC NULLS LAST LIMIT 1',
+      [name]
+    );
+    if (existing.rows.length > 0) return existing.rows[0].id;
+    const id = uuidv4();
+    await pool.query('INSERT INTO companies (id, name) VALUES ($1, $2)', [id, name]);
+    return id;
+  } catch (err) {
+    console.error('[company] resolve failed:', err.message);
+    return null;
+  }
+}
+
+async function getCompanyNameById(companyId) {
+  if (!companyId) return '';
+  try {
+    const r = await pool.query('SELECT name FROM companies WHERE id = $1', [companyId]);
+    return r.rows.length > 0 ? (r.rows[0].name || '') : '';
+  } catch (err) {
+    return '';
+  }
+}
 
 const mapRequest = (r) => ({
   id: r.id,
@@ -982,7 +1011,8 @@ async function getRequestEmailContext(requestId) {
             p.name AS priority_name, p.color AS priority_color,
             s.name AS status_name,
             u.name AS client_name, u.email AS client_account_email,
-            u.role AS client_role, u.company_name AS client_company,
+            u.role AS client_role,
+            COALESCE(NULLIF(co.name, ''), NULLIF(co2.name, ''), NULLIF(u.company_name, '')) AS client_company,
             u.created_at AS client_since,
             a.name AS assignee_name, a.email AS assignee_email, a.role AS assignee_role,
             g.name AS group_name
@@ -991,6 +1021,8 @@ async function getRequestEmailContext(requestId) {
      LEFT JOIN priorities p ON p.id = r.priority_id
      LEFT JOIN statuses s ON s.id = r.status_id
      LEFT JOIN users u ON u.id = r.client_id
+     LEFT JOIN companies co ON co.id = u.company_id
+     LEFT JOIN companies co2 ON u.company_id IS NULL AND LOWER(co2.name) = LOWER(u.company_name)
      LEFT JOIN users a ON a.id = r.assigned_to
      LEFT JOIN groups g ON g.id = r.assigned_group
      WHERE r.id = $1`,
@@ -1025,7 +1057,7 @@ function workflowSectionTitle(title) {
 
 
 
-async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, statusBadge, infoRows, detailsTitle, detailsBody, resolution, extraSection, closing, req, requestId }) {
+async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hello', lead, leadHtml, groupLine, statusBadge, infoTitle, infoRows, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature, viewLabel, req, requestId }) {
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
   const appLink = req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '';
@@ -1033,6 +1065,13 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
   const badgeColor = (statusBadge && badgeColors[statusBadge]) || '#3B82F6';
   const para = (t) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#E8EEFF;">${t}</p>`;
   const escPara = (t) => para(escapeEmailHtml(t));
+  const allExtraSections = [];
+  if (extraSection) allExtraSections.push(extraSection);
+  if (Array.isArray(extraSections)) allExtraSections.push(...extraSections.filter(Boolean));
+  const signatureBlock = signature
+    ? `<p style="margin:16px 0 8px;font-size:14px;line-height:1.7;color:#E8EEFF;">${escapeEmailHtml(signature.thanks || '')}</p>` +
+      `<p style="margin:0;font-size:14px;line-height:1.7;color:#E8EEFF;"><strong style="color:#ffffff;">${escapeEmailHtml(signature.brand || 'RHMS Support System')}</strong><br><span style="color:#BFDBFE;">${escapeEmailHtml(signature.subtitle || 'Automated Notification Service')}</span></p>`
+    : `<p style="margin:16px 0 0;font-size:14px;line-height:1.7;color:#E8EEFF;"><strong style="color:#ffffff;">Thank you,</strong><br><strong style="color:#ffffff;">RHMS Notification System</strong></p>`;
   const html =
     `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
     `<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">` +
@@ -1044,8 +1083,8 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
     `<h1 style="margin:0;font-size:22px;line-height:1.35;color:#ffffff;font-weight:700;">${escapeEmailHtml(title)}</h1>` +
     `</td></tr>` +
     `<tr><td style="padding:0 32px 8px;">` +
-    escPara(`Dear ${greetingName},`) +
-    escPara(lead) +
+    escPara(`${salutation} ${greetingName},`) +
+    (leadHtml != null ? para(leadHtml) : escPara(lead)) +
     (groupLine
       ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#E8EEFF;"><strong style="color:#ffffff;">Group:</strong> ${escapeEmailHtml(groupLine)}</p>`
       : '') +
@@ -1056,34 +1095,36 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
       : '') +
     `</td></tr>` +
     `<tr><td style="padding:8px 32px;">` +
-    workflowSectionTitle('Request Information') +
+    workflowSectionTitle(infoTitle || 'Request Information') +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${infoRows}</table>` +
     `</td></tr>` +
-    `<tr><td style="padding:18px 32px 0;">` +
-    workflowSectionTitle('Request Details') +
-    `<p style="margin:0 0 8px;font-size:15px;font-weight:700;line-height:1.6;color:#ffffff;">${escapeEmailHtml(detailsTitle)}</p>` +
-    `<p style="margin:0;font-size:14px;line-height:1.7;color:#E8EEFF;white-space:pre-line;">${escapeEmailHtml(detailsBody)}</p>` +
-    `</td></tr>` +
+    (detailsBody != null
+      ? `<tr><td style="padding:18px 32px 0;">` +
+        workflowSectionTitle(detailsSectionTitle || 'Request Details') +
+        (detailsTitle ? `<p style="margin:0 0 8px;font-size:15px;font-weight:700;line-height:1.6;color:#ffffff;">${escapeEmailHtml(detailsTitle)}</p>` : '') +
+        `<p style="margin:0;font-size:14px;line-height:1.7;color:#E8EEFF;white-space:pre-line;">${escapeEmailHtml(detailsBody)}</p>` +
+        `</td></tr>`
+      : '') +
     (resolution != null
       ? `<tr><td style="padding:18px 32px 0;">` +
         workflowSectionTitle('Resolution') +
         `<p style="margin:0;font-size:14px;line-height:1.7;color:#E8EEFF;white-space:pre-line;">${escapeEmailHtml(resolution)}</p>` +
         `</td></tr>`
       : '') +
-    (extraSection != null
-      ? `<tr><td style="padding:18px 32px 0;">` +
-        workflowSectionTitle(extraSection.title) +
-        `<p style="margin:0;font-size:14px;line-height:1.7;color:#E8EEFF;white-space:pre-line;">${escapeEmailHtml(extraSection.body)}</p>` +
-        `</td></tr>`
-      : '') +
+    allExtraSections.map((section) =>
+      `<tr><td style="padding:18px 32px 0;">` +
+      workflowSectionTitle(section.title) +
+      `<p style="margin:0;font-size:14px;line-height:1.7;color:#E8EEFF;white-space:pre-line;">${escapeEmailHtml(section.body)}</p>` +
+      `</td></tr>`
+    ).join('') +
     `<tr><td style="padding:18px 32px 0;">` +
     closing.map(escPara).join('') +
-    `<p style="margin:16px 0 0;font-size:14px;line-height:1.7;color:#E8EEFF;"><strong style="color:#ffffff;">Thank you,</strong><br><strong style="color:#ffffff;">RHMS Notification System</strong></p>` +
+    signatureBlock +
     `</td></tr>` +
     (appLink
       ? `<tr><td align="center" style="padding:24px 32px 8px;">` +
         `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;"><tr><td align="center" bgcolor="#2563EB" style="border-radius:8px;">` +
-        `<a href="${escapeEmailHtml(appLink)}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">View Request</a>` +
+        `<a href="${escapeEmailHtml(appLink)}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">${escapeEmailHtml(viewLabel || 'View Request')}</a>` +
         `</td></tr></table></td></tr>`
       : '') +
     `<tr><td style="padding:16px 32px 32px;"><p style="margin:0;font-size:12px;line-height:1.6;color:#9ca3af;">This is an automated message from the RHMS Support Request System.</p></td></tr>` +
@@ -1092,18 +1133,38 @@ async function buildRequestWorkflowHtml({ title, greetingName, lead, groupLine, 
   return { html, logoAttachment };
 }
 
-function buildRequestWorkflowText({ title, greetingName, lead, groupLine, statusBadge, infoText, detailsTitle, detailsBody, resolution, extraSection, closing }) {
+function buildRequestWorkflowText({ title, greetingName, salutation = 'Hello', lead, leadText, groupLine, statusBadge, infoTitle, infoText, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature }) {
+  const allExtraSections = [];
+  if (extraSection) allExtraSections.push(extraSection);
+  if (Array.isArray(extraSections)) allExtraSections.push(...extraSections.filter(Boolean));
   return (
-    `${title}\n\nHello ${greetingName},\n\n${lead}\n\n` +
+    `${title}\n\n${salutation} ${greetingName},\n\n${leadText || lead}\n\n` +
     (groupLine ? `Group: ${groupLine}\n\n` : '') +
     (statusBadge ? `Request Status: ${statusBadge}\n\n` : '') +
-    `Request Information\n${infoText}\n\n` +
-    `Request Details\n${detailsTitle}\n\n${detailsBody}\n\n` +
+    `${infoTitle || 'Request Information'}\n${infoText}\n\n` +
+    (detailsBody != null
+      ? `${detailsSectionTitle || 'Request Details'}\n${detailsTitle ? `${detailsTitle}\n\n` : ''}${detailsBody}\n\n`
+      : '') +
     (resolution != null ? `Resolution\n${resolution}\n\n` : '') +
-    (extraSection != null ? `${extraSection.title}\n${extraSection.body}\n\n` : '') +
+    allExtraSections.map((section) => `${section.title}\n${section.body}\n\n`).join('') +
     closing.join('\n\n') +
-    `\n\nThank you,\nRHMS Notification System`
+    (signature
+      ? `\n\n${signature.thanks || ''}\n\nBest regards,\n${signature.brand || 'RHMS Support System'}\n${signature.subtitle || 'Automated Notification Service'}`
+      : `\n\nThank you,\nRHMS Notification System`)
   );
+}
+
+function workflowInfoRowHtml(label, valueHtml) {
+  return (
+    `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;">` +
+    `<span style="color:#60A5FA;">&#8226;&nbsp;&nbsp;</span>` +
+    `<strong style="color:#BFDBFE;">${escapeEmailHtml(label)}:</strong> ${valueHtml}` +
+    `</td></tr>`
+  );
+}
+
+function workflowPill(label, color) {
+  return `<span style="display:inline-block;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:700;color:#ffffff;background:${color || '#6B7280'};">${escapeEmailHtml(label)}</span>`;
 }
 
 
@@ -1185,61 +1246,59 @@ async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
 
 
 
-async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, submitterId, req, alreadyEmailed = new Set()) {
+async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, submitterId, req, alreadyEmailed = new Set(), restrictToUserId = null) {
   const emailedKeys = [];
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return emailedKeys;
     const category = workflowCategoryOf(ctx);
     const submittedOn = formatEmailDateTime(ctx.created_at);
-    const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
-    const clientName = ctx.client_name || 'a client';
+    const clientName = ctx.client_name || 'Client';
     const members = await getAssignmentGroupRecipients(groupId);
-    const companyName = ctx.client_company || 'N/A';
+    const subject = `[RHMS] New Request Assigned to Your Group – #${requestId}: ${ctx.subject || 'N/A'}`;
     for (const m of members) {
       if (m.role !== 'developer') continue;
       const dedupKey = `${m.id}|${groupId}`;
       if (alreadyEmailed && alreadyEmailed.has(dedupKey)) continue;
+      if (restrictToUserId && String(m.id) !== String(restrictToUserId)) continue;
       if (submitterId && String(m.id) === String(submitterId)) continue;
       emailedKeys.push(dedupKey);
-      const subject = `New Request from ${companyName} – Submitted by ${clientName}`;
+      const leadText = `A new support request has been submitted by client ${clientName} and assigned to your group. The request is now available on your RHMS dashboard for review and action.`;
       fireWorkflowEmail({
         to: m.email,
         subject,
         tag: 'group-new', req, requestId,
         body: {
-          title: 'New Request Notification',
+          title: 'New Support Request',
+          salutation: 'Dear',
           greetingName: m.name || 'Developer',
-          lead: `A new service request has been submitted by ${clientName} from ${companyName} company and has been assigned to your support group.`,
-          groupLine: groupName,
-          statusBadge: 'NEW',
+          lead: leadText,
+          leadHtml:
+            `A new support request has been submitted by client <strong style="color:#ffffff;">${escapeEmailHtml(clientName)}</strong> and assigned to your group.<br><br>` +
+            `The request is now available on your RHMS dashboard for review and action.`,
+          leadText,
+          infoTitle: 'Request Details',
           infoRows:
-            workflowInfoRow('Request ID', `#${requestId}`) +
+            workflowInfoRowHtml('Request ID', `<span style="color:#FACC15;font-weight:700;">#${escapeEmailHtml(requestId)}</span>`) +
             workflowInfoRow('Request Title', ctx.subject || 'N/A') +
-            workflowInfoRow('Company Name', companyName) +
-            workflowInfoRow('Submitted By', clientName) +
-            workflowInfoRow('Client Email', clientEmail) +
-            `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;">` +
-            `<span style="color:#60A5FA;">&#8226;&nbsp;&nbsp;</span>` +
-            `<strong style="color:#BFDBFE;">Category:</strong> ` +
-            `<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#ffffff;background:${ctx.category_color || '#6B7280'};">${escapeEmailHtml(category)}</span>` +
-            `</td></tr>` +
-            `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;">` +
-            `<span style="color:#60A5FA;">&#8226;&nbsp;&nbsp;</span>` +
-            `<strong style="color:#BFDBFE;">Priority:</strong> ` +
-            `<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#ffffff;background:${ctx.priority_color || '#6B7280'};">${escapeEmailHtml(ctx.priority_name || 'N/A')}</span>` +
-            `</td></tr>` +
-            workflowInfoRow('Assigned Group', groupName) +
-            workflowInfoRow('Submitted Date', submittedOn) +
-            workflowInfoRow('Current Status', ctx.status_name || 'N/A'),
+            workflowInfoRow('Client Name', clientName) +
+            workflowInfoRow('Category', category) +
+            workflowInfoRowHtml('Priority', workflowPill(ctx.priority_name || 'N/A', ctx.priority_color || '#6B7280')) +
+            workflowInfoRowHtml('Status', workflowPill('New', '#3B82F6')) +
+            workflowInfoRow('Submitted Date', submittedOn),
           infoText:
-            `Request ID: #${requestId}\nRequest Title: ${ctx.subject || 'N/A'}\nCompany Name: ${companyName}\nSubmitted By: ${clientName}\nClient Email: ${clientEmail}\nCategory: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\nAssigned Group: ${groupName}\nSubmitted Date: ${submittedOn}\nCurrent Status: ${ctx.status_name || 'N/A'}`,
-          detailsTitle: ctx.subject,
-          detailsBody: ctx.description || 'N/A',
+            `Request ID: #${requestId}\nRequest Title: ${ctx.subject || 'N/A'}\nClient Name: ${clientName}\n` +
+            `Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\n` +
+            `Status: New\nSubmitted Date: ${submittedOn}`,
+          detailsBody: null,
           resolution: null,
-          closing: [
-            'Please log in to the RHMS Developer Dashboard to review this request and begin handling it.',
-          ],
+          closing: [],
+          signature: {
+            thanks: 'Thank you for your commitment and support.',
+            brand: 'RHMS Support System',
+            subtitle: 'Automated Notification Service',
+          },
+          viewLabel: 'View Request in RHMS',
         },
       });
     }
@@ -1255,7 +1314,7 @@ async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, s
 
 
 
-async function emailGroupDevelopersForSyncedRequests(requestIds, groupId, req) {
+async function emailGroupDevelopersForSyncedRequests(requestIds, groupId, req, onlyUserId = null) {
   try {
     if (!Array.isArray(requestIds) || requestIds.length === 0) return;
     const grp = await pool.query('SELECT name FROM groups WHERE id = $1', [groupId]);
@@ -1265,7 +1324,7 @@ async function emailGroupDevelopersForSyncedRequests(requestIds, groupId, req) {
       const st = await pool.query('SELECT client_id, status_id FROM requests WHERE id = $1', [requestId]);
       if (st.rows.length === 0) continue;
       if (['5', '6', '8'].includes(String(st.rows[0].status_id))) continue;
-      for (const key of await emailGroupMembersForRequestGroup(requestId, groupId, groupName, st.rows[0].client_id, req, emailed)) {
+      for (const key of await emailGroupMembersForRequestGroup(requestId, groupId, groupName, st.rows[0].client_id, req, emailed, onlyUserId)) {
         emailed.add(key);
       }
     }
@@ -1518,16 +1577,9 @@ async function getEscalationNote(requestId) {
       'SELECT content FROM comments WHERE request_id = $1 ORDER BY created_at DESC LIMIT 1',
       [requestId]
     );
-    if (c.rows.length > 0 && c.rows[0].content) return String(c.rows[0].content);
+    if (c.rows.length > 0 && c.rows[0].content && String(c.rows[0].content).trim()) return String(c.rows[0].content).trim();
   } catch (e) {  }
-  try {
-    const a = await pool.query(
-      'SELECT message FROM activity_log WHERE request_id = $1 ORDER BY created_at DESC LIMIT 1',
-      [requestId]
-    );
-    if (a.rows.length > 0 && a.rows[0].message) return String(a.rows[0].message);
-  } catch (e) {  }
-  return 'No escalation note was provided.';
+  return 'The request was escalated by the developer for further investigation and resolution.';
 }
 
 
@@ -1536,7 +1588,7 @@ async function getEscalationNote(requestId) {
 
 
 
-async function emailEscalationTeamOnEscalation(requestId, escalator, req, previousGroupId) {
+async function emailEscalationTeamOnEscalation(requestId, escalator, req, previousGroupId, previousStatusName) {
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
@@ -1546,24 +1598,13 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
     );
     if (grp.rows.length === 0) { console.log('[WorkflowEmail:escalated] skipped — request has no group'); return; }
     const category = workflowCategoryOf(ctx);
-    const clientEmail = ctx.client_account_email || ctx.client_email || 'N/A';
-    const companyName = ctx.client_company || 'N/A';
-    const clientName = ctx.client_name || 'a client';
+    const clientName = ctx.client_name || 'Client';
     const escalatedOn = formatEmailDateTime(ctx.updated_at);
     const note = await getEscalationNote(requestId);
-    const escalatorName = (escalator && escalator.name) || 'A developer';
+    const escalatorName = (escalator && escalator.name) || 'Developer';
     const escalatorId = escalator && escalator.id;
-    
-    let previousGroupName = 'N/A';
-    const prevId = previousGroupId || ctx.assigned_group; 
-    
-    const effectivePrevId = previousGroupId || null;
-    if (effectivePrevId) {
-      const pg = await pool.query('SELECT name FROM groups WHERE id = $1', [effectivePrevId]);
-      if (pg.rows.length > 0) previousGroupName = pg.rows[0].name;
-    } else if (ctx.group_name) {
-      previousGroupName = ctx.group_name;
-    }
+    const prevStatus = previousStatusName || 'In Progress';
+    const subject = `[RHMS] Escalated Request Assigned to Your Group – #${requestId}: ${ctx.subject || 'N/A'}`;
     let sent = 0;
     const alreadyEmailed = new Set();
     for (const g of grp.rows) {
@@ -1575,39 +1616,54 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
         if (alreadyEmailed.has(key)) continue;
         alreadyEmailed.add(key);
         sent += 1;
-        const subject = `Request Escalated – ${companyName} – Submitted by ${clientName}`;
+        const leadText = `A support request has been escalated by ${escalatorName} and assigned to your group. The request is now available on your RHMS dashboard for review and action.`;
         fireWorkflowEmail({
           to: m.email,
           subject,
           tag: 'escalated', req, requestId,
           body: {
-            title: 'Request Escalation Notification',
-            greetingName: m.name || 'Team Member',
-            lead: `A service request originally submitted by **${clientName}** from **${companyName}** has been escalated to your team by developer **${escalatorName}**.`,
-            groupLine: g.name,
-            statusBadge: 'ESCALATED',
+            title: 'Escalated Support Request',
+            salutation: 'Dear',
+            greetingName: m.name || 'Escalation Team Member',
+            lead: leadText,
+            leadHtml:
+              `A support request has been escalated by <strong style="color:#ffffff;">${escapeEmailHtml(escalatorName)}</strong> and assigned to your group.<br><br>` +
+              `The request is now available on your RHMS dashboard for review and action.`,
+            leadText,
+            infoTitle: 'Escalation Details',
             infoRows:
-              workflowInfoRow('Request ID', `#${requestId}`) +
+              workflowInfoRowHtml('Request ID', `<span style="color:#FACC15;font-weight:700;">#${escapeEmailHtml(requestId)}</span>`) +
               workflowInfoRow('Request Title', ctx.subject || 'N/A') +
-              workflowInfoRow('Company Name', companyName) +
-              workflowInfoRow('Original Client', clientName) +
-              workflowInfoRow('Client Email', clientEmail) +
-              workflowInfoRow('Request Category', category) +
-              workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
-              workflowInfoRow('Previous Assigned Group', previousGroupName) +
-              workflowInfoRow('Escalated To', g.name) +
+              workflowInfoRow('Client Name', clientName) +
+              workflowInfoRow('Category', category) +
+              workflowInfoRowHtml('Priority', workflowPill(ctx.priority_name || 'N/A', ctx.priority_color || '#6B7280')) +
+              workflowInfoRow('Previous Status', prevStatus) +
+              workflowInfoRowHtml('Current Status', workflowPill('Escalated', '#EF4444')) +
               workflowInfoRow('Escalated By', escalatorName) +
-              workflowInfoRow('Escalation Date', escalatedOn) +
-              workflowInfoRow('Current Status', ctx.status_name || 'N/A'),
+              workflowInfoRow('Escalation Date', escalatedOn),
             infoText:
-              `Request ID: #${requestId}\nRequest Title: ${ctx.subject || 'N/A'}\nCompany Name: ${companyName}\nOriginal Client: ${clientName}\nClient Email: ${clientEmail}\nRequest Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\nPrevious Assigned Group: ${previousGroupName}\nEscalated To: ${g.name}\nEscalated By: ${escalatorName}\nEscalation Date: ${escalatedOn}\nCurrent Status: ${ctx.status_name || 'N/A'}`,
-            detailsTitle: ctx.subject,
+              `Request ID: #${requestId}\nRequest Title: ${ctx.subject || 'N/A'}\nClient Name: ${clientName}\n` +
+              `Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\n` +
+              `Previous Status: ${prevStatus}\nCurrent Status: Escalated\n` +
+              `Escalated By: ${escalatorName}\nEscalation Date: ${escalatedOn}`,
+            detailsSectionTitle: 'Issue Description',
+            detailsTitle: null,
             detailsBody: ctx.description || 'N/A',
             resolution: null,
-            extraSection: { title: 'Reason for Escalation', body: note },
-            closing: [
-              'Please log in to the RHMS Escalation Dashboard to review the request and take the appropriate action.',
+            extraSections: [
+              { title: 'Escalation Reason', body: note },
+              {
+                title: 'Required Action',
+                body: 'Please review the escalated request, investigate the issue, and take the necessary action to resolve it.',
+              },
             ],
+            closing: [],
+            signature: {
+              thanks: 'Your prompt attention and cooperation are appreciated.',
+              brand: 'RHMS Support System',
+              subtitle: 'Automated Notification Service',
+            },
+            viewLabel: 'View Escalated Request in RHMS',
           },
         });
       }
@@ -1778,11 +1834,13 @@ app.post('/api/auth/signup', async (req, res) => {
     }
     const id = uuidv4();
     const hashedPassword = await bcrypt.hash(password, 10);
+    const normalizedCompanyName = String(companyName || '').trim();
+    const companyId = await resolveCompanyIdByName(normalizedCompanyName);
     let result;
     try {
       result = await pool.query(
-        'INSERT INTO users (id, name, email, password, role, company_name, language, approved, moderated, client_approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, name, email, role, avatar, created_at, company_name, language, approved, moderated, client_approved',
-        [id, name, email, hashedPassword, 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en', true, false, (await (async()=>{try{const r=await pool.query("SELECT value FROM system_settings WHERE key='clientApprovalRequired'"); return r.rows[0]?.value==='true'?false:true;}catch(e){return true;}})())]
+        'INSERT INTO users (id, name, email, password, role, company_name, company_id, language, approved, moderated, client_approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, name, email, role, avatar, created_at, company_name, company_id, language, approved, moderated, client_approved',
+        [id, name, email, hashedPassword, 'client', normalizedCompanyName, companyId, ['en', 'am'].includes(language) ? language : 'en', true, false, (await (async()=>{try{const r=await pool.query("SELECT value FROM system_settings WHERE key='clientApprovalRequired'"); return r.rows[0]?.value==='true'?false:true;}catch(e){return true;}})())]
       );
     } catch (err) {
       if (err.code === '23505') {
@@ -2749,7 +2807,7 @@ app.post('/api/auth/verify-email-code', async (req, res) => {
 app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support', 'developer', 'client'), async (req, res) => {
   try {
     let query = `
-      SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.language, u.approved, u.client_approved, u.moderated, u.created_at,
+      SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.company_id, u.language, u.approved, u.client_approved, u.moderated, u.created_at,
         EXISTS(SELECT 1 FROM login_audit la WHERE la.action = 'signup' AND la.email = u.email) AS self_registered
       FROM users u
     `;
@@ -2797,16 +2855,24 @@ app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support', 'develo
 
 app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const { name, email, password, role, groupIds, companyName, language } = req.body;
+    const { name, email, password, role, groupIds, companyName, companyId, language } = req.body;
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'An account with this email address already exists. Please sign in to your account.' });
     }
     const id = uuidv4();
     const hashedPassword = await bcrypt.hash(password, 10);
+    let resolvedCompanyId = companyId || null;
+    let resolvedCompanyName = String(companyName || '').trim();
+    if (!resolvedCompanyId && resolvedCompanyName) {
+      resolvedCompanyId = await resolveCompanyIdByName(resolvedCompanyName);
+    }
+    if (resolvedCompanyId && !resolvedCompanyName) {
+      resolvedCompanyName = await getCompanyNameById(resolvedCompanyId);
+    }
     await pool.query(
-      'INSERT INTO users (id, name, email, password, role, company_name, language, approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [id, name, email, hashedPassword, role || 'client', companyName || '', ['en', 'am'].includes(language) ? language : 'en', true]
+      'INSERT INTO users (id, name, email, password, role, company_name, company_id, language, approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [id, name, email, hashedPassword, role || 'client', resolvedCompanyName, resolvedCompanyId, ['en', 'am'].includes(language) ? language : 'en', true]
     );
     try {
       if (groupIds && groupIds.length > 0) {
@@ -2847,18 +2913,35 @@ app.post('/api/users', authMiddleware, roleMiddleware('admin'), async (req, res)
 
 app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const { name, email, role, groupIds, password, companyName, language } = req.body;
+    const { name, email, role, groupIds, password, companyName, companyId, language } = req.body;
     const lang = ['en', 'am'].includes(language) ? language : undefined;
-    let query, params;
+    const sets = [];
+    const params = [];
+    const add = (value) => { params.push(value); return `$${params.length}`; };
+    if (name !== undefined) sets.push(`name = ${add(name)}`);
+    if (email !== undefined) sets.push(`email = ${add(email)}`);
+    if (role !== undefined) sets.push(`role = ${add(role)}`);
     if (password) {
       const hashedPassword = await bcrypt.hash(password, 10);
-      query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role), password = $4, company_name = COALESCE($5, company_name), language = COALESCE($6, language) WHERE id = $7 RETURNING *';
-      params = [name, email, role, hashedPassword, companyName, lang, req.params.id];
-    } else {
-      query = 'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role), company_name = COALESCE($4, company_name), language = COALESCE($5, language) WHERE id = $6 RETURNING *';
-      params = [name, email, role, companyName, lang, req.params.id];
+      sets.push(`password = ${add(hashedPassword)}`);
     }
-    const result = await pool.query(query, params);
+    if (companyName !== undefined) {
+      const normalizedCompanyName = String(companyName || '').trim();
+      const resolvedCompanyId = normalizedCompanyName ? await resolveCompanyIdByName(normalizedCompanyName) : null;
+      sets.push(`company_name = ${add(normalizedCompanyName)}`);
+      sets.push(`company_id = ${add(resolvedCompanyId)}`);
+    } else if (companyId !== undefined) {
+      const resolvedCompanyId = companyId || null;
+      const resolvedCompanyName = await getCompanyNameById(resolvedCompanyId);
+      sets.push(`company_id = ${add(resolvedCompanyId)}`);
+      if (resolvedCompanyName) sets.push(`company_name = ${add(resolvedCompanyName)}`);
+    }
+    if (lang !== undefined) sets.push(`language = ${add(lang)}`);
+    if (sets.length === 0) sets.push('id = id');
+    const result = await pool.query(
+      `UPDATE users SET ${sets.join(', ')} WHERE id = ${add(req.params.id)} RETURNING *`,
+      params
+    );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     try {
     await pool.query('UPDATE feedback SET user_id = NULL WHERE user_id = $1', [req.params.id]);
@@ -2875,7 +2958,7 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
         notifyGroupMembers(gid, `${count} new request${count > 1 ? 's' : ''} available for your group`, { groupId: gid });
         
         
-        emailGroupDevelopersForSyncedRequests(addedGroups[gid], gid, req);
+        emailGroupDevelopersForSyncedRequests(addedGroups[gid], gid, req, req.params.id);
       }
     } catch (e) { console.log('user_groups save error:', e.message); }
     const user = mapUser(result.rows[0]);
@@ -3297,12 +3380,12 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       if (myRequests) {
         query += ` AND r.assigned_to = $${paramIndex++}`;
         params.push(req.user.id);
+      } else if (req.user.role === 'support') {
+        
+        query += ` AND (r.assigned_to = $${paramIndex++} OR (r.status_id = '9' AND EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++})))`;
+        params.push(req.user.id, req.user.id);
       } else {
-        query += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++})`;
-        if (req.user.role === 'support') {
-          query += ` OR r.status_id = '9'`;
-        }
-        query += `)`;
+        query += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++}))`;
         params.push(req.user.id, req.user.id);
       }
     }
@@ -3438,13 +3521,14 @@ app.get('/api/search', authMiddleware, async (req, res) => {
         visibility = 'r.client_id = $1';
         visParams.push(req.user.id);
       } else if (role === 'developer' || role === 'support') {
-        visibility = `(r.assigned_to = $${visParams.length + 1}
-          OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${visParams.length + 2})`;
-        visParams.push(req.user.id, req.user.id);
         if (role === 'support') {
-          visibility += ` OR r.status_id = '9'`;
+          visibility = `(r.assigned_to = $${visParams.length + 1}
+            OR (r.status_id = '9' AND EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${visParams.length + 2})))`;
+        } else {
+          visibility = `(r.assigned_to = $${visParams.length + 1}
+            OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${visParams.length + 2}))`;
         }
-        visibility += ')';
+        visParams.push(req.user.id, req.user.id);
       }
 
       const searchClause = `(
@@ -3565,15 +3649,15 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     if (req.user.role !== 'admin' && req.user.role !== 'client' && r.assigned_to !== req.user.id) {
-      const isEscalated = r.status_id === '9';
-      if (!(req.user.role === 'support' && isEscalated)) {
-        const groupAccess = await pool.query(
-          'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
-          [req.params.id, req.user.id]
-        );
-        if (groupAccess.rows.length === 0) {
-          return res.status(403).json({ error: 'Access denied' });
-        }
+      const groupAccess = await pool.query(
+        'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+        [req.params.id, req.user.id]
+      );
+      if (groupAccess.rows.length === 0) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      if (req.user.role === 'support' && r.status_id !== '9') {
+        return res.status(403).json({ error: 'Access denied - escalation team can only access escalated requests' });
       }
     }
 
@@ -3709,13 +3793,6 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     await logRequestActivity('created', { id, subject }, req.user, req);
 
     
-    const clientGroups = await pool.query('SELECT group_id FROM user_groups WHERE user_id = $1', [clientId]);
-    if (clientGroups.rows.length > 0) {
-      const groupValues = clientGroups.rows.map(r => `('${id}', '${r.group_id}')`).join(',');
-      await pool.query(`INSERT INTO request_groups (request_id, group_id) VALUES ${groupValues} ON CONFLICT DO NOTHING`);
-    }
-
-    
     notifyAdmins('New request created', { type: 'request_created', requestId: id, subject, userId: req.user.id, userName: req.user.name });
     
     
@@ -3725,28 +3802,23 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     
     
     try {
-      const clientRow = await pool.query('SELECT company_id, company_name FROM users WHERE id = $1', [clientId]);
-      let companyId = clientRow.rows[0]?.company_id || null;
-      if (!companyId && clientRow.rows[0]?.company_name) {
-        const c = await pool.query('SELECT id FROM companies WHERE name = $1 LIMIT 1', [clientRow.rows[0].company_name]);
-        companyId = c.rows[0]?.id || null;
-      }
-      if (!companyId) {
-         console.log(`[WorkflowEmail:auto-assign] client ${clientId} has no company; request ${id} left unassigned for admin`);
-         notifyAdmins(`New request #${id} requires manual assignment (client has no company)`, { type: 'manual_assignment_needed', requestId: id, userId: req.user.id, userName: req.user.name });
-       } else {
-        const cg = await pool.query(
-          'SELECT id FROM groups WHERE company_id = $1 ORDER BY is_default DESC NULLS LAST, id ASC LIMIT 1',
-          [companyId]
-        );
-        if (cg.rows.length > 0) {
-          const groupId = cg.rows[0].id;
-          await pool.query('UPDATE requests SET assigned_group = $1 WHERE id = $2', [groupId, id]);
-          await pool.query('INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, groupId]);
-        } else {
-          console.log(`[WorkflowEmail:auto-assign] no group configured for company ${companyId}; request ${id} left unassigned for admin`);
-          notifyAdmins(`New request #${id} requires manual assignment (no support group configured for company)`, { type: 'manual_assignment_needed', requestId: id, userId: req.user.id, userName: req.user.name });
-        }
+      const clientGroup = await pool.query(
+        `SELECT g.id, g.name
+         FROM user_groups ug
+         JOIN groups g ON g.id = ug.group_id
+         WHERE ug.user_id = $1
+         ORDER BY COALESCE(g.is_default, FALSE) ASC, g.name ASC
+         LIMIT 1`,
+        [clientId]
+      );
+      if (clientGroup.rows.length > 0) {
+        const groupId = clientGroup.rows[0].id;
+        await pool.query('UPDATE requests SET assigned_group = $1 WHERE id = $2', [groupId, id]);
+        await pool.query('DELETE FROM request_groups WHERE request_id = $1', [id]);
+        await pool.query('INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, groupId]);
+      } else {
+        console.log(`[WorkflowEmail:auto-assign] client ${clientId} has no assigned group; request ${id} left unassigned for admin`);
+        notifyAdmins(`New request #${id} requires manual assignment (client has no assigned group)`, { type: 'manual_assignment_needed', requestId: id, userId: req.user.id, userName: req.user.name });
       }
     } catch (e) { console.error('[auto-assign] failed:', e.message); }
     emailGroupMembersOnNewRequest(id, req.user.id, req);
@@ -3810,6 +3882,14 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: 'Access denied - new requests cannot be modified by the escalation team' });
           } else if (existing.rows[0].status_id !== '9') {
             return res.status(403).json({ error: 'Access denied - you can only modify requests assigned to you' });
+          } else {
+            const groupAccess = await pool.query(
+              'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+              [req.params.id, req.user.id]
+            );
+            if (groupAccess.rows.length === 0) {
+              return res.status(403).json({ error: 'Access denied - this escalated request belongs to another group' });
+            }
           }
         } else {
           if (!isAssignedToUser && !isUnassigned) {
@@ -3883,7 +3963,12 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
     
     
     if (groupChanged) {
-      emailEscalationTeamOnAssignment(req.params.id, assignedGroup, req.user.name, req, newAssignedTo);
+      if (statusId === '9') {
+        
+        console.log('[WorkflowEmail:assign-team] skipped — escalation notification will be sent');
+      } else {
+        emailEscalationTeamOnAssignment(req.params.id, assignedGroup, req.user.name, req, newAssignedTo);
+      }
     }
 
     const notifResult = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('notifyClientStatusChange', 'notifyDeveloperAssignment', 'emailNotifications', 'inAppNotifications')");
@@ -3925,7 +4010,7 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       
       
       if (statusId === '9' || statusName === 'Escalated') {
-        emailEscalationTeamOnEscalation(req.params.id, { id: req.user.id, name: req.user.name }, req, existing.rows[0].assigned_group);
+        emailEscalationTeamOnEscalation(req.params.id, { id: req.user.id, name: req.user.name }, req, existing.rows[0].assigned_group, oldStatusName);
       }
     }
 
@@ -3993,7 +4078,7 @@ app.put('/api/requests/:id/claim', authMiddleware, async (req, res) => {
       }
     }
 
-    if (req.user.role !== 'support') {
+    if (req.user.role !== 'admin') {
       const groupAccess = await pool.query(
         'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
         [requestId, req.user.id]
@@ -4306,12 +4391,11 @@ const buildRequestScopeWhere = (req, startIndex = 1) => {
     if (myRequests) {
       clause += ` AND r.assigned_to = $${i++}`;
       clauseParams.push(req.user.id);
+    } else if (req.user.role === 'support') {
+      clause += ` AND (r.assigned_to = $${i++} OR (r.status_id = '9' AND EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${i++})))`;
+      clauseParams.push(req.user.id, req.user.id);
     } else {
-      clause += ` AND (r.assigned_to = $${i++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${i++})`;
-      if (req.user.role === 'support') {
-        clause += ` OR r.status_id = '9'`;
-      }
-      clause += `)`;
+      clause += ` AND (r.assigned_to = $${i++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${i++}))`;
       clauseParams.push(req.user.id, req.user.id);
     }
   }
@@ -4922,11 +5006,11 @@ app.get('/api/activity', authMiddleware, async (req, res) => {
       conditions.push(`r.client_id = $${params.length + 1}`);
       params.push(req.user.id);
     } else if (req.user.role !== 'admin') {
-      conditions.push(`(r.assigned_to = $${params.length + 1} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${params.length + 1})`);
       if (req.user.role === 'support') {
-        conditions[conditions.length - 1] += ` OR r.status_id = '9'`;
+        conditions.push(`(r.assigned_to = $${params.length + 1} OR (r.status_id = '9' AND EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${params.length + 1})))`);
+      } else {
+        conditions.push(`(r.assigned_to = $${params.length + 1} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${params.length + 1}))`);
       }
-      conditions[conditions.length - 1] += `)`;
       params.push(req.user.id);
     }
 
@@ -5053,10 +5137,13 @@ app.get('/api/requests/:id/activity', authMiddleware, async (req, res) => {
       if (ownership.rows.length === 0) return res.status(403).json({ error: 'Access denied' });
     } else if (req.user.role !== 'admin') {
       const access = await pool.query(
-        'SELECT r.assigned_to FROM requests r LEFT JOIN request_groups rg ON r.id = rg.request_id LEFT JOIN user_groups ug ON rg.group_id = ug.group_id AND ug.user_id = $2 WHERE r.id = $1 AND (r.assigned_to = $2 OR ug.user_id IS NOT NULL) LIMIT 1',
+        'SELECT r.assigned_to, r.status_id FROM requests r LEFT JOIN request_groups rg ON r.id = rg.request_id LEFT JOIN user_groups ug ON rg.group_id = ug.group_id AND ug.user_id = $2 WHERE r.id = $1 AND (r.assigned_to = $2 OR ug.user_id IS NOT NULL) LIMIT 1',
         [req.params.id, req.user.id]
       );
       if (access.rows.length === 0) return res.status(403).json({ error: 'Access denied' });
+      if (req.user.role === 'support' && access.rows[0].assigned_to !== req.user.id && access.rows[0].status_id !== '9') {
+        return res.status(403).json({ error: 'Access denied - escalation team can only access escalated requests' });
+      }
     }
     const result = await pool.query(`
       SELECT al.*, u.name as user_name, u.email as user_email, u.role as user_role, u.avatar as user_avatar
@@ -5212,14 +5299,20 @@ app.post('/api/groups', authMiddleware, roleMiddleware('admin'), async (req, res
 app.put('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const { name, description, color, company_id } = req.body;
-    if (company_id) {
+    const companyProvided = Object.prototype.hasOwnProperty.call(req.body, 'company_id');
+    if (companyProvided && company_id) {
       const existing = await pool.query('SELECT id FROM groups WHERE company_id = $1 AND id <> $2 LIMIT 1', [company_id, req.params.id]);
       if (existing.rows.length > 0) return res.status(400).json({ error: 'This company is already assigned to another support group' });
     }
-    const result = await pool.query(
-      'UPDATE groups SET name = COALESCE($1, name), description = COALESCE($2, description), color = COALESCE($3, color), company_id = $4 WHERE id = $5 RETURNING *',
-      [name, description, color, company_id ?? null, req.params.id]
-    );
+    const result = companyProvided
+      ? await pool.query(
+          'UPDATE groups SET name = COALESCE($1, name), description = COALESCE($2, description), color = COALESCE($3, color), company_id = $4 WHERE id = $5 RETURNING *',
+          [name, description, color, company_id ?? null, req.params.id]
+        )
+      : await pool.query(
+          'UPDATE groups SET name = COALESCE($1, name), description = COALESCE($2, description), color = COALESCE($3, color) WHERE id = $4 RETURNING *',
+          [name, description, color, req.params.id]
+        );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Group not found' });
     await logGroupActivity('group_updated', { id: req.params.id, name }, req.user, req);
     res.json(result.rows[0]);
@@ -5272,7 +5365,7 @@ app.post('/api/groups/:id/members', authMiddleware, roleMiddleware('admin'), asy
       notifyGroupMembers(req.params.id, `${syncedIds.length} new request${syncedIds.length > 1 ? 's' : ''} available for your group`);
       
       
-      emailGroupDevelopersForSyncedRequests(syncedIds, req.params.id, req);
+      emailGroupDevelopersForSyncedRequests(syncedIds, req.params.id, req, user_id);
     }
     res.status(201).json({ message: 'Member added' });
   } catch (err) {
@@ -6368,16 +6461,21 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
     const { conversationType, conversationId, content, attachments, replyTo } = req.body || {};
     const type = String(conversationType || 'direct');
     const rawCid = String(conversationId || '');
-    if (!rawCid || !content || !String(content).trim()) return res.status(400).json({ error: 'content required' });
+    const rawContent = content == null ? '' : String(content);
+    const messageContent = rawContent.trim() ? rawContent : '';
+    const attachmentList = Array.isArray(attachments) ? attachments.filter((a) => a != null) : [];
+    if (!rawCid) return res.status(400).json({ error: 'conversationId required' });
+    // A message is valid when it has text, an attachment, or both.
+    if (!messageContent.trim() && attachmentList.length === 0) return res.status(400).json({ error: 'content or attachment required' });
     if (!(await canAccessConversation(req.user, type, rawCid))) return res.status(403).json({ error: 'Forbidden' });
     const otherId = directOtherId(req.user, rawCid);
     const cid = type === 'direct' ? directConvKey(req.user.id, otherId) : rawCid;
     const id = uuidv4();
-    const att = JSON.stringify(Array.isArray(attachments) ? attachments : []);
+    const att = JSON.stringify(attachmentList);
     await pool.query(
       `INSERT INTO messages (id, conversation_type, conversation_id, sender_id, content, attachments, reply_to, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-      [id, type, cid, req.user.id, String(content), att, replyTo || null]
+      [id, type, cid, req.user.id, messageContent, att, replyTo || null]
     );
     const result = await pool.query(
       `SELECT m.id, m.conversation_type, m.conversation_id, m.sender_id, m.content, m.attachments, m.reply_to, m.reactions, m.delivered, m.created_at,
@@ -6390,12 +6488,14 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
     row.reactions = (() => { try { return JSON.parse(row.reactions || '[]'); } catch { return []; } })();
     // notify recipients
     try {
+      const attachmentPreview = attachmentList.length === 1 ? 'Sent an attachment' : `Sent ${attachmentList.length} attachments`;
+      const messagePreview = messageContent.trim() ? messageContent.slice(0, 80) : attachmentPreview;
       if (type === 'direct') {
-        await notifyUser(otherId, `New message from ${req.user.name}`, { type: 'message', conversationType: type, conversationId: otherId, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview: String(content).slice(0, 80) });
+        await notifyUser(otherId, `New message from ${req.user.name}`, { type: 'message', conversationType: type, conversationId: otherId, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview: messagePreview });
       } else if (type === 'group') {
         const mems = await pool.query('SELECT user_id FROM user_groups WHERE group_id = $1', [cid]);
         for (const r of mems.rows) {
-          await notifyUser(r.user_id, `New group message from ${req.user.name}`, { type: 'message', conversationType: type, conversationId: cid, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview: String(content).slice(0, 80) });
+          await notifyUser(r.user_id, `New group message from ${req.user.name}`, { type: 'message', conversationType: type, conversationId: cid, userId: req.user.id, userName: req.user.name, userRole: req.user.role, preview: messagePreview });
         }
       }
     } catch (e) { console.error('notify message err', e.message); }

@@ -23,13 +23,12 @@ export default function Groups() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const [groups, setGroups] = useState([]);
-  const [companies, setCompanies] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
-  const [form, setForm] = useState({ name: '', description: '', color: '#3B82F6', company_id: '' });
+  const [form, setForm] = useState({ name: '', description: '', color: '#3B82F6' });
   const [toasts, setToasts] = useState([]);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -65,11 +64,9 @@ export default function Groups() {
     setLoading(true);
     Promise.all([
       api.get('/api/groups'),
-      api.get('/api/companies'),
       api.get('/api/users')
-    ]).then(([groupsData, companiesData, usersData]) => {
+    ]).then(([groupsData, usersData]) => {
       setGroups(groupsData.map((g, i) => ({ ...g, numId: i + 1 })));
-      setCompanies(companiesData);
       setAllUsers(usersData);
       setLoading(false);
     }).catch(err => { setError(t('common.failedToLoadData') + ': ' + err.message); setLoading(false); });
@@ -84,10 +81,9 @@ export default function Groups() {
     e.preventDefault();
     try {
       const body = { name: form.name, description: form.description, color: form.color };
-      if (form.company_id) body.company_id = form.company_id;
       await api.post('/api/groups', body);
       setShowModal(false);
-      setForm({ name: '', description: '', color: '#3B82F6', company_id: '' });
+      setForm({ name: '', description: '', color: '#3B82F6' });
       loadGroups();
       addToast(t('common.createdSuccess', { item: t('common.group') }));
       showStatusToast(t('common.groupCreatedWithName', { name: form.name }), 'request_created');
@@ -100,10 +96,10 @@ export default function Groups() {
   const handleEdit = async (e) => {
     e.preventDefault();
     try {
-      const body = { name: form.name, description: form.description, color: form.color, company_id: form.company_id || null };
+      const body = { name: form.name, description: form.description, color: form.color };
       await api.put(`/api/groups/${editingGroup.id}`, body);
       setEditingGroup(null);
-      setForm({ name: '', description: '', color: '#3B82F6', company_id: '' });
+      setForm({ name: '', description: '', color: '#3B82F6' });
       loadGroups();
       addToast(t('common.updatedSuccess', { item: t('common.group') }));
       showStatusToast(t('common.groupUpdatedWithName', { name: form.name }), 'status');
@@ -132,15 +128,14 @@ export default function Groups() {
     setForm({
       name: group.name,
       description: group.description || '',
-      color: group.color || '#3B82F6',
-      company_id: group.company_id || ''
+      color: group.color || '#3B82F6'
     });
     setShowModal(false);
   };
 
   const openCreate = () => {
     setEditingGroup(null);
-    setForm({ name: '', description: '', color: '#3B82F6', company_id: '' });
+    setForm({ name: '', description: '', color: '#3B82F6' });
     setShowModal(true);
   };
 
@@ -254,8 +249,7 @@ export default function Groups() {
       const q = searchQuery.toLowerCase();
       return (
         (g.name || '').toLowerCase().includes(q) ||
-        (g.description || '').toLowerCase().includes(q) ||
-        (g.company_name || '').toLowerCase().includes(q)
+        (g.description || '').toLowerCase().includes(q)
       );
     }
     return true;
@@ -265,7 +259,6 @@ export default function Groups() {
     switch (sort.key) {
       case 'id': aVal = a.numId; bVal = b.numId; break;
       case 'name': aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase(); break;
-      case 'company': aVal = (a.company_name || '').toLowerCase(); bVal = (b.company_name || '').toLowerCase(); break;
       case 'members': aVal = a.memberCount || 0; bVal = b.memberCount || 0; break;
       default: return 0;
     }
@@ -332,7 +325,6 @@ export default function Groups() {
                 <tr>
                   <th style={{ width: '80px', cursor: 'pointer' }} onClick={() => handleSort('id')}><span>{t('common.id')} {getSortIcon('id')}</span></th>
                   <th className="sortable"><span>{t('common.group')} {getSortIcon('name')}</span></th>
-                  <th className="sortable"><span>{t('common.company')} {getSortIcon('company')}</span></th>
                   <th className="sortable"><span>{t('common.members')} {getSortIcon('members')}</span></th>
                   <th>{t('common.actions')}</th>
                 </tr>
@@ -347,7 +339,6 @@ export default function Groups() {
                         <span className="truncate-cell">{g.name}</span>
                       </div>
                     </td>
-                    <td><span className="truncate-cell">{g.company_name || <span style={{ color: '#9ca3af' }}>—</span>}</span></td>
                     <td>
                       <span className="role-badge" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', cursor: 'pointer' }} onClick={() => openMembers(g)}>
                         {g.memberCount || 0}
@@ -363,7 +354,7 @@ export default function Groups() {
                   </tr>
                 ))}
                 {paginated.length === 0 && (
-                  <tr><td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noGroupsFound')}</td></tr>
+                  <tr><td colSpan="4" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noGroupsFound')}</td></tr>
                 )}
               </tbody>
             </table>
@@ -400,15 +391,6 @@ export default function Groups() {
               <div className="form-group">
                 <label>{t('common.groupName')}</label>
                 <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label>{t("common.company")}</label>
-                <select value={form.company_id} onChange={(e) => setForm({ ...form, company_id: e.target.value })}>
-                  <option value="">{companies.length === 0 ? "No companies available. Create one in Company Management." : "Select company"}</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
               </div>
               <div className="form-group">
                 <label>{t('common.description')}</label>

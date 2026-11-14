@@ -562,7 +562,16 @@ export default function Users() {
               </div>
               <div className="form-group">
                 <label>{t('common.companyName')}</label>
-                <input type="text" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} />
+                <input
+                  type="text"
+                  list="company-name-options"
+                  value={form.companyName}
+                  onChange={(e) => setForm({ ...form, companyName: e.target.value })}
+                  placeholder={t('common.selectCompany')}
+                />
+                <datalist id="company-name-options">
+                  {companyOptions.map(name => <option key={name} value={name} />)}
+                </datalist>
               </div>
               <div className="form-group">
                 <label>{editingUser ? t('common.newPassword') + ' (' + t('common.leaveBlank') + ')' : t('common.password')}</label>

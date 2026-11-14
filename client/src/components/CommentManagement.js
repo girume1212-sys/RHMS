@@ -24,6 +24,47 @@ function Avatar({ user, size = 40 }) {
 
 const ROLE_LABELS = { admin: 'Admin', client: 'Client', developer: 'Developer', support: 'Escalation Team' };
 
+const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|bmp|svg|avif|heic|heif|ico|tiff?|jfif)$/i;
+const VIDEO_EXT_RE = /\.(mp4|m4v|webm|ogg|ogv|mov|mkv|avi|3gp|wmv|flv)$/i;
+
+function attachmentName(a) {
+  if (!a) return 'file';
+  if (a.name) return a.name;
+  const path = a.path || a.url || '';
+  const name = String(path).split('/').pop();
+  return name || 'file';
+}
+
+function normalizeAttachment(a) {
+  if (typeof a === 'string') return { name: attachmentName(a), path: a };
+  if (!a || typeof a !== 'object') return null;
+  return { ...a, name: attachmentName(a) };
+}
+
+function attachmentMime(a) {
+  return String(a?.type || a?.mimeType || a?.mimetype || a?.mime || '').toLowerCase();
+}
+
+function isImageAttachment(a) {
+  const mime = attachmentMime(a);
+  if (mime.startsWith('image/')) return true;
+  return IMAGE_EXT_RE.test(attachmentName(a));
+}
+
+function isVideoAttachment(a) {
+  const mime = attachmentMime(a);
+  if (mime.startsWith('video/')) return true;
+  if (mime.startsWith('audio/')) return false;
+  return VIDEO_EXT_RE.test(attachmentName(a));
+}
+
+function attachmentUrl(a) {
+  const path = a?.path || a?.url || '';
+  if (!path) return '#';
+  if (/^(https?:|blob:|data:)/i.test(path)) return path;
+  return (API_BASE || '') + path;
+}
+
 export default function CommentManagement() {
   const { user, darkMode } = useAuth();
   const { t } = useTranslation();
@@ -280,7 +321,7 @@ export default function CommentManagement() {
       fd.append('file', files[i]);
       try {
         const res = await api.upload('/api/upload', fd);
-        uploaded.push({ name: files[i].name, path: res.path, size: files[i].size });
+        uploaded.push({ name: files[i].name, path: res.path, size: files[i].size, type: files[i].type || '' });
       } catch (e) { console.error(e); }
       setUploadProgress(Math.round(((i + 1) / files.length) * 100));
     }
@@ -289,20 +330,25 @@ export default function CommentManagement() {
   };
 
   const send = async () => {
-    if ((!text.trim() && attachments.length === 0) || !selectedUser || sending) return;
+    const hasText = !!text.trim();
+    if ((!hasText && attachments.length === 0) || !selectedUser || sending) return;
     setSending(true);
     try {
-      let atts = attachments.map((f) => ({ name: f.name, path: f.path || null, size: f.size }));
-      // if raw files not uploaded yet
+      let atts = attachments
+        .filter((f) => f && f.path)
+        .map((f) => ({ name: f.name, path: f.path, size: f.size, type: f.type || '' }));
+      // upload any raw files selected in the composer
       const rawFiles = attachments.filter((f) => !f.path && f instanceof File);
       if (rawFiles.length) {
         const uploaded = await uploadAttachments(rawFiles);
-        atts = [...attachments.filter((f) => f.path), ...uploaded];
+        atts = [...atts, ...uploaded];
       }
+      // A comment can be text-only, attachment-only, or text + attachments.
+      if (!hasText && atts.length === 0) return;
       const created = await api.post('/api/messages', {
         conversationType: selectedUser.type,
         conversationId: selectedUser.id,
-        content: text || '',
+        content: hasText ? text : '',
         attachments: atts,
         replyTo: replyTo?.id || null,
       });
@@ -316,6 +362,17 @@ export default function CommentManagement() {
     } finally {
       setSending(false);
     }
+  };
+
+  const openFilePicker = (accept) => {
+    setAcceptType(accept);
+    setShowAttachMenu(false);
+    const input = fileInputRef.current;
+    if (!input) return;
+    // Apply the filter immediately so the picker always reflects the chosen type.
+    input.accept = accept;
+    input.value = '';
+    input.click();
   };
 
   const handleKey = (e) => {
@@ -553,24 +610,24 @@ export default function CommentManagement() {
                                 {Array.isArray(m.attachments) && m.attachments.length > 0 && (
                                   <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, alignItems: own ? 'flex-end' : 'flex-start' }}>
                                     {(() => {
-                                      const media = m.attachments.filter((a) => /\.(jpe?g|png|gif|webp)$/i.test(a.name || '') || /\.(mp4|webm|ogg|mov)$/i.test(a.name || ''));
-                                      const docs = m.attachments.filter((a) => !(/\.(jpe?g|png|gif|webp)$/i.test(a.name || '') || /\.(mp4|webm|ogg|mov)$/i.test(a.name || '')));
+                                      const all = m.attachments.map(normalizeAttachment).filter(Boolean);
+                                      const media = all.filter((a) => isImageAttachment(a) || isVideoAttachment(a));
+                                      const docs = all.filter((a) => !isImageAttachment(a) && !isVideoAttachment(a));
                                       return (
                                         <>
                                           {media.length > 0 && (
                                             <div style={{ display: 'grid', gridTemplateColumns: media.length > 1 ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: 4, maxWidth: 300, borderRadius: 8, overflow: 'hidden' }}>
                                               {media.map((a, i) => {
-                                                const url = a.path ? (process.env.REACT_APP_API_URL || '') + a.path : '#';
-                                                const name = a.name || 'file';
-                                                const isImg = /\.(jpe?g|png|gif|webp)$/i.test(name);
-                                                if (isImg) {
+                                                const url = attachmentUrl(a);
+                                                const name = attachmentName(a);
+                                                if (isImageAttachment(a)) {
                                                   return (
                                                     <img key={i} src={url} alt={name} onClick={() => setPreviewMedia({ type: 'image', url })} style={{ width: '100%', height: media.length > 1 ? 120 : 'auto', maxHeight: 260, objectFit: 'cover', cursor: 'pointer', display: 'block', borderRadius: 6 }} />
                                                   );
                                                 }
                                                 return (
                                                   <div key={i} onClick={() => setPreviewMedia({ type: 'video', url })} style={{ position: 'relative', width: '100%', height: media.length > 1 ? 120 : 180, background: '#000', cursor: 'pointer', borderRadius: 6, overflow: 'hidden' }}>
-                                                    <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} muted preload="metadata" />
+                                                    <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} muted preload="metadata" playsInline />
                                                     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)' }}>
                                                       <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>▶</div>
                                                     </div>
@@ -580,11 +637,11 @@ export default function CommentManagement() {
                                             </div>
                                           )}
                                           {docs.map((a, i) => {
-                                            const url = a.path ? (process.env.REACT_APP_API_URL || '') + a.path : '#';
-                                            const name = a.name || 'file';
+                                            const url = attachmentUrl(a);
+                                            const name = attachmentName(a);
                                             const sizeLabel = a.size ? (a.size > 1024 * 1024 ? (a.size / (1024 * 1024)).toFixed(1) + ' MB' : Math.round(a.size / 1024) + ' KB') : '';
                                             const ext = (name.split('.').pop() || '').toUpperCase();
-                                            const icon = /\.pdf$/i.test(name) ? 'PDF' : /\.(docx?)$/i.test(name) ? 'DOC' : /\.(xlsx?|csv)$/i.test(name) ? 'XLS' : /\.(pptx?)$/i.test(name) ? 'PPT' : /\.(mp3|wav|ogg|m4a)$/i.test(name) ? 'AUD' : 'FILE';
+                                            const icon = /\.pdf$/i.test(name) ? 'PDF' : /\.(docx?)$/i.test(name) ? 'DOC' : /\.(xlsx?|csv)$/i.test(name) ? 'XLS' : /\.(pptx?)$/i.test(name) ? 'PPT' : /\.(mp3|wav|ogg|m4a|aac|flac|oga)$/i.test(name) ? 'AUD' : 'FILE';
                                             return (
                                               <a key={i} href={url} target="_blank" rel="noreferrer" download style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, borderRadius: 8, background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', border: '1px solid ' + T.border, textDecoration: 'none', color: own ? (dark ? '#BFDBFE' : '#1D4ED8') : T.accent, maxWidth: 300 }}>
                                                 <div style={{ width: 36, height: 36, borderRadius: 8, background: T.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{icon}</div>
@@ -670,7 +727,7 @@ export default function CommentManagement() {
                            { label: 'Music / Audio', icon: <Music size={16} color="#2B547E" />, accept: 'audio/*' },
                            { label: 'Other Files', icon: <Paperclip size={16} color="#2B547E" />, accept: '*/*' },
                          ].map((opt) => (
-                           <button key={opt.label} onClick={() => { setAcceptType(opt.accept); setShowAttachMenu(false); setTimeout(() => fileInputRef.current && fileInputRef.current.click(), 0); }}
+                           <button key={opt.label} onClick={() => openFilePicker(opt.accept)}
                              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8, color: T.text, fontSize: 13, textAlign: 'left' }}
                              onMouseEnter={(e) => { e.currentTarget.style.background = T.hover; }}
                              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
