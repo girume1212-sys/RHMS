@@ -951,7 +951,7 @@ async function syncUserRequestGroups(userId, groupIds) {
   const groupList = Array.isArray(groupIds) ? groupIds.filter(Boolean) : [];
   const added = {};
   const userRequests = await pool.query(
-    'SELECT id FROM requests WHERE client_id = $1 AND assigned_group IS NULL',
+    "SELECT id FROM requests WHERE client_id = $1 AND status_id = '1'",
     [userId]
   );
   for (const r of userRequests.rows) {
@@ -983,7 +983,7 @@ async function addUserRequestGroup(userId, groupId) {
     `INSERT INTO request_groups (request_id, group_id)
      SELECT r.id, $2
      FROM requests r
-     WHERE r.client_id = $1 AND r.assigned_group IS NULL
+     WHERE r.client_id = $1 AND r.status_id = '1'
      ON CONFLICT DO NOTHING
      RETURNING request_id`,
     [userId, groupId]
