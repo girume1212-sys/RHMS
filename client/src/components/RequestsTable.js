@@ -239,6 +239,7 @@ const RequestsTable = forwardRef(function RequestsTable({
         case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
         case 'assignee': aVal = (a.assignee?.name || '').toLowerCase(); bVal = (b.assignee?.name || '').toLowerCase(); break;
         case 'client': aVal = (a.client?.name || '').toLowerCase(); bVal = (b.client?.name || '').toLowerCase(); break;
+        case 'company': aVal = (a.client?.company || '').toLowerCase(); bVal = (b.client?.company || '').toLowerCase(); break;
         case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
         case 'assignedGroup': aVal = (a.assignedGroup?.name || '').toLowerCase(); bVal = (b.assignedGroup?.name || '').toLowerCase(); break;
         case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
@@ -261,7 +262,7 @@ const RequestsTable = forwardRef(function RequestsTable({
   }, [totalPages, page]);
 
   const paginated = filteredRequests.slice((page - 1) * perPage, page * perPage);
-  const colSpan = isClient ? 7 : 10;
+  const colSpan = isClient ? 7 : 11;
 
   return (
     <div className="chart-card">
@@ -331,6 +332,7 @@ const RequestsTable = forwardRef(function RequestsTable({
                   <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')} {getSortIcon('subject')}</span></th>
                   {!isClient && <th className="sortable"><span onClick={() => handleSort('assignee')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedTo')} {getSortIcon('assignee')}</span></th>}
                   {!isClient && <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')} {getSortIcon('client')}</span></th>}
+                  {!isClient && <th className="sortable"><span onClick={() => handleSort('company')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.company')} {getSortIcon('company')}</span></th>}
                   {!isClient && <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')} {getSortIcon('groups')}</span></th>}
                   <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')} {getSortIcon('category')}</span></th>
                   <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')} {getSortIcon('priority')}</span></th>
@@ -370,9 +372,17 @@ const RequestsTable = forwardRef(function RequestsTable({
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                               <span className="truncate-cell">{r.client?.name}</span>
-                              {r.client?.company && <span className="truncate-cell" style={{ fontSize: '11px', color: '#6B7280' }}>{r.client.company}</span>}
                             </div>
                           </div>
+                        ) : (
+                          <span style={{ color: '#9ca3af' }}>-</span>
+                        )}
+                      </td>
+                    )}
+                    {!isClient && (
+                      <td>
+                        {r.client?.company ? (
+                          <span className="truncate-cell">{r.client.company}</span>
                         ) : (
                           <span style={{ color: '#9ca3af' }}>-</span>
                         )}

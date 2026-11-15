@@ -182,7 +182,8 @@ export default function EscalationDashboard() {
           str(r.status?.name),
           str(r.priority?.name),
           str(r.category?.name),
-          str(r.client?.name),
+           str(r.client?.name),
+           str(r.client?.company),
           str(r.assignee?.name),
           str(r.assignedGroup?.name),
           ...(r.groups || []).map(g => str(g.name)),
@@ -199,6 +200,7 @@ export default function EscalationDashboard() {
         case 'id': aVal = a.id; bVal = b.id; break;
         case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
         case 'client': aVal = (a.client?.name || '').toLowerCase(); bVal = (b.client?.name || '').toLowerCase(); break;
+        case 'company': aVal = (a.client?.company || '').toLowerCase(); bVal = (b.client?.company || '').toLowerCase(); break;
         case 'groups': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
         case 'assignedGroup': aVal = (a.assignedGroup?.name || '').toLowerCase(); bVal = (b.assignedGroup?.name || '').toLowerCase(); break;
         case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
@@ -403,6 +405,7 @@ if (statusName === 'New') {
                 <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')} {getSortIcon('subject')}</span></th>
                 <th>{t('common.assignedTo')}</th>
                 <th className="sortable"><span onClick={() => handleSort('client')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.client')} {getSortIcon('client')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('company')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.company')} {getSortIcon('company')}</span></th>
                 <th className="sortable"><span onClick={() => handleSort('groups')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')} {getSortIcon('groups')}</span></th>
                 <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')} {getSortIcon('category')}</span></th>
                 <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')} {getSortIcon('priority')}</span></th>
@@ -427,6 +430,7 @@ if (statusName === 'New') {
                     ) : <span className="muted-text">-</span>}
                   </td>
                   <td>{r.clientDeleted ? <span className="muted-text">{t('common.clientDeleted')}</span> : <span className="truncate-cell">{r.client?.name || '-'}</span>}</td>
+                  <td>{r.client?.company ? <span className="truncate-cell">{r.client.company}</span> : <span style={{ color: '#9ca3af' }}>-</span>}</td>
                   <td>
                     {r.groups && r.groups.length > 0
                       ? <span className="truncate-cell">{r.groups.map((g, i) => (
@@ -494,7 +498,7 @@ if (statusName === 'New') {
                 </tr>
               ))}
               {paginatedRequests.length === 0 && (
-                <tr><td colSpan="10" className="muted-text" style={{ textAlign: 'center', padding: '24px' }}>
+                <tr><td colSpan="11" className="muted-text" style={{ textAlign: 'center', padding: '24px' }}>
                   {displayRequests.length === 0 ? (showAssignedOnly ? t('common.noAssignedRequests') : t('common.noRequestsYet')) : t('common.noMatchFilters')}
                 </td></tr>
               )}

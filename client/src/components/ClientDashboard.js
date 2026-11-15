@@ -171,6 +171,7 @@ export default function ClientDashboard() {
       switch (sort.key) {
         case 'id': aVal = a.id; bVal = b.id; break;
         case 'subject': aVal = (a.subject || '').toLowerCase(); bVal = (b.subject || '').toLowerCase(); break;
+        case 'company': aVal = (a.client?.company || '').toLowerCase(); bVal = (b.client?.company || '').toLowerCase(); break;
         case 'group': aVal = (a.groups?.[0]?.name || '').toLowerCase(); bVal = (b.groups?.[0]?.name || '').toLowerCase(); break;
         case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
         case 'priority': aVal = a.priority?.level || 0; bVal = b.priority?.level || 0; break;
@@ -266,6 +267,7 @@ export default function ClientDashboard() {
               <tr>
                 <th className="sortable"><span onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.id')} {getSortIcon('id')}</span></th>
                 <th className="sortable"><span onClick={() => handleSort('subject')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.requestTitle')} {getSortIcon('subject')}</span></th>
+                <th className="sortable"><span onClick={() => handleSort('company')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.company')} {getSortIcon('company')}</span></th>
                 <th className="sortable"><span onClick={() => handleSort('group')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.assignedGroup')} {getSortIcon('group')}</span></th>
                 <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')} {getSortIcon('category')}</span></th>
                 <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')} {getSortIcon('priority')}</span></th>
@@ -276,12 +278,13 @@ export default function ClientDashboard() {
             </thead>
             <tbody>
               {paginatedRequests.length === 0 && !error && (
-                <tr><td colSpan="8" className="muted-text" style={{ textAlign: 'center', padding: '24px' }}>{t('common.noRequestsFound')}</td></tr>
+                <tr><td colSpan="9" className="muted-text" style={{ textAlign: 'center', padding: '24px' }}>{t('common.noRequestsFound')}</td></tr>
               )}
               {paginatedRequests.map((r) => (
                 <tr key={r.id} onClick={() => navigate(`/client/requests/${r.id}`)} className="clickable-row">
                   <td><strong>{formatRequestId(r.id)}</strong></td>
                   <td><span className="truncate-cell">{r.subject}</span></td>
+                  <td>{r.client?.company ? <span className="truncate-cell">{r.client.company}</span> : <span style={{ color: '#9ca3af' }}>-</span>}</td>
                   <td>
                     {r.groups && r.groups.length > 0 ? (
                       <span className="truncate-cell">{r.groups.map((g, i) => (
