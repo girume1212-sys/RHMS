@@ -319,6 +319,7 @@
     "attachmentsCount": "Attachments ({count})",
     "fileCount": "{count} file(s)",
     "requestCreatedSuccess": "Request created successfully!",
+    "noGroupMappedWarning": "No support group is mapped to your company. An administrator has been notified to assign this request.",
     "newRequestCreated": "New request \"{subject}\" created",
     "failedToCreateRequest": "Failed to create request",
     "fillRequiredFields": "Please fill all required fields",

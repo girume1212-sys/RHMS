@@ -221,6 +221,7 @@ const RequestsTable = forwardRef(function RequestsTable({
           str(r.priority?.name),
           str(r.category?.name),
           str(r.client?.name),
+          str(r.client?.company),
           str(r.assignee?.name),
           str(r.assignedGroup?.name),
           ...(r.groups || []).map(g => str(g.name)),
@@ -243,6 +244,7 @@ const RequestsTable = forwardRef(function RequestsTable({
         case 'category': aVal = (a.category?.name || '').toLowerCase(); bVal = (b.category?.name || '').toLowerCase(); break;
         case 'priority': aVal = a.priority?.level || 0; bVal = b.priority?.level || 0; break;
         case 'status': aVal = (a.status?.name || '').toLowerCase(); bVal = (b.status?.name || '').toLowerCase(); break;
+        case 'createdAt': aVal = new Date(a.createdAt || 0); bVal = new Date(b.createdAt || 0); break;
         case 'updatedAt': aVal = new Date(a.updatedAt || 0); bVal = new Date(b.updatedAt || 0); break;
         default: return 0;
       }
@@ -333,7 +335,7 @@ const RequestsTable = forwardRef(function RequestsTable({
                   <th className="sortable"><span onClick={() => handleSort('category')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.category')} {getSortIcon('category')}</span></th>
                   <th className="sortable"><span onClick={() => handleSort('priority')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.priority')} {getSortIcon('priority')}</span></th>
                   <th className="sortable"><span onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.status')} {getSortIcon('status')}</span></th>
-                  <th className="sortable"><span onClick={() => handleSort('updatedAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.updated')} {getSortIcon('updatedAt')}</span></th>
+                  {!isClient && <th className="sortable"><span onClick={() => handleSort('createdAt')} style={{ cursor: 'pointer', userSelect: 'none' }}>{t('common.created')} {getSortIcon('createdAt')}</span></th>}
                   <th>{t('common.actions')}</th>
                 </tr>
               </thead>
@@ -366,7 +368,10 @@ const RequestsTable = forwardRef(function RequestsTable({
                             <div className="assigned-avatar" style={{ background: '#10B981', overflow: 'visible', position: 'relative' }}>
                               <span style={{ display: 'block', width: '100%', height: '100%', overflow: 'hidden', borderRadius: '50%' }}>{getAvatarUrl(r.client?.avatar) ? <img src={getAvatarUrl(r.client?.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (r.client?.name.charAt(0) || '?')}</span>{isCriticalUnworked(r) && <span className="critical-dot critical-dot-avatar" title="Critical — needs work" />}
                             </div>
-                            <span className="truncate-cell">{r.client?.name}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                              <span className="truncate-cell">{r.client?.name}</span>
+                              {r.client?.company && <span className="truncate-cell" style={{ fontSize: '11px', color: '#6B7280' }}>{r.client.company}</span>}
+                            </div>
                           </div>
                         ) : (
                           <span style={{ color: '#9ca3af' }}>-</span>
@@ -387,7 +392,7 @@ const RequestsTable = forwardRef(function RequestsTable({
                     <td><span className="truncate-cell"><span className="category-tag" style={{ background: (r.category?.color || '#3B82F6') + '20', color: r.category?.color || '#3B82F6' }}>{transSeeded(r.category?.name, 'category', t) || '-'}</span></span></td>
                     <td><span className="priority-badge" style={{ background: getPriorityColor(r.priority) + '20', color: getPriorityColor(r.priority) }}>{transSeeded(r.priority?.name, 'priority', t) || '-'}</span></td>
                     <td><span className="status-badge" style={{ background: getStatusColor(r.status) + '20', color: getStatusColor(r.status) }}>{transSeeded(r.status?.name, 'status', t) || '-'}</span></td>
-                    <td>{r.updatedAt ? new Date(r.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
+                    {!isClient && <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>}
                     <td>
                       <div className="actions-cell-inline" onClick={(e) => e.stopPropagation()}>
                         {isReadOnly(r) ? (

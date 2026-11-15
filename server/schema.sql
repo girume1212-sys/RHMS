@@ -69,6 +69,13 @@ CREATE TABLE groups (
   is_default BOOLEAN DEFAULT FALSE
 );
 
+CREATE TABLE company_groups (
+  company_id VARCHAR(50) NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  group_id VARCHAR(50) NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  PRIMARY KEY (company_id, group_id)
+);
+
 CREATE TABLE users (
   id VARCHAR(50) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
@@ -132,6 +139,7 @@ CREATE TABLE requests (
   assigned_to VARCHAR(50) REFERENCES users(id),
   assigned_group VARCHAR(50) REFERENCES groups(id) ON DELETE SET NULL,
   custom_category TEXT,
+  assignment_source VARCHAR(30),
   attachments JSONB DEFAULT '[]',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -170,6 +178,22 @@ CREATE TABLE request_groups (
   request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
   group_id VARCHAR(50) REFERENCES groups(id) ON DELETE CASCADE,
   PRIMARY KEY (request_id, group_id)
+);
+
+CREATE TABLE email_notifications (
+  id VARCHAR(50) PRIMARY KEY,
+  event_type VARCHAR(50) NOT NULL,
+  request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
+  recipient_id VARCHAR(50),
+  recipient_email VARCHAR(255) NOT NULL DEFAULT '',
+  group_id VARCHAR(50),
+  dedup_key VARCHAR(255) UNIQUE,
+  subject VARCHAR(500),
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  message_id VARCHAR(255),
+  error TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  sent_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE request_tags (

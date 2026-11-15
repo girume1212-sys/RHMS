@@ -149,9 +149,13 @@ export default function CreateRequest() {
         attachments = await uploadFiles();
         setUploading(false);
       }
-      await api.post('/api/requests', { ...form, customCategory: isOtherCategory ? form.customCategory.trim() : undefined, attachments });
+      const created = await api.post('/api/requests', { ...form, customCategory: isOtherCategory ? form.customCategory.trim() : undefined, attachments });
       addToast(t('common.requestCreatedSuccess'));
-      showStatusToast(t('common.newRequestCreated', { subject: form.subject }), 'request_created');
+      if (created && created.assignmentWarning) {
+        showStatusToast(t('common.noGroupMappedWarning'), 'status');
+      } else {
+        showStatusToast(t('common.newRequestCreated', { subject: form.subject }), 'request_created');
+      }
       navigate(`${basePath}/requests`);
     } catch (err) {
       

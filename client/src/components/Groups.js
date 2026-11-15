@@ -29,7 +29,7 @@ export default function Groups() {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
-  const [form, setForm] = useState({ name: '', description: '', color: '#3B82F6', companyId: '' });
+  const [form, setForm] = useState({ name: '', description: '', color: '#3B82F6', companyIds: [] });
   const [toasts, setToasts] = useState([]);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -83,10 +83,10 @@ export default function Groups() {
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
-      const body = { name: form.name, description: form.description, color: form.color, company_id: form.companyId || null };
+      const body = { name: form.name, description: form.description, color: form.color, companyIds: form.companyIds, company_id: form.companyIds[0] || null };
       await api.post('/api/groups', body);
       setShowModal(false);
-      setForm({ name: '', description: '', color: '#3B82F6', companyId: '' });
+      setForm({ name: '', description: '', color: '#3B82F6', companyIds: [] });
       loadGroups();
       addToast(t('common.createdSuccess', { item: t('common.group') }));
       showStatusToast(t('common.groupCreatedWithName', { name: form.name }), 'request_created');
@@ -99,10 +99,10 @@ export default function Groups() {
   const handleEdit = async (e) => {
     e.preventDefault();
     try {
-      const body = { name: form.name, description: form.description, color: form.color, company_id: form.companyId || null };
+      const body = { name: form.name, description: form.description, color: form.color, companyIds: form.companyIds, company_id: form.companyIds[0] || null };
       await api.put(`/api/groups/${editingGroup.id}`, body);
       setEditingGroup(null);
-setForm({ name: '', description: '', color: '#3B82F6', companyId: '' });
+setForm({ name: '', description: '', color: '#3B82F6', companyIds: [] });
       loadGroups();
       addToast(t('common.updatedSuccess', { item: t('common.group') }));
       showStatusToast(t('common.groupUpdatedWithName', { name: form.name }), 'status');
@@ -128,18 +128,21 @@ setForm({ name: '', description: '', color: '#3B82F6', companyId: '' });
 
   const openEdit = (group) => {
     setEditingGroup(group);
+    const mappedIds = Array.isArray(group.company_ids)
+      ? group.company_ids.map(String)
+      : (group.company_id ? [String(group.company_id)] : []);
     setForm({
       name: group.name,
       description: group.description || '',
       color: group.color || '#3B82F6',
-      companyId: group.company_id || ''
+      companyIds: mappedIds
     });
     setShowModal(false);
   };
 
   const openCreate = () => {
     setEditingGroup(null);
-    setForm({ name: '', description: '', color: '#3B82F6' });
+    setForm({ name: '', description: '', color: '#3B82F6', companyIds: [] });
     setShowModal(true);
   };
 
@@ -253,7 +256,8 @@ setForm({ name: '', description: '', color: '#3B82F6', companyId: '' });
       const q = searchQuery.toLowerCase();
       return (
         (g.name || '').toLowerCase().includes(q) ||
-        (g.description || '').toLowerCase().includes(q)
+        (g.description || '').toLowerCase().includes(q) ||
+        (g.companies || []).some(c => (c.name || '').toLowerCase().includes(q))
       );
     }
     return true;
@@ -264,7 +268,7 @@ setForm({ name: '', description: '', color: '#3B82F6', companyId: '' });
       case 'id': aVal = a.numId; bVal = b.numId; break;
       case 'name': aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase(); break;
       case 'members': aVal = a.memberCount || 0; bVal = b.memberCount || 0; break;
-       case 'company': aVal = (a.company_name || '').toLowerCase(); bVal = (b.company_name || '').toLowerCase(); break;
+       case 'company': aVal = (a.companies || []).map(c => c.name).join(', ').toLowerCase(); bVal = (b.companies || []).map(c => c.name).join(', ').toLowerCase(); break;
       default: return 0;
     }
     if (aVal < bVal) return sort.dir === 'asc' ? -1 : 1;
@@ -345,7 +349,7 @@ setForm({ name: '', description: '', color: '#3B82F6', companyId: '' });
                         <span className="truncate-cell">{g.name}</span>
                       </div>
                     </td>
-                    <td>{g.company_name || '-'}</td>
+                    <td>{(g.companies || []).map(c => c.name).join(', ') || g.company_name || '-'}</td>
                     <td>
                       <span className="role-badge" style={{ background: (g.color || '#6B7280') + '20', color: g.color || '#6B7280', cursor: 'pointer' }} onClick={() => openMembers(g)}>
                         {g.memberCount || 0}
@@ -361,7 +365,7 @@ setForm({ name: '', description: '', color: '#3B82F6', companyId: '' });
                   </tr>
                 ))}
                 {paginated.length === 0 && (
-                  <tr><td colSpan="4" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noGroupsFound')}</td></tr>
+                  <tr><td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('common.noGroupsFound')}</td></tr>
                 )}
               </tbody>
             </table>
@@ -409,12 +413,29 @@ setForm({ name: '', description: '', color: '#3B82F6', companyId: '' });
               </div>
 <div className="form-group">
                 <label>{t('common.company')}</label>
-                <select value={form.companyId} onChange={(e) => setForm({ ...form, companyId: e.target.value })} style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid rgba(0,180,216,0.25)', padding: '0 12px' }}>
-                  <option value="">Select company</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <div style={{ maxHeight: '170px', overflowY: 'auto', border: '1px solid rgba(0,180,216,0.25)', borderRadius: '10px', padding: '8px 10px', background: '#ffffff' }}>
+                  {companies.map((c) => {
+                    const companyId = String(c.id);
+                    const checked = form.companyIds.includes(companyId);
+                    return (
+                      <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 2px', cursor: 'pointer', fontSize: '14px' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setForm(prev => ({
+                            ...prev,
+                            companyIds: checked ? prev.companyIds.filter(id => id !== companyId) : [...prev.companyIds, companyId]
+                          }))}
+                        />
+                        <span>{c.name}</span>
+                      </label>
+                    );
+                  })}
+                  {companies.length === 0 && (
+                    <div style={{ color: '#9ca3af', fontSize: '13px', padding: '4px 2px' }}>No companies available</div>
+                  )}
+                </div>
+                <div style={{ marginTop: '6px', fontSize: '12px', color: '#6B7280' }}>Select one or more companies to route their requests to this group.</div>
               </div>
               <div className="form-actions">
                 <button type="button" className="btn btn-outline" onClick={() => { setShowModal(false); setEditingGroup(null); }}>{t('common.cancel')}</button>

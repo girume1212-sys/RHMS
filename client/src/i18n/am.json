@@ -319,6 +319,7 @@
     "attachmentsCount": "አባሪዎች ({count})",
     "fileCount": "{count} ፋይል(ፋይሎች)",
     "requestCreatedSuccess": "ጥያቄው በተሳካ ሁኔታ ተፈጥሯል!",
+    "noGroupMappedWarning": "ከኩባንያዎ ጋር የተገናኘ የድጋፍ ቡድን የለም። ጥያቄውን ለመመደብ ለአስተዳዳሪው ማሳወቂያ ተልኳል።",
     "newRequestCreated": "አዲስ ጥያቄ \"{subject}\" ተፈጥሯል",
     "failedToCreateRequest": "ጥያቄ መፍጠር አልተሳካም",
     "fillRequiredFields": "እባክዎ ሁሉንም አስፈላጊ መስኮች ይሙሉ",

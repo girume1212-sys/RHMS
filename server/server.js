@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
+const zlib = require('zlib');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
@@ -125,6 +126,8 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS status_id VARCHAR(50)`);
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT '[]'`);
     await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS custom_category TEXT`);
+    await pool.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS assignment_source VARCHAR(30) DEFAULT NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_assignment_source ON requests(assignment_source)`);
     await pool.query(`ALTER TABLE comments ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT '[]'`);
     console.log('requests columns ready');
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255) DEFAULT ''`);
@@ -168,6 +171,23 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     `);
     await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo VARCHAR(255)`);
     console.log('companies table ready');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS company_groups (
+        company_id VARCHAR(50) NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        group_id VARCHAR(50) NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        PRIMARY KEY (company_id, group_id)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_company_groups_company ON company_groups(company_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_company_groups_group ON company_groups(group_id)`);
+    await pool.query(`
+      INSERT INTO company_groups (company_id, group_id)
+      SELECT g.company_id, g.id FROM groups g
+      WHERE g.company_id IS NOT NULL AND g.company_id <> ''
+      ON CONFLICT DO NOTHING
+    `);
+    console.log('company_groups table ready');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS activity_log (
         id VARCHAR(50) PRIMARY KEY,
@@ -505,6 +525,28 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_deleted_accounts_name ON deleted_accounts(name)`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS email_notifications (
+        id VARCHAR(50) PRIMARY KEY,
+        event_type VARCHAR(50) NOT NULL,
+        request_id VARCHAR(50) REFERENCES requests(id) ON DELETE CASCADE,
+        recipient_id VARCHAR(50),
+        recipient_email VARCHAR(255) NOT NULL DEFAULT '',
+        group_id VARCHAR(50),
+        dedup_key VARCHAR(255) UNIQUE,
+        subject VARCHAR(500),
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        message_id VARCHAR(255),
+        error TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        sent_at TIMESTAMP WITH TIME ZONE
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_email_notifications_request ON email_notifications(request_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_email_notifications_recipient ON email_notifications(recipient_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_email_notifications_status ON email_notifications(status)`);
+    console.log('email_notifications table ready');
     
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_priority ON requests(priority_id)`);
@@ -517,6 +559,12 @@ const { logActivity, logActivityWithContext, logAuthActivity, logRequestActivity
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_groups_user ON user_groups(user_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_groups_group ON user_groups(group_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_assigned_group ON requests(assigned_group)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_requests_updated ON requests(updated_at)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_log_request ON activity_log(request_id, type, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_comments_request_created ON comments(request_id, created_at)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_groups_group_user ON user_groups(group_id, user_id)`);
   } catch (err) {
     console.log('Init error:', err.message);
   }
@@ -533,6 +581,35 @@ const sseClients = new Map();
 app.use(cors());
 app.use(express.json());
 
+// Gzip JSON responses above a small threshold. This is a dependency-free
+// replacement for the `compression` middleware and only touches res.json, so
+// streaming endpoints (SSE) that use res.write are never buffered.
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
+  if (!/\bgzip\b/i.test(req.headers['accept-encoding'] || '')) return next();
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    if (res.headersSent || res.getHeader('Content-Encoding')) return originalJson(body);
+    let buffer;
+    try {
+      buffer = Buffer.from(JSON.stringify(body));
+    } catch (e) {
+      return originalJson(body);
+    }
+    if (buffer.length < 1024) return originalJson(body);
+    zlib.gzip(buffer, (err, gzipped) => {
+      if (err || res.headersSent) return originalJson(body);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Vary', 'Accept-Encoding');
+      res.setHeader('Content-Length', gzipped.length);
+      res.end(gzipped);
+    });
+    return res;
+  };
+  next();
+});
+
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const PRIVATE_AUDIO_DIR = path.join(__dirname, 'private_uploads', 'audio');
 const AUDIO_FILE_EXT_RE = /\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|wma|webm|weba)$/i;
@@ -541,9 +618,19 @@ try { fs.mkdirSync(PRIVATE_AUDIO_DIR, { recursive: true }); } catch (e) {}
 
 // Audio files are deliberately stored outside the public /uploads tree. They
 // are only served by the authenticated attachment route below.
-app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
 app.use('/private_uploads', (req, res) => res.status(404).json({ error: 'Not found' }));
-app.use(express.static(path.join(__dirname, '../client/build')));
+app.use(express.static(path.join(__dirname, '../client/build'), {
+  setHeaders: (res, filePath) => {
+    if (/[\\/]static[\\/]/.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (path.basename(filePath).toLowerCase() === 'index.html') {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    }
+  },
+}));
 
 
 app.get('/api/health', async (req, res) => {
@@ -630,9 +717,7 @@ const authMiddleware = async (req, res, next) => {
     if (req.user.client_approved === undefined) req.user.client_approved = true;
     if (req.user.approved === false) return res.status(403).json({ error: 'Your account is blocked. Please contact the administrator.' });
     if (req.user.role === 'client' && req.user.client_approved === false) {
-      const _settingRes = await pool.query("SELECT value FROM system_settings WHERE key = 'clientApprovalRequired'");
-      const _required = _settingRes.rows.length === 0 || _settingRes.rows[0].value === 'true';
-      if (_required) return res.status(403).json({ error: 'Your account is pending admin approval. Please wait for an administrator to approve your account.' });
+      if (await getClientApprovalRequired()) return res.status(403).json({ error: 'Your account is pending admin approval. Please wait for an administrator to approve your account.' });
     }
     next();
   } catch (err) {
@@ -649,6 +734,31 @@ const roleMiddleware = (...roles) => (req, res, next) => {
 
 
 
+// Small in-process cache for frequently read system settings. These values are
+// consulted on nearly every request (maintenance mode, client approval), so
+// avoiding a database round-trip here removes a large amount of redundant load.
+const SETTING_CACHE_TTL_MS = 5000;
+const settingCache = new Map();
+
+function invalidateSettingCache(key) {
+  if (key) settingCache.delete(key);
+  else settingCache.clear();
+}
+
+async function getSettingValue(key, ttlMs = SETTING_CACHE_TTL_MS) {
+  const cached = settingCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const result = await pool.query('SELECT value FROM system_settings WHERE key = $1', [key]);
+  const value = result.rows.length > 0 ? result.rows[0].value : null;
+  settingCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  return value;
+}
+
+async function getClientApprovalRequired() {
+  const value = await getSettingValue('clientApprovalRequired');
+  return value === null || value === 'true';
+}
+
 const MAINTENANCE_ALLOWED_PATHS = new Set([
   '/auth/login', '/auth/signup', '/auth/logout', '/auth/me', '/auth/google',
   '/auth/forgot-password', '/auth/reset-password/validate', '/auth/reset-password',
@@ -659,8 +769,8 @@ const MAINTENANCE_ALLOWED_PATHS = new Set([
 
 async function maintenanceMiddleware(req, res, next) {
   try {
-    const result = await pool.query("SELECT value FROM system_settings WHERE key = 'maintenanceMode'");
-    if (result.rows.length === 0 || result.rows[0].value !== 'true') return next();
+    const value = await getSettingValue('maintenanceMode');
+    if (value !== 'true') return next();
     if (MAINTENANCE_ALLOWED_PATHS.has(req.path)) return next();
     const token = req.headers.authorization?.split(' ')[1];
     if (token) {
@@ -723,6 +833,43 @@ async function persistNotification(userId, message, data = {}) {
   }
 }
 
+async function persistNotificationsBatch(userIds, message, data = {}) {
+  const unique = [...new Set((userIds || []).filter(Boolean).map(String))];
+  const idByUser = new Map();
+  if (unique.length === 0) return idByUser;
+  const requestId = (data.requestId && String(data.requestId).match(/^REQ-/)) ? data.requestId : null;
+  const actorId = data.userId ? String(data.userId) : null;
+  const type = data.type || 'info';
+  const title = data.title || null;
+  const body = message || '';
+  const values = [];
+  const params = [];
+  for (const userId of unique) {
+    const id = uuidv4();
+    idByUser.set(userId, id);
+    const base = params.length;
+    values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, NOW())`);
+    params.push(id, userId, type, title, body, requestId, actorId);
+  }
+  try {
+    await pool.query(
+      `INSERT INTO notifications (id, user_id, type, title, message, request_id, actor_id, created_at)
+       VALUES ${values.join(', ')}`,
+      params
+    );
+  } catch (err) {
+    console.error('Failed to persist notifications:', err.message);
+    idByUser.clear();
+  }
+  return idByUser;
+}
+
+function broadcastNotificationBatch(idByUser, message, data = {}) {
+  for (const [userId, nid] of idByUser) {
+    broadcastNotification(userId, message, { ...data, notificationId: nid });
+  }
+}
+
 async function notifyAdmins(message, data = {}, options = {}) {
   const actorId = data.userId ? String(data.userId) : null;
   const excluded = new Set([actorId, ...(options.exclude || [])].filter(Boolean).map(String));
@@ -733,10 +880,8 @@ async function notifyAdmins(message, data = {}, options = {}) {
     recipients = r.rows.map(row => row.id).filter(id => !excluded.has(String(id)));
   } catch (e) { recipients = []; }
 
-  for (const userId of recipients) {
-    const nid = await persistNotification(userId, message, data);
-    broadcastNotification(userId, message, { ...data, notificationId: nid });
-  }
+  const idByUser = await persistNotificationsBatch(recipients, message, data);
+  broadcastNotificationBatch(idByUser, message, data);
   return recipients;
 }
 
@@ -748,16 +893,15 @@ async function notifyAll(message, data = {}) {
     recipients = r.rows.map(row => row.id).filter(id => !actorId || String(id) !== actorId);
   } catch (e) { recipients = []; }
 
-  for (const userId of recipients) {
-    const nid = await persistNotification(userId, message, data);
-    broadcastNotification(userId, message, { ...data, notificationId: nid });
-  }
+  const idByUser = await persistNotificationsBatch(recipients, message, data);
+  broadcastNotificationBatch(idByUser, message, data);
 }
 
 async function notifyUser(userId, message, data = {}) {
   // Never notify the actor for their own action
   if (userId && data.userId && String(userId) === String(data.userId)) return null;
-  const nid = await persistNotification(userId, message, data);
+  const idByUser = await persistNotificationsBatch([userId], message, data);
+  const nid = idByUser.get(String(userId)) || null;
   broadcastNotification(userId, message, { ...data, notificationId: nid });
   return nid;
 }
@@ -899,6 +1043,123 @@ async function getAssignmentGroupRecipients(groupId) {
   return membersResult.rows;
 }
 
+async function groupHasCompany(groupId) {
+  if (!groupId) return false;
+  try {
+    const mapped = await pool.query('SELECT 1 FROM company_groups WHERE group_id = $1 LIMIT 1', [groupId]);
+    if (mapped.rows.length > 0) return true;
+    const r = await pool.query('SELECT company_id FROM groups WHERE id = $1', [groupId]);
+    return r.rows.length > 0 && r.rows[0].company_id != null && String(r.rows[0].company_id).trim() !== '';
+  } catch (e) {
+    console.error('[WorkflowEmail] group company lookup failed:', e.message);
+    return false;
+  }
+}
+
+async function requestGroupHasCompany(requestId) {
+  if (!requestId) return false;
+  try {
+    const r = await pool.query(
+      `SELECT g.company_id
+       FROM requests r
+       LEFT JOIN groups g ON g.id = r.assigned_group
+       WHERE r.id = $1`,
+      [requestId]
+    );
+    if (r.rows.length === 0) return false;
+    const companyId = r.rows[0].company_id;
+    if (companyId != null && String(companyId).trim() !== '') return true;
+    const mapped = await pool.query(
+      `SELECT 1
+       FROM request_groups rg JOIN company_groups cg ON cg.group_id = rg.group_id
+       WHERE rg.request_id = $1
+       LIMIT 1`,
+      [requestId]
+    );
+    if (mapped.rows.length > 0) return true;
+    const rg = await pool.query(
+      `SELECT g.company_id
+       FROM request_groups rg JOIN groups g ON g.id = rg.group_id
+       WHERE rg.request_id = $1 AND g.company_id IS NOT NULL AND g.company_id <> ''
+       LIMIT 1`,
+      [requestId]
+    );
+    return rg.rows.length > 0;
+  } catch (e) {
+    console.error('[WorkflowEmail] request group company lookup failed:', e.message);
+    return false;
+  }
+}
+
+function normalizeCompanyIds(value) {
+  const list = Array.isArray(value) ? value : (value === undefined || value === null || value === '' ? [] : [value]);
+  return [...new Set(list.map((v) => String(v == null ? '' : v).trim()).filter(Boolean))];
+}
+
+async function resolveClientCompanyId(clientId) {
+  if (!clientId) return null;
+  try {
+    const r = await pool.query('SELECT company_id, company_name FROM users WHERE id = $1', [clientId]);
+    if (r.rows.length === 0) return null;
+    const direct = r.rows[0].company_id;
+    if (direct) return direct;
+    const name = String(r.rows[0].company_name || '').trim();
+    if (!name) return null;
+    const c = await pool.query('SELECT id FROM companies WHERE LOWER(name) = LOWER($1) LIMIT 1', [name]);
+    return c.rows.length > 0 ? c.rows[0].id : null;
+  } catch (e) {
+    console.error('[auto-assign] client company lookup failed:', e.message);
+    return null;
+  }
+}
+
+async function resolveGroupForClient(clientId) {
+  if (!clientId) return null;
+  try {
+    const userRes = await pool.query('SELECT company_id, company_name FROM users WHERE id = $1', [clientId]);
+    if (userRes.rows.length === 0) return null;
+
+    // Direct client-to-group assignment takes precedence.
+    const direct = await pool.query(
+      `SELECT g.id, g.name
+       FROM user_groups ug
+       JOIN groups g ON g.id = ug.group_id
+       WHERE ug.user_id = $1
+       ORDER BY COALESCE(g.is_default, FALSE) ASC, g.name ASC
+       LIMIT 1`,
+      [clientId]
+    );
+    if (direct.rows.length > 0) return { ...direct.rows[0], source: 'direct' };
+
+    const companyId = await resolveClientCompanyId(clientId);
+    if (companyId) {
+      const mapped = await pool.query(
+        `SELECT g.id, g.name
+         FROM company_groups cg
+         JOIN groups g ON g.id = cg.group_id
+         WHERE cg.company_id = $1
+         ORDER BY COALESCE(g.is_default, FALSE) ASC, g.name ASC
+         LIMIT 1`,
+        [companyId]
+      );
+      if (mapped.rows.length > 0) return { ...mapped.rows[0], source: 'company' };
+      const legacy = await pool.query(
+        `SELECT g.id, g.name
+         FROM groups g
+         WHERE g.company_id = $1
+         ORDER BY COALESCE(g.is_default, FALSE) ASC, g.name ASC
+         LIMIT 1`,
+        [companyId]
+      );
+      if (legacy.rows.length > 0) return { ...legacy.rows[0], source: 'company' };
+    }
+    return null;
+  } catch (e) {
+    console.error('[auto-assign] group lookup failed:', e.message);
+    return null;
+  }
+}
+
 
 async function notifyGroupMembers(groupId, message, data = {}) {
   try {
@@ -906,9 +1167,11 @@ async function notifyGroupMembers(groupId, message, data = {}) {
     const groupName = groupResult.rows[0]?.name || '';
     const members = await getAssignmentGroupRecipients(groupId);
     const payload = { type: 'group_assigned', groupId, groupName, ...data };
-    for (const m of members) {
-      notifyUser(m.id, message, payload);
-    }
+    const recipientIds = members
+      .map((m) => m.id)
+      .filter((id) => !(payload.userId && String(id) === String(payload.userId)));
+    const idByUser = await persistNotificationsBatch(recipientIds, message, payload);
+    broadcastNotificationBatch(idByUser, message, payload);
   } catch (err) {
     console.error('notifyGroupMembers error:', err.message);
   }
@@ -969,6 +1232,7 @@ const mapRequest = (r) => ({
   statusId: r.status_id,
   assignedTo: r.assigned_to,
   attachments: typeof r.attachments === 'string' ? JSON.parse(r.attachments) : r.attachments,
+  assignmentSource: r.assignment_source || null,
   createdAt: r.created_at,
   updatedAt: r.updated_at
 });
@@ -984,8 +1248,7 @@ async function getEmailLogoBlock(req) {
   let logoUrl = '';
   let logoAttachment = null;
   try {
-    const logoResult = await pool.query("SELECT value FROM system_settings WHERE key = 'systemLogo'");
-    const logoPath = logoResult.rows.length > 0 ? (logoResult.rows[0].value || '') : '';
+    const logoPath = (await getSettingValue('systemLogo')) || '';
     if (logoPath) {
       if (logoPath.startsWith('/uploads/')) {
         const filePath = path.join(__dirname, 'uploads', path.basename(logoPath));
@@ -1234,19 +1497,49 @@ function workflowPill(label, color) {
 }
 
 
-function fireWorkflowEmail({ to, subject, tag, req, requestId, body }) {
+function fireWorkflowEmail({ to, subject, tag, req, requestId, body, recipientId, groupId, eventType, dedupKey }) {
+  const logId = uuidv4();
   (async () => {
+    let logCreated = false;
+    const updateStatus = async (status, extra = {}) => {
+      if (!logCreated) return;
+      try {
+        const sets = ['status = $2'];
+        const params = [logId, status];
+        if (extra.messageId !== undefined) { params.push(extra.messageId || null); sets.push(`message_id = $${params.length}`); }
+        if (extra.error !== undefined) { params.push(extra.error || null); sets.push(`error = $${params.length}`); }
+        if (status === 'sent') sets.push('sent_at = NOW()');
+        await pool.query(`UPDATE email_notifications SET ${sets.join(', ')} WHERE id = $1`, params);
+      } catch (e) {
+        console.error(`[WorkflowEmail:${tag}] status update failed:`, e.message);
+      }
+    };
     try {
-      if (!to) { console.log(`[WorkflowEmail:${tag}] skipped — no recipient`); return; }
+      const inserted = await pool.query(
+        `INSERT INTO email_notifications (id, event_type, request_id, recipient_id, recipient_email, group_id, dedup_key, subject, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+         ON CONFLICT (dedup_key) DO NOTHING
+         RETURNING id`,
+        [logId, eventType || tag || 'workflow_email', requestId || null, recipientId || null, String(to || '').trim(), groupId || null, dedupKey || null, subject || null]
+      );
+      if (inserted.rows.length === 0) {
+        console.log(`[WorkflowEmail:${tag}] skipped — duplicate notification (${dedupKey})`);
+        return;
+      }
+      logCreated = true;
+      if (!to) { await updateStatus('skipped', { error: 'No recipient' }); console.log(`[WorkflowEmail:${tag}] skipped — no recipient`); return; }
       if (!mailer.isSmtpConfigured()) {
+        await updateStatus('skipped', { error: 'SMTP not configured' });
         console.log(`[WorkflowEmail:${tag}] SMTP not configured; email to ${to} not sent (subject: ${subject})`);
         return;
       }
       const { html, logoAttachment } = await buildRequestWorkflowHtml({ ...body, req, requestId });
       const text = buildRequestWorkflowText(body);
       const info = await mailer.sendMail({ to, subject, text, html, ...(logoAttachment ? { attachments: [logoAttachment] } : {}) });
+      await updateStatus('sent', { messageId: info.messageId || null });
       console.log(`[WorkflowEmail:${tag}] sent to ${to} (messageId: ${info.messageId || 'n/a'})`);
     } catch (err) {
+      await updateStatus('failed', { error: (err && err.message) || String(err) });
       console.error(`[WorkflowEmail:${tag}] delivery failed:`, (err && err.message) || err);
     }
   })().catch((err) => console.error(`[WorkflowEmail:${tag}] unexpected error:`, (err && err.message) || err));
@@ -1317,45 +1610,64 @@ async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, s
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return emailedKeys;
+    const sourceRow = await pool.query('SELECT assignment_source FROM requests WHERE id = $1', [requestId]);
+    const assignmentSource = sourceRow.rows.length > 0 ? sourceRow.rows[0].assignment_source : null;
+    const isDirect = assignmentSource === 'direct';
+    if (!isDirect && !(await groupHasCompany(groupId))) {
+      console.log(`[WorkflowEmail:group-new] skipped — group ${groupId} has no company assigned`);
+      return emailedKeys;
+    }
     const category = workflowCategoryOf(ctx);
     const submittedOn = formatEmailDateTime(ctx.created_at);
     const clientName = ctx.client_name || 'Client';
+    const companyName = ctx.client_company || 'N/A';
+    const assignedGroupName = groupName || ctx.group_name || 'N/A';
     const members = await getAssignmentGroupRecipients(groupId);
-    const subject = `[RHMS] New Request Assigned to Your Group – #${requestId}: ${ctx.subject || 'N/A'}`;
+    const subject = 'New Support Request Assigned to Your Group';
     for (const m of members) {
       if (m.role !== 'developer') continue;
-      const dedupKey = `${m.id}|${groupId}`;
+      const dedupKey = `${requestId}|${m.id}|${groupId}`;
       if (alreadyEmailed && alreadyEmailed.has(dedupKey)) continue;
       if (restrictToUserId && String(m.id) !== String(restrictToUserId)) continue;
       if (submitterId && String(m.id) === String(submitterId)) continue;
       emailedKeys.push(dedupKey);
-      const leadText = `A new support request has been submitted by client ${clientName} and assigned to your group. The request is now available on your RHMS dashboard for review and action.`;
+      const leadText = isDirect
+        ? `A new support request has been assigned to your group.\n\nPlease log in to the RHMS Support System to review and manage the request.`
+        : `A new support request has been submitted by ${clientName} from ${companyName} and assigned to your group.\n\nPlease log in to the RHMS Support System to review and manage the request.`;
+      const leadHtml = isDirect
+        ? `A new support request has been assigned to your group.<br><br>Please log in to the RHMS Support System to review and manage the request.`
+        : `A new support request has been submitted by <strong style="color:#ffffff;">${escapeEmailHtml(clientName)}</strong> from <strong style="color:#ffffff;">${escapeEmailHtml(companyName)}</strong> and assigned to your group.<br><br>Please log in to the RHMS Support System to review and manage the request.`;
+      const companyRowHtml = isDirect ? '' : workflowInfoRow('Company Name', companyName) + '\n';
+      const companyRowText = isDirect ? '' : `Company Name: ${companyName}\n`;
       fireWorkflowEmail({
         to: m.email,
         subject,
         tag: 'group-new', req, requestId,
+        recipientId: m.id,
+        groupId,
+        eventType: 'request_assigned_group',
+        dedupKey: `request-assigned:${requestId}:${m.id}`,
         body: {
-          title: 'New Support Request',
+          title: 'New Support Request Assigned to Your Group',
           salutation: 'Dear',
           greetingName: m.name || 'Developer',
           lead: leadText,
-          leadHtml:
-            `A new support request has been submitted by client <strong style="color:#ffffff;">${escapeEmailHtml(clientName)}</strong> and assigned to your group.<br><br>` +
-            `The request is now available on your RHMS dashboard for review and action.`,
+          leadHtml,
           leadText,
           infoTitle: 'Request Details',
           infoRows:
             workflowInfoRowHtml('Request ID', `<span style="color:#FACC15;font-weight:700;">#${escapeEmailHtml(requestId)}</span>`) +
-            workflowInfoRow('Request Title', ctx.subject || 'N/A') +
             workflowInfoRow('Client Name', clientName) +
-            workflowInfoRow('Category', category) +
+            (isDirect ? '' : workflowInfoRow('Company Name', companyName)) +
+            workflowInfoRow('Assigned Group', assignedGroupName) +
+            workflowInfoRow('Request Category', category) +
             workflowInfoRowHtml('Priority', workflowPill(ctx.priority_name || 'N/A', ctx.priority_color || '#6B7280')) +
-            workflowInfoRowHtml('Status', workflowPill('New', '#3B82F6')) +
             workflowInfoRow('Submitted Date', submittedOn),
           infoText:
-            `Request ID: #${requestId}\nRequest Title: ${ctx.subject || 'N/A'}\nClient Name: ${clientName}\n` +
-            `Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\n` +
-            `Status: New\nSubmitted Date: ${submittedOn}`,
+            `Request ID: #${requestId}\nClient Name: ${clientName}\n` +
+            (isDirect ? '' : `Company Name: ${companyName}\n`) +
+            `Assigned Group: ${assignedGroupName}\nRequest Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\n` +
+            `Submitted Date: ${submittedOn}`,
           detailsBody: null,
           resolution: null,
           closing: [],
@@ -1529,6 +1841,10 @@ async function emailDeveloperOnAssignment(requestId, assigneeId, assignerName, r
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
+    if (!(await requestGroupHasCompany(requestId))) {
+      console.log('[WorkflowEmail:assign-dev] skipped — group has no company assigned');
+      return;
+    }
     const u = await pool.query('SELECT name, email, role FROM users WHERE id = $1', [assigneeId]);
     const to = u.rows.length > 0 ? u.rows[0].email : null;
     const role = u.rows.length > 0 ? u.rows[0].role : null;
@@ -1583,6 +1899,10 @@ async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName,
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
+    if (!(await groupHasCompany(groupId))) {
+      console.log('[WorkflowEmail:assign-team] skipped — group has no company assigned');
+      return;
+    }
     const members = [];
     for (const m of await getAssignmentGroupRecipients(groupId)) {
       if (excludeUserId && String(m.id) === String(excludeUserId)) continue;
@@ -1658,6 +1978,9 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
+    const sourceRow = await pool.query('SELECT assignment_source FROM requests WHERE id = $1', [requestId]);
+    const assignmentSource = sourceRow.rows.length > 0 ? sourceRow.rows[0].assignment_source : null;
+    const isDirect = assignmentSource === 'direct';
     const grp = await pool.query(
       'SELECT g.id, g.name FROM request_groups rg JOIN groups g ON g.id = rg.group_id WHERE rg.request_id = $1',
       [requestId]
@@ -1665,53 +1988,59 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
     if (grp.rows.length === 0) { console.log('[WorkflowEmail:escalated] skipped — request has no group'); return; }
     const category = workflowCategoryOf(ctx);
     const clientName = ctx.client_name || 'Client';
-    const escalatedOn = formatEmailDateTime(ctx.updated_at);
+    const clientCompany = ctx.client_company || 'N/A';
+    const escalationEventId = ctx.updated_at ? new Date(ctx.updated_at).toISOString() : 'unknown';
     const note = await getEscalationNote(requestId);
     const escalatorName = (escalator && escalator.name) || 'Developer';
     const escalatorId = escalator && escalator.id;
-    const prevStatus = previousStatusName || 'In Progress';
-    const subject = `[RHMS] Escalated Request Assigned to Your Group – #${requestId}: ${ctx.subject || 'N/A'}`;
+    const subject = 'Support Request Escalated to Your Group';
     let sent = 0;
     const alreadyEmailed = new Set();
     for (const g of grp.rows) {
+      if (!isDirect && !(await groupHasCompany(g.id))) {
+        console.log(`[WorkflowEmail:escalated] skipped — group ${g.id} has no company assigned`);
+        continue;
+      }
       const members = await getAssignmentGroupRecipients(g.id);
       for (const m of members) {
         if (m.role !== 'support') continue;
         if (escalatorId && String(m.id) === String(escalatorId)) continue;
-        const key = `${m.id}|${g.id}`;
+        const key = `${m.id}`;
         if (alreadyEmailed.has(key)) continue;
         alreadyEmailed.add(key);
         sent += 1;
-        const leadText = `A support request has been escalated by ${escalatorName} and assigned to your group. The request is now available on your RHMS dashboard for review and action.`;
+        const leadText = `A support request has been escalated to your group by ${escalatorName}.\n\nPlease log in to the RHMS Support System to review the escalated request and take the necessary action.`;
         fireWorkflowEmail({
           to: m.email,
           subject,
           tag: 'escalated', req, requestId,
+          recipientId: m.id,
+          groupId: g.id,
+          eventType: 'request_escalated_group',
+          dedupKey: `request-escalated:${requestId}:${m.id}:${escalationEventId}`,
           body: {
-            title: 'Escalated Support Request',
+            title: 'Support Request Escalated to Your Group',
             salutation: 'Dear',
             greetingName: m.name || 'Escalation Team Member',
             lead: leadText,
             leadHtml:
-              `A support request has been escalated by <strong style="color:#ffffff;">${escapeEmailHtml(escalatorName)}</strong> and assigned to your group.<br><br>` +
-              `The request is now available on your RHMS dashboard for review and action.`,
+              `A support request has been escalated to your group by <strong style="color:#ffffff;">${escapeEmailHtml(escalatorName)}</strong>.<br><br>` +
+              `Please log in to the RHMS Support System to review the escalated request and take the necessary action.`,
             leadText,
-            infoTitle: 'Escalation Details',
+            infoTitle: 'Request Details',
             infoRows:
               workflowInfoRowHtml('Request ID', `<span style="color:#FACC15;font-weight:700;">#${escapeEmailHtml(requestId)}</span>`) +
-              workflowInfoRow('Request Title', ctx.subject || 'N/A') +
               workflowInfoRow('Client Name', clientName) +
+              workflowInfoRow('Company Name', clientCompany) +
+              workflowInfoRow('Assigned Group', g.name || ctx.group_name || 'N/A') +
+              workflowInfoRow('Escalated By', escalatorName) +
               workflowInfoRow('Category', category) +
               workflowInfoRowHtml('Priority', workflowPill(ctx.priority_name || 'N/A', ctx.priority_color || '#6B7280')) +
-              workflowInfoRow('Previous Status', prevStatus) +
-              workflowInfoRowHtml('Current Status', workflowPill('Escalated', '#EF4444')) +
-              workflowInfoRow('Escalated By', escalatorName) +
-              workflowInfoRow('Escalation Date', escalatedOn),
+              workflowInfoRowHtml('Current Status', workflowPill('Escalated', '#EF4444')),
             infoText:
-              `Request ID: #${requestId}\nRequest Title: ${ctx.subject || 'N/A'}\nClient Name: ${clientName}\n` +
-              `Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\n` +
-              `Previous Status: ${prevStatus}\nCurrent Status: Escalated\n` +
-              `Escalated By: ${escalatorName}\nEscalation Date: ${escalatedOn}`,
+              `Request ID: #${requestId}\nClient Name: ${clientName}\nCompany Name: ${clientCompany}\n` +
+              `Assigned Group: ${g.name || ctx.group_name || 'N/A'}\nEscalated By: ${escalatorName}\n` +
+              `Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\nCurrent Status: Escalated`,
             detailsSectionTitle: 'Issue Description',
             detailsTitle: null,
             detailsBody: ctx.description || 'N/A',
@@ -1910,7 +2239,7 @@ app.post('/api/auth/signup', async (req, res) => {
     try {
       result = await pool.query(
         'INSERT INTO users (id, name, email, password, role, company_name, company_id, language, approved, moderated, client_approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, name, email, role, avatar, created_at, company_name, company_id, language, approved, moderated, client_approved',
-        [id, name, email, hashedPassword, 'client', normalizedCompanyName, companyId, ['en', 'am'].includes(language) ? language : 'en', true, false, (await (async()=>{try{const r=await pool.query("SELECT value FROM system_settings WHERE key='clientApprovalRequired'"); return r.rows[0]?.value==='true'?false:true;}catch(e){return true;}})())]
+        [id, name, email, hashedPassword, 'client', normalizedCompanyName, companyId, ['en', 'am'].includes(language) ? language : 'en', true, false, (await (async()=>{try{const v=await getSettingValue('clientApprovalRequired');return v==='true'?false:true;}catch(e){return true;}})())]
       );
     } catch (err) {
       if (err.code === '23505') {
@@ -2078,9 +2407,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (user.role === 'client' && user.client_approved === false) {
-      const _sr = await pool.query("SELECT value FROM system_settings WHERE key = 'clientApprovalRequired'");
-      const _req = _sr.rows.length === 0 || _sr.rows[0].value === 'true';
-      if (_req) {
+      if (await getClientApprovalRequired()) {
         auditLogin('login_pending_approval', user.id, user.email, req);
         return res.status(403).json({ error: 'Your account is pending admin approval. Please wait for an administrator to approve your account.' });
       }
@@ -2889,36 +3216,30 @@ app.get('/api/users', authMiddleware, roleMiddleware('admin', 'support', 'develo
       // Keep full list for group resolution but conversations are enforced by canAccessConversation.
     }
     query += ` ORDER BY u.created_at DESC`;
-    const result = await pool.query(query, params);
+    const [result, groupResult] = await Promise.all([
+      pool.query(query, params),
+      pool.query(`
+        SELECT ug.user_id, g.id AS group_id, g.name AS group_name, g.color AS group_color
+        FROM user_groups ug
+        JOIN groups g ON ug.group_id = g.id
+      `).catch(() => ({ rows: [] })),
+    ]);
     const users = result.rows.map(u => mapUser(u));
     for (const u of users) {
       u.online = sseClients.has(String(u.id));
     }
-    try {
-      const groupResult = await pool.query(`
-        SELECT ug.user_id, g.id AS group_id, g.name AS group_name, g.color AS group_color
-        FROM user_groups ug
-        JOIN groups g ON ug.group_id = g.id
-      `);
-      const userGroups = {};
-      for (const row of groupResult.rows) {
-        if (!userGroups[row.user_id]) userGroups[row.user_id] = { groupIds: [], groupNames: [], groupColors: [] };
-        userGroups[row.user_id].groupIds.push(row.group_id);
-        userGroups[row.user_id].groupNames.push(row.group_name);
-        userGroups[row.user_id].groupColors.push(row.group_color);
-      }
-      for (const u of users) {
-        const g = userGroups[u.id] || { groupIds: [], groupNames: [], groupColors: [] };
-        u.groupIds = g.groupIds;
-        u.groupNames = g.groupNames;
-        u.groupColors = g.groupColors;
-      }
-    } catch (e) {
-      for (const u of users) {
-        u.groupIds = [];
-        u.groupNames = [];
-        u.groupColors = [];
-      }
+    const userGroups = {};
+    for (const row of groupResult.rows) {
+      if (!userGroups[row.user_id]) userGroups[row.user_id] = { groupIds: [], groupNames: [], groupColors: [] };
+      userGroups[row.user_id].groupIds.push(row.group_id);
+      userGroups[row.user_id].groupNames.push(row.group_name);
+      userGroups[row.user_id].groupColors.push(row.group_color);
+    }
+    for (const u of users) {
+      const g = userGroups[u.id] || { groupIds: [], groupNames: [], groupColors: [] };
+      u.groupIds = g.groupIds;
+      u.groupNames = g.groupNames;
+      u.groupColors = g.groupColors;
     }
     res.json(users);
   } catch (err) {
@@ -3422,6 +3743,7 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
     let query = `
       SELECT r.*, 
         u.name as client_name, u.email as client_email, u.role as client_role, u.avatar as client_avatar, u.created_at as client_created_at,
+        COALESCE(NULLIF(cu.name, ''), NULLIF(u.company_name, '')) as client_company,
         c.name as category_name, c.description as category_description, c.color as category_color,
         p.name as priority_name, p.color as priority_color, p.level as priority_level,
         s.name as status_name, s.color as status_color,
@@ -3434,6 +3756,7 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
         ) as groups
       FROM requests r
       LEFT JOIN users u ON r.client_id = u.id
+      LEFT JOIN companies cu ON cu.id = u.company_id
       LEFT JOIN categories c ON r.category_id = c.id
       LEFT JOIN priorities p ON r.priority_id = p.id
       LEFT JOIN statuses s ON r.status_id = s.id
@@ -3514,7 +3837,7 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       createdAt: r.created_at,
       updatedAt: r.updated_at,
       clientDeleted: r.client_deleted,
-      client: r.client_deleted ? { deleted: true } : (r.client_name && r.client_role === 'client' ? { id: r.client_id, name: r.client_name, email: r.client_email, role: r.client_role, avatar: r.client_avatar, createdAt: r.client_created_at } : null),
+      client: r.client_deleted ? { deleted: true } : (r.client_name && r.client_role === 'client' ? { id: r.client_id, name: r.client_name, email: r.client_email, role: r.client_role, avatar: r.client_avatar, company: r.client_company || '', companyName: r.client_company || '', createdAt: r.client_created_at } : null),
       category: r.category_name ? { id: r.category_id, name: (r.custom_category || r.category_name), description: r.category_description, color: r.category_color, customCategory: (r.custom_category || null) } : (r.custom_category ? { id: r.category_id, name: r.custom_category, description: null, color: '#6B7280', customCategory: r.custom_category } : null),
       priority: r.priority_name ? { id: r.priority_id, name: r.priority_name, color: r.priority_color, level: r.priority_level } : null,
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
@@ -3624,61 +3947,66 @@ app.get('/api/search', authMiddleware, async (req, res) => {
 
       const searchIndex = visParams.length + 1;
       const countParams = [...visParams, pattern];
-      const countResult = await pool.query(
-        `SELECT COUNT(*)::int AS total ${base}`.replaceAll('$a', `$${searchIndex}`),
-        countParams
-      );
-
       const itemsParams = [...visParams, pattern, limit, offset];
-      const itemsResult = await pool.query(`
-        SELECT r.id, r.subject, r.description, r.created_at, r.client_deleted,
-          u.name AS client_name,
-          a.name AS assignee_name,
-          ag.name AS assigned_group_name, ag.color AS assigned_group_color,
-          c.name AS category_name, c.color AS category_color,
-          s.name AS status_name, s.color AS status_color,
-          p.name AS priority_name, p.color AS priority_color
-        ${base}
-        ORDER BY r.created_at DESC LIMIT $${searchIndex + 1} OFFSET $${searchIndex + 2}
-      `.replaceAll('$a', `$${searchIndex}`), itemsParams);
+      const [countResult, itemsResult] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*)::int AS total ${base}`.replaceAll('$a', `$${searchIndex}`),
+          countParams
+        ),
+        pool.query(`
+          SELECT r.id, r.subject, r.description, r.created_at, r.client_deleted,
+            u.name AS client_name,
+            a.name AS assignee_name,
+            ag.name AS assigned_group_name, ag.color AS assigned_group_color,
+            c.name AS category_name, c.color AS category_color,
+            s.name AS status_name, s.color AS status_color,
+            p.name AS priority_name, p.color AS priority_color
+          ${base}
+          ORDER BY r.created_at DESC LIMIT $${searchIndex + 1} OFFSET $${searchIndex + 2}
+        `.replaceAll('$a', `$${searchIndex}`), itemsParams),
+      ]);
 
       results.requests = { total: countResult.rows[0].total, items: itemsResult.rows };
     }
 
     
     if ((type === 'all' || type === 'users') && role === 'admin') {
-      const countResult = await pool.query(
-        `SELECT COUNT(*)::int AS total FROM users u
-         WHERE u.id ILIKE $1 OR u.name ILIKE $1 OR u.email ILIKE $1 OR u.role ILIKE $1 OR u.company_name ILIKE $1`,
-        [pattern]
-      );
-      const itemsResult = await pool.query(
-        `SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name
-         FROM users u
-         WHERE u.id ILIKE $1 OR u.name ILIKE $1 OR u.email ILIKE $1 OR u.role ILIKE $1 OR u.company_name ILIKE $1
-         ORDER BY u.name LIMIT $2 OFFSET $3`,
-        [pattern, limit, offset]
-      );
+      const [countResult, itemsResult] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*)::int AS total FROM users u
+           WHERE u.id ILIKE $1 OR u.name ILIKE $1 OR u.email ILIKE $1 OR u.role ILIKE $1 OR u.company_name ILIKE $1`,
+          [pattern]
+        ),
+        pool.query(
+          `SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name
+           FROM users u
+           WHERE u.id ILIKE $1 OR u.name ILIKE $1 OR u.email ILIKE $1 OR u.role ILIKE $1 OR u.company_name ILIKE $1
+           ORDER BY u.name LIMIT $2 OFFSET $3`,
+          [pattern, limit, offset]
+        ),
+      ]);
       results.users = { total: countResult.rows[0].total, items: itemsResult.rows };
     }
 
     
     if ((type === 'all' || type === 'groups') && role === 'admin') {
-      const countResult = await pool.query(
-        `SELECT COUNT(*)::int AS total FROM groups g
-         LEFT JOIN companies c ON c.id = g.company_id
-         WHERE g.id ILIKE $1 OR g.name ILIKE $1 OR g.description ILIKE $1 OR c.name ILIKE $1`,
-        [pattern]
-      );
-      const itemsResult = await pool.query(
-        `SELECT g.id, g.name, g.description, g.color, c.name AS company_name,
-          (SELECT COUNT(*) FROM user_groups ug WHERE ug.group_id = g.id) AS "memberCount"
-         FROM groups g
-         LEFT JOIN companies c ON c.id = g.company_id
-         WHERE g.id ILIKE $1 OR g.name ILIKE $1 OR g.description ILIKE $1 OR c.name ILIKE $1
-         ORDER BY g.name LIMIT $2 OFFSET $3`,
-        [pattern, limit, offset]
-      );
+      const [countResult, itemsResult] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*)::int AS total FROM groups g
+           LEFT JOIN companies c ON c.id = g.company_id
+           WHERE g.id ILIKE $1 OR g.name ILIKE $1 OR g.description ILIKE $1 OR c.name ILIKE $1`,
+          [pattern]
+        ),
+        pool.query(
+          `SELECT g.id, g.name, g.description, g.color, c.name AS company_name,
+            (SELECT COUNT(*) FROM user_groups ug WHERE ug.group_id = g.id) AS "memberCount"
+           FROM groups g
+           LEFT JOIN companies c ON c.id = g.company_id
+           WHERE g.id ILIKE $1 OR g.name ILIKE $1 OR g.description ILIKE $1 OR c.name ILIKE $1
+           ORDER BY g.name LIMIT $2 OFFSET $3`,
+          [pattern, limit, offset]
+        ),
+      ]);
       results.groups = { total: countResult.rows[0].total, items: itemsResult.rows };
     }
 
@@ -3695,6 +4023,7 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
     const result = await pool.query(`
       SELECT r.*, 
         u.name as client_name, u.email as client_email, u.role as client_role, u.avatar as client_avatar, u.created_at as client_created_at,
+        COALESCE(NULLIF(cu.name, ''), NULLIF(u.company_name, '')) as client_company,
         c.name as category_name, c.description as category_description, c.color as category_color,
         p.name as priority_name, p.color as priority_color, p.level as priority_level,
         s.name as status_name, s.color as status_color,
@@ -3707,6 +4036,7 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
         ) as groups
       FROM requests r
       LEFT JOIN users u ON r.client_id = u.id
+      LEFT JOIN companies cu ON cu.id = u.company_id
       LEFT JOIN categories c ON r.category_id = c.id
       LEFT JOIN priorities p ON r.priority_id = p.id
       LEFT JOIN statuses s ON r.status_id = s.id
@@ -3760,12 +4090,13 @@ app.get('/api/requests/:id', authMiddleware, async (req, res) => {
       createdAt: r.created_at,
       updatedAt: r.updated_at,
       clientDeleted: r.client_deleted,
-      client: r.client_deleted ? { deleted: true } : (r.client_name && r.client_role === 'client' ? { id: r.client_id, name: r.client_name, email: r.client_email, role: r.client_role, avatar: r.client_avatar, createdAt: r.client_created_at } : null),
+      client: r.client_deleted ? { deleted: true } : (r.client_name && r.client_role === 'client' ? { id: r.client_id, name: r.client_name, email: r.client_email, role: r.client_role, avatar: r.client_avatar, company: r.client_company || '', companyName: r.client_company || '', createdAt: r.client_created_at } : null),
       category: r.category_name ? { id: r.category_id, name: (r.custom_category || r.category_name), description: r.category_description, color: r.category_color, customCategory: (r.custom_category || null) } : (r.custom_category ? { id: r.category_id, name: r.custom_category, description: null, color: '#6B7280', customCategory: r.custom_category } : null),
       priority: r.priority_name ? { id: r.priority_id, name: r.priority_name, color: r.priority_color, level: r.priority_level } : null,
       status: r.status_name ? { id: r.status_id, name: r.status_name, color: r.status_color } : null,
       assignee: r.assignee_name ? { id: r.assigned_to, name: r.assignee_name, email: r.assignee_email, role: r.assignee_role, avatar: r.assignee_avatar, createdAt: r.assignee_created_at } : null,
       assignedGroup: r.assigned_group_name ? { id: r.assigned_group_id, name: r.assigned_group_name, color: r.assigned_group_color } : null,
+      assignmentSource: r.assignment_source || null,
       groups: r.groups ? (typeof r.groups === 'string' ? JSON.parse(r.groups) : r.groups) : [],
       comments: commentsResult.rows.map(c => ({
         id: c.id,
@@ -3817,9 +4148,7 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Your account is blocked. You cannot submit requests.' });
     }
     if (req.user.role === 'client' && req.user.client_approved === false) {
-      const _settingRes2 = await pool.query("SELECT value FROM system_settings WHERE key = 'clientApprovalRequired'");
-      const _required2 = _settingRes2.rows.length === 0 || _settingRes2.rows[0].value === 'true';
-      if (_required2) return res.status(403).json({ error: 'Account Approval Required: Your account is awaiting administrator approval. You cannot submit support requests until your account is approved. Please contact the administrator for assistance.' });
+      if (await getClientApprovalRequired()) return res.status(403).json({ error: 'Account Approval Required: Your account is awaiting administrator approval. You cannot submit support requests until your account is approved. Please contact the administrator for assistance.' });
     }
     const { subject, description, categoryId, priorityId, attachments, customCategory } = req.body;
     if (!subject || !subject.trim() || !description || !description.trim() || !categoryId) {
@@ -3874,21 +4203,15 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     
     
     
+    let autoAssignedGroup = null;
     try {
-      const clientGroup = await pool.query(
-        `SELECT g.id, g.name
-         FROM user_groups ug
-         JOIN groups g ON g.id = ug.group_id
-         WHERE ug.user_id = $1
-         ORDER BY COALESCE(g.is_default, FALSE) ASC, g.name ASC
-         LIMIT 1`,
-        [clientId]
-      );
-      if (clientGroup.rows.length > 0) {
-        const groupId = clientGroup.rows[0].id;
-        await pool.query('UPDATE requests SET assigned_group = $1 WHERE id = $2', [groupId, id]);
+      const assignedGroup = await resolveGroupForClient(clientId);
+      if (assignedGroup) {
+        autoAssignedGroup = assignedGroup;
+        await pool.query('UPDATE requests SET assigned_group = $1, assignment_source = $3 WHERE id = $2', [assignedGroup.id, id, assignedGroup.source]);
         await pool.query('DELETE FROM request_groups WHERE request_id = $1', [id]);
-        await pool.query('INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, groupId]);
+        await pool.query('INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, assignedGroup.id]);
+        console.log(`[WorkflowEmail:auto-assign] client ${clientId} routed to group '${assignedGroup.name}' (${assignedGroup.id}) via ${assignedGroup.source}`);
       } else {
         console.log(`[WorkflowEmail:auto-assign] client ${clientId} has no assigned group; request ${id} left unassigned for admin`);
         notifyAdmins(`New request #${id} requires manual assignment (client has no assigned group)`, { type: 'manual_assignment_needed', requestId: id, userId: req.user.id, userName: req.user.name });
@@ -3896,7 +4219,7 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     } catch (e) { console.error('[auto-assign] failed:', e.message); }
     emailGroupMembersOnNewRequest(id, req.user.id, req);
 
-    res.status(201).json({ id, subject, description, clientId, categoryId: effectiveCategoryId, customCategory: customCategoryValue, priorityId: priorityId || '2', statusId: '1', assignedTo: null, attachments: attachments || [], createdAt: now, updatedAt: now });
+    res.status(201).json({ id, subject, description, clientId, categoryId: effectiveCategoryId, customCategory: customCategoryValue, priorityId: priorityId || '2', statusId: '1', assignedTo: null, assignedGroup: autoAssignedGroup, assignmentSource: autoAssignedGroup ? autoAssignedGroup.source : null, assignmentWarning: autoAssignedGroup ? null : true, attachments: attachments || [], createdAt: now, updatedAt: now });
   } catch (err) {
     console.error('Create request error:', err.message);
     res.status(500).json({ error: 'Failed to create request: ' + err.message });
@@ -4614,17 +4937,71 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     const whereClause = currentScope.clause;
     const params = currentScope.params;
 
-    const totalResult = await pool.query(`SELECT COUNT(*) FROM requests r ${whereClause}`, params);
-    const total = parseInt(totalResult.rows[0].count);
+    const [
+      totalResult, statusCounts, weeklyCounts, statusesResult, priorityCounts,
+      prioritiesResult, categoryCounts, categoriesResult, companyCounts, todayResult, monthlyResult,
+    ] = await Promise.all([
+      pool.query(`SELECT COUNT(*) FROM requests r ${whereClause}`, params),
+      pool.query(`SELECT r.status_id, COUNT(*) as count FROM requests r ${whereClause} GROUP BY r.status_id`, params),
+      getWeeklyStatusCounts(currentScope),
+      pool.query('SELECT * FROM statuses ORDER BY id'),
+      pool.query(`SELECT r.priority_id, COUNT(*) as count FROM requests r ${whereClause} GROUP BY r.priority_id`, params),
+      pool.query('SELECT * FROM priorities ORDER BY level'),
+      pool.query(`SELECT r.category_id, COUNT(*) as count FROM requests r ${whereClause} GROUP BY r.category_id`, params),
+      pool.query('SELECT * FROM categories ORDER BY name'),
+      pool.query(
+        `WITH user_company AS (
+           SELECT DISTINCT ON (u.id)
+                  u.id AS user_id,
+                  COALESCE(
+                    u.company_id,
+                    (SELECT c.id FROM companies c
+                      WHERE LOWER(c.name) = LOWER(NULLIF(TRIM(u.company_name), ''))
+                      ORDER BY c.created_at ASC NULLS LAST, c.id ASC
+                      LIMIT 1)
+                  ) AS company_id
+           FROM users u
+           ORDER BY u.id
+         ),
+         company_request_counts AS (
+           SELECT uc.company_id, COUNT(r.id)::int AS count
+           FROM requests r
+           LEFT JOIN user_company uc ON uc.user_id = r.client_id
+           ${whereClause}
+           GROUP BY uc.company_id
+         ),
+         company_rows AS (
+           SELECT co.id, co.name, COALESCE(crc.count, 0)::int AS count
+           FROM companies co
+           LEFT JOIN company_request_counts crc ON crc.company_id = co.id
+         ),
+         unknown_row AS (
+           SELECT NULL::varchar AS id, 'Unknown'::text AS name, COALESCE(SUM(crc.count), 0)::int AS count
+           FROM company_request_counts crc
+           WHERE crc.company_id IS NULL
+         )
+         SELECT id, name, count FROM company_rows
+         UNION ALL
+         SELECT id, name, count FROM unknown_row WHERE count > 0
+         ORDER BY count DESC, name ASC`, params
+      ),
+      pool.query('SELECT CURRENT_DATE::text AS today'),
+      pool.query(
+        `SELECT TO_CHAR(DATE_TRUNC('month', r.created_at), 'YYYY-MM') AS month,
+               COUNT(*) FILTER (WHERE r.status_id != '6') AS created,
+               COUNT(*) FILTER (WHERE r.status_id = '5') AS resolved,
+               COUNT(*) FILTER (WHERE r.status_id = '6') AS closed
+        FROM requests r
+        GROUP BY 1
+        ORDER BY 1`
+      ),
+    ]);
 
-    const statusCounts = await pool.query(
-      `SELECT r.status_id, COUNT(*) as count FROM requests r ${whereClause} GROUP BY r.status_id`, params
-    );
+    const total = parseInt(totalResult.rows[0].count);
     const statusMap = {};
     statusCounts.rows.forEach(row => { statusMap[row.status_id] = parseInt(row.count); });
 
-    const { currentMap: thisWeekStatusMap, previousMap: lastWeekStatusMap, currentTotal: thisWeekTotal, previousTotal: lastWeekTotal } =
-      await getWeeklyStatusCounts(currentScope);
+    const { currentMap: thisWeekStatusMap, previousMap: lastWeekStatusMap, currentTotal: thisWeekTotal, previousTotal: lastWeekTotal } = weeklyCounts;
 
     const open = statusMap['1'] || 0;
     const assigned = statusMap['2'] || 0;
@@ -4635,7 +5012,6 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     const escalated = statusMap['9'] || 0;
     const rejected = statusMap['8'] || 0;
 
-    const statusesResult = await pool.query('SELECT * FROM statuses ORDER BY id');
     const statuses = statusesResult.rows.filter(s => s.name.toLowerCase() !== 'reopened');
     const byStatus = statuses.map(s => {
       const currentCount = statusMap[s.id] || 0;
@@ -4651,13 +5027,9 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       };
     });
 
-    const priorityCounts = await pool.query(
-      `SELECT r.priority_id, COUNT(*) as count FROM requests r ${whereClause} GROUP BY r.priority_id`, params
-    );
     const priorityMap = {};
     priorityCounts.rows.forEach(row => { priorityMap[row.priority_id] = parseInt(row.count); });
 
-    const prioritiesResult = await pool.query('SELECT * FROM priorities ORDER BY level');
     const priorities = prioritiesResult.rows;
     const byPriority = priorities.map(p => ({
       ...p,
@@ -4665,13 +5037,9 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       percentage: total > 0 ? (((priorityMap[p.id] || 0) / total) * 100).toFixed(1) : 0
     }));
 
-    const categoryCounts = await pool.query(
-      `SELECT r.category_id, COUNT(*) as count FROM requests r ${whereClause} GROUP BY r.category_id`, params
-    );
     const categoryMap = {};
     categoryCounts.rows.forEach(row => { categoryMap[row.category_id] = parseInt(row.count); });
 
-    const categoriesResult = await pool.query('SELECT * FROM categories ORDER BY name');
     const categories = categoriesResult.rows;
     const byCategory = categories.map(c => ({
       ...c,
@@ -4682,52 +5050,10 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
     // Count qualifying requests per company in a scoped subquery, then LEFT JOIN
     // to all companies so companies with zero matching requests are always included.
     // Requests whose client cannot be resolved to a registered company are shown as "Unknown".
-    const companyCounts = await pool.query(
-      `WITH user_company AS (
-         SELECT DISTINCT ON (u.id)
-                u.id AS user_id,
-                COALESCE(
-                  u.company_id,
-                  (SELECT c.id FROM companies c
-                    WHERE LOWER(c.name) = LOWER(NULLIF(TRIM(u.company_name), ''))
-                    ORDER BY c.created_at ASC NULLS LAST, c.id ASC
-                    LIMIT 1)
-                ) AS company_id
-         FROM users u
-         ORDER BY u.id
-       ),
-       company_request_counts AS (
-         SELECT uc.company_id, COUNT(r.id)::int AS count
-         FROM requests r
-         LEFT JOIN user_company uc ON uc.user_id = r.client_id
-         ${whereClause}
-         GROUP BY uc.company_id
-       ),
-       company_rows AS (
-         SELECT co.id, co.name, COALESCE(crc.count, 0)::int AS count
-         FROM companies co
-         LEFT JOIN company_request_counts crc ON crc.company_id = co.id
-       ),
-       unknown_row AS (
-         SELECT NULL::varchar AS id, 'Unknown'::text AS name, COALESCE(SUM(crc.count), 0)::int AS count
-         FROM company_request_counts crc
-         WHERE crc.company_id IS NULL
-       )
-       SELECT id, name, count FROM company_rows
-       UNION ALL
-       SELECT id, name, count FROM unknown_row WHERE count > 0
-       ORDER BY count DESC, name ASC`, params
-    );
     const byCompany = companyCounts.rows.map(r => ({ ...r, name: r.name, count: Number(r.count) || 0 }));
 
-    
-    
-    
-    
-    
     const daysParam = params.length + 1;
     const requestedDays = String(req.query.days ?? '30').toLowerCase();
-    const todayResult = await pool.query('SELECT CURRENT_DATE::text AS today');
     const todayIso = todayResult.rows[0].today;
     let rangeDays = null;
     let startDay;
@@ -4797,23 +5123,12 @@ app.get('/api/dashboard/stats', authMiddleware, async (req, res) => {
       byCategory,
       byCompany,
       dailyData,
-      monthlyData: await (async () => {
-        const monthlyResult = await pool.query(
-          `SELECT TO_CHAR(DATE_TRUNC('month', r.created_at), 'YYYY-MM') AS month,
-                 COUNT(*) FILTER (WHERE r.status_id != '6') AS created,
-                 COUNT(*) FILTER (WHERE r.status_id = '5') AS resolved,
-                 COUNT(*) FILTER (WHERE r.status_id = '6') AS closed
-          FROM requests r
-          GROUP BY 1
-          ORDER BY 1`
-        );
-        return monthlyResult.rows.map(row => ({
-          month: row.month,
-          created: parseInt(row.created) || 0,
-          resolved: parseInt(row.resolved) || 0,
-          closed: parseInt(row.closed) || 0
-        }));
-      })(),
+      monthlyData: monthlyResult.rows.map(row => ({
+        month: row.month,
+        created: parseInt(row.created) || 0,
+        resolved: parseInt(row.resolved) || 0,
+        closed: parseInt(row.closed) || 0
+      })),
       rangeDays,
       totalThisWeek: thisWeekTotal,
       totalLastWeek: lastWeekTotal,
@@ -4846,7 +5161,8 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
       labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
     }
 
-    const byCompanyResult = await pool.query(`
+    const [byCompanyResult, companyStatusResult, byDeveloperResult, devStatusResult, allDevUsers, allDevUsers2] = await Promise.all([
+      pool.query(`
       SELECT u.company_name,
         r.created_at::date AS day,
         COUNT(*) AS created,
@@ -4858,7 +5174,43 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
         AND u.company_name IS NOT NULL AND u.company_name != ''
       GROUP BY u.company_name, r.created_at::date
       ORDER BY u.company_name, r.created_at::date
-    `, [dates[dates.length - 1], days]);
+    `, [dates[dates.length - 1], days]),
+      pool.query(`
+      SELECT u.company_name, s.name AS status_name, COUNT(*)::int AS count
+      FROM requests r
+      LEFT JOIN users u ON r.client_id = u.id
+      LEFT JOIN statuses s ON r.status_id = s.id
+      WHERE r.created_at::date >= ($1::date - INTERVAL '1 day' * $2)
+        AND u.company_name IS NOT NULL AND u.company_name != ''
+      GROUP BY u.company_name, s.name
+      ORDER BY u.company_name, s.name
+    `, [dates[dates.length - 1], days]),
+      pool.query(`
+      SELECT u.id, u.name AS developer_name,
+        r.created_at::date AS day,
+        COUNT(*) AS created,
+        COUNT(CASE WHEN s.name = 'Resolved' OR s.name = 'Closed' THEN 1 END) AS resolved
+      FROM requests r
+      LEFT JOIN users u ON r.assigned_to = u.id
+      LEFT JOIN statuses s ON r.status_id = s.id
+      WHERE r.created_at::date >= ($1::date - INTERVAL '1 day' * $2)
+        AND u.role IN ('developer', 'support')
+      GROUP BY u.id, u.name, r.created_at::date
+      ORDER BY u.name, r.created_at::date
+    `, [dates[dates.length - 1], days]),
+      pool.query(`
+      SELECT u.name AS developer_name, s.name AS status_name, COUNT(*)::int AS count
+      FROM requests r
+      LEFT JOIN users u ON r.assigned_to = u.id
+      LEFT JOIN statuses s ON r.status_id = s.id
+      WHERE r.created_at::date >= ($1::date - INTERVAL '1 day' * $2)
+        AND u.role IN ('developer', 'support')
+      GROUP BY u.name, s.name
+      ORDER BY u.name, s.name
+    `, [dates[dates.length - 1], days]),
+      pool.query(`SELECT name FROM users WHERE role IN ('developer', 'support') ORDER BY name`),
+      pool.query(`SELECT name FROM users WHERE role IN ('developer', 'support')`),
+    ]);
 
     const companyMap = {};
     byCompanyResult.rows.forEach(row => {
@@ -4872,17 +5224,6 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
       data: dates.map((d, i) => ({ date: labels[i], created: dayData[d]?.created || 0, resolved: dayData[d]?.resolved || 0 }))
     }));
 
-    const companyStatusResult = await pool.query(`
-      SELECT u.company_name, s.name AS status_name, COUNT(*)::int AS count
-      FROM requests r
-      LEFT JOIN users u ON r.client_id = u.id
-      LEFT JOIN statuses s ON r.status_id = s.id
-      WHERE r.created_at::date >= ($1::date - INTERVAL '1 day' * $2)
-        AND u.company_name IS NOT NULL AND u.company_name != ''
-      GROUP BY u.company_name, s.name
-      ORDER BY u.company_name, s.name
-    `, [dates[dates.length - 1], days]);
-
     const companyStatusMap = {};
     companyStatusResult.rows.forEach(row => {
       if (!companyStatusMap[row.company_name]) {
@@ -4895,20 +5236,6 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
       ...statuses
     }));
 
-    const byDeveloperResult = await pool.query(`
-      SELECT u.id, u.name AS developer_name,
-        r.created_at::date AS day,
-        COUNT(*) AS created,
-        COUNT(CASE WHEN s.name = 'Resolved' OR s.name = 'Closed' THEN 1 END) AS resolved
-      FROM requests r
-      LEFT JOIN users u ON r.assigned_to = u.id
-      LEFT JOIN statuses s ON r.status_id = s.id
-      WHERE r.created_at::date >= ($1::date - INTERVAL '1 day' * $2)
-        AND u.role IN ('developer', 'support')
-      GROUP BY u.id, u.name, r.created_at::date
-      ORDER BY u.name, r.created_at::date
-    `, [dates[dates.length - 1], days]);
-
     const devMap = {};
     byDeveloperResult.rows.forEach(row => {
       if (!devMap[row.developer_name]) {
@@ -4918,7 +5245,6 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
     });
     
     
-    const allDevUsers = await pool.query(`SELECT name FROM users WHERE role IN ('developer', 'support') ORDER BY name`);
     allDevUsers.rows.forEach(row => {
       if (row.name && !devMap[row.name]) devMap[row.name] = {};
     });
@@ -4927,17 +5253,6 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
       data: dates.map((d, i) => ({ date: labels[i], created: dayData[d]?.created || 0, resolved: dayData[d]?.resolved || 0 }))
     }));
 
-    const devStatusResult = await pool.query(`
-      SELECT u.name AS developer_name, s.name AS status_name, COUNT(*)::int AS count
-      FROM requests r
-      LEFT JOIN users u ON r.assigned_to = u.id
-      LEFT JOIN statuses s ON r.status_id = s.id
-      WHERE r.created_at::date >= ($1::date - INTERVAL '1 day' * $2)
-        AND u.role IN ('developer', 'support')
-      GROUP BY u.name, s.name
-      ORDER BY u.name, s.name
-    `, [dates[dates.length - 1], days]);
-
     const devStatusMap = {};
     devStatusResult.rows.forEach(row => {
       if (!devStatusMap[row.developer_name]) {
@@ -4945,7 +5260,6 @@ app.get('/api/dashboard/performance', authMiddleware, async (req, res) => {
       }
       devStatusMap[row.developer_name][row.status_name] = row.count;
     });
-    const allDevUsers2 = await pool.query(`SELECT name FROM users WHERE role IN ('developer', 'support')`);
     allDevUsers2.rows.forEach(row => {
       if (row.name && !devStatusMap[row.name]) devStatusMap[row.name] = {};
     });
@@ -5473,7 +5787,16 @@ app.get('/api/groups', authMiddleware, roleMiddleware('admin', 'support', 'devel
   try {
     const result = await pool.query(`
       SELECT g.*, c.name as company_name,
-        (SELECT COUNT(*) FROM user_groups ug WHERE ug.group_id = g.id) as "memberCount"
+        (SELECT COUNT(*) FROM user_groups ug WHERE ug.group_id = g.id) as "memberCount",
+        COALESCE((
+          SELECT json_agg(cg.company_id ORDER BY cg.company_id)
+          FROM company_groups cg WHERE cg.group_id = g.id
+        ), '[]'::json) as company_ids,
+        COALESCE((
+          SELECT json_agg(json_build_object('id', co.id, 'name', co.name) ORDER BY co.name)
+          FROM company_groups cg JOIN companies co ON co.id = cg.company_id
+          WHERE cg.group_id = g.id
+        ), '[]'::json) as companies
       FROM groups g
       LEFT JOIN companies c ON c.id = g.company_id
       ORDER BY g.name
@@ -5485,39 +5808,79 @@ app.get('/api/groups', authMiddleware, roleMiddleware('admin', 'support', 'devel
 });
 
 app.post('/api/groups', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { name, description, color, company_id } = req.body;
+    const { name, description, color } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
-    const id = uuidv4();
-    const result = await pool.query(
-      'INSERT INTO groups (id, name, description, color, company_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [id, name, description || '', color || '#6B7280', company_id || null]
+    const companyIds = normalizeCompanyIds(
+      Object.prototype.hasOwnProperty.call(req.body, 'companyIds') ? req.body.companyIds : req.body.company_id
     );
+    const primaryCompanyId = companyIds[0] || null;
+    const id = uuidv4();
+    await client.query('BEGIN');
+    const result = await client.query(
+      'INSERT INTO groups (id, name, description, color, company_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [id, name, description || '', color || '#6B7280', primaryCompanyId]
+    );
+    for (const companyId of companyIds) {
+      await client.query(
+        'INSERT INTO company_groups (company_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [companyId, id]
+      );
+    }
+    await client.query('COMMIT');
     await logGroupActivity('group_created', { id, name }, req.user, req);
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({ ...result.rows[0], company_ids: companyIds, companies: companyIds });
   } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (e) {}
+    if (err.code === '23503') return res.status(400).json({ error: 'One or more selected companies do not exist' });
     res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
   }
 });
 
 app.put('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { name, description, color, company_id } = req.body;
-    const companyProvided = Object.prototype.hasOwnProperty.call(req.body, 'company_id');
+    const { name, description, color } = req.body;
+    const companyProvided = Object.prototype.hasOwnProperty.call(req.body, 'companyIds') || Object.prototype.hasOwnProperty.call(req.body, 'company_id');
+    const companyIds = normalizeCompanyIds(
+      Object.prototype.hasOwnProperty.call(req.body, 'companyIds') ? req.body.companyIds : req.body.company_id
+    );
+    const primaryCompanyId = companyProvided ? (companyIds[0] || null) : undefined;
+    await client.query('BEGIN');
     const result = companyProvided
-      ? await pool.query(
+      ? await client.query(
           'UPDATE groups SET name = COALESCE($1, name), description = COALESCE($2, description), color = COALESCE($3, color), company_id = $4 WHERE id = $5 RETURNING *',
-          [name, description, color, company_id ?? null, req.params.id]
+          [name, description, color, primaryCompanyId, req.params.id]
         )
-      : await pool.query(
+      : await client.query(
           'UPDATE groups SET name = COALESCE($1, name), description = COALESCE($2, description), color = COALESCE($3, color) WHERE id = $4 RETURNING *',
           [name, description, color, req.params.id]
         );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Group not found' });
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    if (companyProvided) {
+      await client.query('DELETE FROM company_groups WHERE group_id = $1', [req.params.id]);
+      for (const companyId of companyIds) {
+        await client.query(
+          'INSERT INTO company_groups (company_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [companyId, req.params.id]
+        );
+      }
+    }
+    await client.query('COMMIT');
     await logGroupActivity('group_updated', { id: req.params.id, name }, req.user, req);
-    res.json(result.rows[0]);
+    res.json({ ...result.rows[0], company_ids: companyIds, companies: companyIds });
   } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (e) {}
+    if (err.code === '23503') return res.status(400).json({ error: 'One or more selected companies do not exist' });
     res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
   }
 });
 
@@ -5661,7 +6024,7 @@ app.get('/api/db-tables', authMiddleware, roleMiddleware('admin'), async (req, r
 app.get('/api/db-tables/:tableName', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
     const { tableName } = req.params;
-    const allowedTables = ['users', 'categories', 'priorities', 'statuses', 'requests', 'comments', 'activity_log', 'announcements', 'knowledge_base', 'tags', 'templates', 'sla_policies', 'sla_tracking', 'attachments', 'notifications', 'sessions', 'login_audit', 'request_watchers', 'request_tags', 'system_settings', 'feedback', 'groups', 'companies', 'user_groups', 'request_groups', 'password_reset_tokens'];
+    const allowedTables = ['users', 'categories', 'priorities', 'statuses', 'requests', 'comments', 'activity_log', 'announcements', 'knowledge_base', 'tags', 'templates', 'sla_policies', 'sla_tracking', 'attachments', 'notifications', 'sessions', 'login_audit', 'request_watchers', 'request_tags', 'system_settings', 'feedback', 'groups', 'companies', 'company_groups', 'email_notifications', 'user_groups', 'request_groups', 'password_reset_tokens'];
     if (!allowedTables.includes(tableName)) {
       return res.status(400).json({ error: 'Invalid table name' });
     }
@@ -5812,6 +6175,7 @@ app.put('/api/settings', authMiddleware, roleMiddleware('admin'), async (req, re
         changeDetails.push({ key, oldValue, newValue: stringValue });
       }
     }
+    invalidateSettingCache();
     if (changedKeys.length > 0) {
       await logSettingsActivity('settings_updated', req.user, req, {
         changes: changedKeys,
@@ -5880,6 +6244,7 @@ app.post('/api/settings/reset', authMiddleware, roleMiddleware('admin'), async (
         [s.key, s.value]
       );
     }
+    invalidateSettingCache();
     await logSettingsActivity('settings_reset', req.user, req);
     res.json({ message: 'Settings reset to defaults' });
   } catch (err) {
@@ -5899,6 +6264,7 @@ app.post('/api/settings/logo', authMiddleware, roleMiddleware('admin'), upload.s
       'INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
       ['systemLogo', logoPath]
     );
+    invalidateSettingCache('systemLogo');
     await logSettingsActivity('logo_uploaded', req.user, req);
     res.json({ logo: logoPath });
   } catch (err) {
@@ -5912,6 +6278,7 @@ app.delete('/api/settings/logo', authMiddleware, roleMiddleware('admin'), async 
       'INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
       ['systemLogo', '']
     );
+    invalidateSettingCache('systemLogo');
     await logSettingsActivity('logo_removed', req.user, req);
     res.json({ message: 'Logo removed' });
   } catch (err) {
@@ -6458,14 +6825,16 @@ app.delete('/api/attachments/:id', authMiddleware, roleMiddleware('admin'), asyn
 app.get('/api/notifications', authMiddleware, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
-    const result = await pool.query(
-      `SELECT n.*, a.name AS user_name FROM notifications n LEFT JOIN users a ON a.id::text = n.actor_id WHERE n.user_id = $1 ORDER BY n.created_at DESC LIMIT $2`,
-      [req.user.id, limit]
-    );
-    const unread = await pool.query(
-      'SELECT COUNT(*)::int AS count FROM notifications WHERE user_id = $1 AND is_read = false',
-      [req.user.id]
-    );
+    const [result, unread] = await Promise.all([
+      pool.query(
+        `SELECT n.*, a.name AS user_name FROM notifications n LEFT JOIN users a ON a.id::text = n.actor_id WHERE n.user_id = $1 ORDER BY n.created_at DESC LIMIT $2`,
+        [req.user.id, limit]
+      ),
+      pool.query(
+        'SELECT COUNT(*)::int AS count FROM notifications WHERE user_id = $1 AND is_read = false',
+        [req.user.id]
+      ),
+    ]);
     res.json({ notifications: result.rows, unread: unread.rows[0].count });
   } catch (err) {
     console.error(err);
@@ -6840,43 +7209,185 @@ app.get('/api/messages/unread-count', authMiddleware, async (req, res) => {
   }
 });
 
+function parseDirectPeer(conversationId, userId) {
+  const parts = String(conversationId || '').split(':');
+  if (parts.length !== 2) return null;
+  const self = String(userId);
+  if (parts[0] !== self && parts[1] !== self) return null;
+  return parts[0] === self ? parts[1] : parts[0];
+}
+
+function canAccessDirectPeer(user, peer) {
+  if (!peer) return false;
+  if (String(peer.id) === String(user.id)) return true;
+  if (user.role === 'admin') return true;
+  if (user.role === 'client') return peer.role === 'admin';
+  if (user.role === 'developer') {
+    if (peer.role === 'admin' || peer.role === 'support') return true;
+    if (peer.role === 'developer') return !!peer.shares_group;
+    return false;
+  }
+  if (user.role === 'support') return peer.role === 'support' || peer.role === 'developer' || peer.role === 'admin';
+  return false;
+}
+
+function parseAttachments(raw) {
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+// Returns every conversation the user can access together with its unread
+// count and latest message. Uses a fixed number of set-based queries instead
+// of one query per conversation, which keeps notification badges fast even as
+// the message table grows.
+async function loadConversationSummaries(user) {
+  const result = await pool.query(
+    `WITH stats AS (
+       SELECT m.conversation_type, m.conversation_id,
+              COUNT(*) FILTER (
+                WHERE m.sender_id <> $1
+                  AND m.created_at > COALESCE(rt.last_read_at, to_timestamp(0))
+              )::int AS unread_count
+       FROM messages m
+       LEFT JOIN message_read_tracking rt
+         ON rt.user_id = $1
+        AND rt.conversation_type = m.conversation_type
+        AND rt.conversation_id = m.conversation_id
+       GROUP BY m.conversation_type, m.conversation_id
+     ),
+     latest AS (
+       SELECT DISTINCT ON (m.conversation_type, m.conversation_id)
+              m.conversation_type, m.conversation_id, m.id, m.content, m.attachments,
+              m.sender_id, m.created_at,
+              a.name AS sender_name, a.avatar AS sender_avatar, a.role AS sender_role
+       FROM messages m
+       LEFT JOIN users a ON a.id = m.sender_id
+       ORDER BY m.conversation_type, m.conversation_id, m.created_at DESC, m.id DESC
+     )
+     SELECT s.unread_count, l.*
+     FROM stats s
+     JOIN latest l
+       ON l.conversation_type = s.conversation_type
+      AND l.conversation_id = s.conversation_id`,
+    [String(user.id)]
+  );
+
+  const directRows = [];
+  const groupRows = [];
+  for (const row of result.rows) {
+    if (row.conversation_type === 'direct') {
+      const peerId = parseDirectPeer(row.conversation_id, user.id);
+      if (peerId) directRows.push({ row, peerId });
+    } else if (row.conversation_type === 'group') {
+      groupRows.push(row);
+    }
+  }
+
+  const peerIds = [...new Set(directRows.map((r) => String(r.peerId)))];
+  const groupIds = [...new Set(groupRows.map((r) => String(r.conversation_id)))];
+  const peerMap = new Map();
+  const groupMap = new Map();
+
+  const lookups = [];
+  if (peerIds.length > 0) {
+    lookups.push(pool.query(
+      `SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.company_id,
+              u.language, u.approved, u.client_approved, u.moderated, u.created_at,
+              EXISTS (
+                SELECT 1 FROM user_groups a JOIN user_groups b ON a.group_id = b.group_id
+                WHERE a.user_id = $1 AND b.user_id = u.id
+              ) AS shares_group
+       FROM users u WHERE u.id::text = ANY($2::text[])`,
+      [String(user.id), peerIds]
+    ));
+  }
+  if (groupIds.length > 0) {
+    lookups.push(pool.query(
+      `SELECT g.id, g.name,
+              EXISTS (SELECT 1 FROM user_groups ug WHERE ug.group_id = g.id AND ug.user_id = $1) AS is_member
+       FROM groups g WHERE g.id::text = ANY($2::text[])`,
+      [String(user.id), groupIds]
+    ));
+  }
+  const lookupResults = await Promise.all(lookups);
+  let lookupIndex = 0;
+  if (peerIds.length > 0) {
+    for (const peer of lookupResults[lookupIndex++].rows) peerMap.set(String(peer.id), peer);
+  }
+  if (groupIds.length > 0) {
+    for (const group of lookupResults[lookupIndex++].rows) groupMap.set(String(group.id), group);
+  }
+
+  const conversations = [];
+  for (const { row, peerId } of directRows) {
+    const peer = peerMap.get(String(peerId));
+    if (!canAccessDirectPeer(user, peer)) continue;
+    conversations.push({
+      type: 'direct',
+      conversationId: peerId,
+      canonicalId: String(row.conversation_id),
+      unreadCount: Number(row.unread_count) || 0,
+      row,
+      userName: row.sender_name,
+      senderRole: row.sender_role,
+      groupName: null,
+    });
+  }
+  for (const row of groupRows) {
+    const group = groupMap.get(String(row.conversation_id));
+    if (!group) continue;
+    if (user.role !== 'admin' && !group.is_member) continue;
+    conversations.push({
+      type: 'group',
+      conversationId: String(row.conversation_id),
+      canonicalId: String(row.conversation_id),
+      unreadCount: Number(row.unread_count) || 0,
+      row,
+      userName: group.name || row.sender_name,
+      senderRole: row.sender_role,
+      groupName: group.name || null,
+    });
+  }
+  return conversations;
+}
+
 // Returns users the current user has an existing direct conversation with.
 // Used by the comment panel to show only real conversations (e.g. clients who
 // have messaged an admin) without exposing users who never started a chat.
 app.get('/api/messages/conversation-peers', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT DISTINCT
-         CASE
-           WHEN split_part(m.conversation_id, ':', 1) = $1::text THEN split_part(m.conversation_id, ':', 2)
-           ELSE split_part(m.conversation_id, ':', 1)
-         END AS peer_id
-       FROM messages m
-       WHERE m.conversation_type = 'direct'
-         AND m.conversation_id LIKE '%' || $1::text || '%'`,
-      [req.user.id]
+      `SELECT DISTINCT conversation_id FROM messages WHERE conversation_type = 'direct'`
     );
     const peerIds = [];
     for (const row of result.rows) {
-      const pid = row.peer_id;
-      if (!pid) continue;
-      const cid = directConvKey(req.user.id, pid);
-      if (!(await canAccessConversation(req.user, 'direct', pid))) continue;
-      // ensure this is actually a participant pair with current user
-      if (cid.indexOf(String(req.user.id)) === -1) continue;
-      peerIds.push(String(pid));
+      const peerId = parseDirectPeer(row.conversation_id, req.user.id);
+      if (peerId) peerIds.push(String(peerId));
     }
-    if (peerIds.length === 0) return res.json([]);
+    const uniquePeerIds = [...new Set(peerIds)];
+    if (uniquePeerIds.length === 0) return res.json([]);
     const usersRes = await pool.query(
-      `SELECT id, name, email, role, avatar, company_name, company_id, language, approved, client_approved, moderated, created_at
-       FROM users WHERE id::text = ANY($1::text[])`,
-      [peerIds]
+      `SELECT u.id, u.name, u.email, u.role, u.avatar, u.company_name, u.company_id,
+              u.language, u.approved, u.client_approved, u.moderated, u.created_at,
+              EXISTS (
+                SELECT 1 FROM user_groups a JOIN user_groups b ON a.group_id = b.group_id
+                WHERE a.user_id = $1 AND b.user_id = u.id
+              ) AS shares_group
+       FROM users u WHERE u.id::text = ANY($2::text[])`,
+      [String(req.user.id), uniquePeerIds]
     );
-    const peers = usersRes.rows.map((u) => {
-      const mu = mapUser(u);
-      mu.online = sseClients.has(String(mu.id));
-      return mu;
-    });
+    const peers = usersRes.rows
+      .filter((u) => canAccessDirectPeer(req.user, u))
+      .map((u) => {
+        const mu = mapUser(u);
+        mu.online = sseClients.has(String(mu.id));
+        return mu;
+      });
     res.json(peers);
   } catch (err) {
     console.error(err);
@@ -6886,32 +7397,8 @@ app.get('/api/messages/conversation-peers', authMiddleware, async (req, res) => 
 
 app.get('/api/messages/unread-total', authMiddleware, async (req, res) => {
   try {
-    let total = 0;
-    const directRes = await pool.query(`SELECT DISTINCT conversation_id FROM messages WHERE conversation_type = 'direct'`);
-    for (const row of directRes.rows) {
-      const cid = row.conversation_id;
-      const parts = String(cid).split(':');
-      if (parts.length !== 2) continue;
-      if (!parts.includes(String(req.user.id))) continue;
-      const otherId = parts.find((p) => p !== String(req.user.id));
-      if (!(await canAccessConversation(req.user, 'direct', otherId))) continue;
-      const readRes = await pool.query(`SELECT last_read_at FROM message_read_tracking WHERE user_id = $1 AND conversation_type = $2 AND conversation_id = $3`, [req.user.id, 'direct', cid]);
-      const lastRead = readRes.rows[0]?.last_read_at || new Date(0).toISOString();
-      const cntRes = await pool.query(`SELECT COUNT(*)::int AS c FROM messages WHERE conversation_type = $1 AND conversation_id = $2 AND sender_id <> $3 AND created_at > $4`, ['direct', cid, req.user.id, lastRead]);
-      total += cntRes.rows[0]?.c || 0;
-    }
-    const groupRes = await pool.query(`SELECT DISTINCT conversation_id FROM messages WHERE conversation_type = 'group'`);
-    for (const row of groupRes.rows) {
-      const gid = row.conversation_id;
-      if (req.user.role !== 'admin') {
-        const mem = await pool.query('SELECT 1 FROM user_groups WHERE user_id = $1 AND group_id = $2', [req.user.id, gid]);
-        if (mem.rows.length === 0) continue;
-      }
-      const readRes = await pool.query(`SELECT last_read_at FROM message_read_tracking WHERE user_id = $1 AND conversation_type = $2 AND conversation_id = $3`, [req.user.id, 'group', gid]);
-      const lastRead = readRes.rows[0]?.last_read_at || new Date(0).toISOString();
-      const cntRes = await pool.query(`SELECT COUNT(*)::int AS c FROM messages WHERE conversation_type = $1 AND conversation_id = $2 AND sender_id <> $3 AND created_at > $4`, ['group', gid, req.user.id, lastRead]);
-      total += cntRes.rows[0]?.c || 0;
-    }
+    const conversations = await loadConversationSummaries(req.user);
+    const total = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
     res.json({ count: total });
   } catch (err) {
     console.error(err);
@@ -6921,77 +7408,53 @@ app.get('/api/messages/unread-total', authMiddleware, async (req, res) => {
 
 app.get('/api/messages/unread-conversations', authMiddleware, async (req, res) => {
   try {
-    const items = [];
-    const directRes = await pool.query(`SELECT DISTINCT conversation_id FROM messages WHERE conversation_type = 'direct'`);
-    for (const row of directRes.rows) {
-      const cid = row.conversation_id;
-      const parts = String(cid).split(':');
-      if (parts.length !== 2) continue;
-      if (!parts.includes(String(req.user.id))) continue;
-      const otherId = parts.find((p) => p !== String(req.user.id));
-      if (!(await canAccessConversation(req.user, 'direct', otherId))) continue;
-      const readRes = await pool.query(`SELECT last_read_at FROM message_read_tracking WHERE user_id = $1 AND conversation_type = $2 AND conversation_id = $3`, [req.user.id, 'direct', cid]);
-      const lastRead = readRes.rows[0]?.last_read_at || new Date(0).toISOString();
-      const unreadRes = await pool.query(
-        `SELECT m.id, m.content, m.attachments, m.sender_id, m.created_at, u.name AS sender_name, u.avatar AS sender_avatar, u.role AS sender_role
-         FROM messages m LEFT JOIN users u ON m.sender_id = u.id
-         WHERE m.conversation_type = $1 AND m.conversation_id = $2 AND m.sender_id <> $3 AND m.created_at > $4
-         ORDER BY m.created_at DESC, m.id DESC`,
-        ['direct', cid, req.user.id, lastRead]
-      );
-      const count = unreadRes.rows.length;
-      if (count === 0) continue;
-      const last = unreadRes.rows[0];
-      items.push({
-        type: 'message',
-        conversationType: 'direct',
-        conversationId: otherId,
-        count,
-        senderId: last.sender_id,
-        userName: last.sender_name,
-        senderRole: last.sender_role,
-        message: last.content || (Array.isArray(JSON.parse(last.attachments || '[]')) && JSON.parse(last.attachments || '[]').length ? 'Sent an attachment' : ''),
-        timestamp: last.created_at,
-        is_read: false,
-        id: `msg:${cid}:${last.id}`,
+    const conversations = await loadConversationSummaries(req.user);
+    const items = conversations
+      .filter((c) => c.unreadCount > 0)
+      .map((c) => {
+        const attachments = parseAttachments(c.row.attachments);
+        const hasAttachment = attachments.length > 0;
+        return {
+          type: 'message',
+          conversationType: c.type,
+          conversationId: c.conversationId,
+          count: c.unreadCount,
+          senderId: c.row.sender_id,
+          userName: c.type === 'group' ? (c.groupName || c.row.sender_name) : c.row.sender_name,
+          senderRole: c.row.sender_role,
+          message: c.type === 'direct'
+            ? (c.row.content || (hasAttachment ? 'Sent an attachment' : ''))
+            : (c.row.content || ''),
+          timestamp: c.row.created_at,
+          is_read: false,
+          id: `msg:${c.canonicalId}:${c.row.id}`,
+        };
       });
-    }
-    const groupRes = await pool.query(`SELECT DISTINCT conversation_id FROM messages WHERE conversation_type = 'group'`);
-    for (const row of groupRes.rows) {
-      const gid = row.conversation_id;
-      if (req.user.role !== 'admin') {
-        const mem = await pool.query('SELECT 1 FROM user_groups WHERE user_id = $1 AND group_id = $2', [req.user.id, gid]);
-        if (mem.rows.length === 0) continue;
-      }
-      const readRes = await pool.query(`SELECT last_read_at FROM message_read_tracking WHERE user_id = $1 AND conversation_type = $2 AND conversation_id = $3`, [req.user.id, 'group', gid]);
-      const lastRead = readRes.rows[0]?.last_read_at || new Date(0).toISOString();
-      const unreadRes = await pool.query(
-        `SELECT m.id, m.content, m.attachments, m.sender_id, m.created_at, u.name AS sender_name, u.role AS sender_role
-         FROM messages m LEFT JOIN users u ON m.sender_id = u.id
-         WHERE m.conversation_type = $1 AND m.conversation_id = $2 AND m.sender_id <> $3 AND m.created_at > $4
-         ORDER BY m.created_at DESC, m.id DESC`,
-        ['group', gid, req.user.id, lastRead]
-      );
-      const count = unreadRes.rows.length;
-      if (count === 0) continue;
-      const last = unreadRes.rows[0];
-      let gname = null;
-      try { const gr = await pool.query('SELECT name FROM groups WHERE id = $1', [gid]); gname = gr.rows[0]?.name || null; } catch (e) {}
-      items.push({
-        type: 'message',
-        conversationType: 'group',
-        conversationId: gid,
-        count,
-        senderId: last.sender_id,
-        userName: gname || last.sender_name,
-        senderRole: last.sender_role,
-        message: last.content || '',
-        timestamp: last.created_at,
-        is_read: false,
-        id: `msg:${gid}:${last.id}`,
-      });
-    }
     items.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    res.json({ items });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Batch summary used by the comment panel. One request replaces the previous
+// per-conversation unread-count polling.
+app.get('/api/messages/summaries', authMiddleware, async (req, res) => {
+  try {
+    const conversations = await loadConversationSummaries(req.user);
+    const items = conversations.map((c) => ({
+      conversationType: c.type,
+      conversationId: c.conversationId,
+      count: c.unreadCount,
+      lastMessage: {
+        content: c.row.content || '',
+        attachments: parseAttachments(c.row.attachments),
+        senderId: c.row.sender_id,
+        senderName: c.type === 'group' ? (c.groupName || c.row.sender_name) : c.row.sender_name,
+        createdAt: c.row.created_at,
+      },
+    }));
     res.json({ items });
   } catch (err) {
     console.error(err);
@@ -7185,18 +7648,42 @@ async function runAutoEscalation() {
   if (candidates.rows.length === 0) return;
   const now = Date.now();
 
+  const candidateIds = candidates.rows.map(r => r.id);
+  const activityRes = await pool.query(
+    `SELECT DISTINCT ON (request_id, type) request_id, type, created_at
+     FROM activity_log
+     WHERE request_id = ANY($1::text[]) AND type IN ('assigned', 'assigned_group_changed')
+     ORDER BY request_id, type, created_at DESC`,
+    [candidateIds]
+  );
+  const lastAssignedAt = new Map();
+  for (const row of activityRes.rows) lastAssignedAt.set(`${row.request_id}:${row.type}`, row.created_at);
+
+  const escalationGroupIds = [...new Set(candidates.rows
+    .filter(r => !r.assigned_to && r.assigned_group)
+    .map(r => String(r.assigned_group)))];
+  const groupDevelopers = new Map();
+  if (escalationGroupIds.length > 0) {
+    const membersRes = await pool.query(
+      `SELECT u.id, ug.group_id FROM users u JOIN user_groups ug ON ug.user_id = u.id
+       WHERE ug.group_id::text = ANY($1::text[]) AND u.role = 'developer'`,
+      [escalationGroupIds]
+    );
+    for (const row of membersRes.rows) {
+      const key = String(row.group_id);
+      if (!groupDevelopers.has(key)) groupDevelopers.set(key, []);
+      groupDevelopers.get(key).push(row.id);
+    }
+  }
+
   for (const req of candidates.rows) {
     try {
       
       
       const isGroup = !req.assigned_to && !!req.assigned_group;
-      const assignedRows = await pool.query(
-        `SELECT created_at FROM activity_log WHERE request_id = $1 AND type = $2
-         ORDER BY created_at DESC LIMIT 1`,
-        [req.id, isGroup ? 'assigned_group_changed' : 'assigned']
-      );
-      const assignedAt = assignedRows.rows.length > 0
-        ? new Date(assignedRows.rows[0].created_at).getTime()
+      const assignedAtRaw = lastAssignedAt.get(`${req.id}:${isGroup ? 'assigned_group_changed' : 'assigned'}`);
+      const assignedAt = assignedAtRaw
+        ? new Date(assignedAtRaw).getTime()
         : new Date(req.updated_at).getTime();
       if (!Number.isFinite(assignedAt) || now - assignedAt < minutes * 60 * 1000) continue;
 
@@ -7230,13 +7717,9 @@ async function runAutoEscalation() {
       }
       if (isGroup && req.assigned_group) {
         
-        const members = await pool.query(
-          `SELECT u.id FROM users u JOIN user_groups ug ON ug.user_id = u.id
-           WHERE ug.group_id = $1 AND u.role = 'developer'`,
-          [req.assigned_group]
-        );
-        for (const m of members.rows) {
-          notifyUser(m.id, `Request #${req.id} assigned to your group was automatically escalated after ${minutes} minutes`, { type: 'status_change', requestId: req.id, status: 'Escalated', userName: 'System' });
+        const memberIds = groupDevelopers.get(String(req.assigned_group)) || [];
+        for (const mid of memberIds) {
+          notifyUser(mid, `Request #${req.id} assigned to your group was automatically escalated after ${minutes} minutes`, { type: 'status_change', requestId: req.id, status: 'Escalated', userName: 'System' });
         }
       }
       if (req.client_id) {
