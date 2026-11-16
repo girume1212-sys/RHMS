@@ -283,7 +283,7 @@ const RequestsTable = forwardRef(function RequestsTable({
                 <input type="text" placeholder={t('common.searchRequests')} value={filter.search} onChange={(e) => { setFilter(f => ({ ...f, search: e.target.value })); setPage(1); }} />
               </div>
             </div>
-            <div className="sf-toolbar-right">
+            <div className="sf-toolbar-right requests-filters">
               {(isDeveloper || isSupport) && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6B7280', cursor: 'pointer', marginRight: '8px', userSelect: 'none' }}>
                   <span>{t('common.showMyTasks')}</span>

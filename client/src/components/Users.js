@@ -324,7 +324,7 @@ export default function Users() {
                   <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
               </select>
-              <select className="filter-select" value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setPage(1); }}>
+              <select className="filter-select company-filter-select" value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setPage(1); }}>
                 <option value="">{t('common.allCompanies')}</option>
                 {companyOptions.map(name => (
                   <option key={name} value={name}>{name}</option>

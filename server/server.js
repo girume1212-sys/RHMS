@@ -8,6 +8,7 @@ const multer = require('multer');
 const zlib = require('zlib');
 const path = require('path');
 const fs = require('fs');
+const { spawn, spawnSync } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 const { OAuth2Client } = require('google-auth-library');
 const pool = require('./db');
@@ -4151,20 +4152,30 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
       if (await getClientApprovalRequired()) return res.status(403).json({ error: 'Account Approval Required: Your account is awaiting administrator approval. You cannot submit support requests until your account is approved. Please contact the administrator for assistance.' });
     }
     const { subject, description, categoryId, priorityId, attachments, customCategory } = req.body;
-    if (!subject || !subject.trim() || !description || !description.trim() || !categoryId) {
+    const subjectText = typeof subject === 'string' ? subject.trim() : '';
+    const descriptionText = typeof description === 'string' ? description.trim() : '';
+    if (!subjectText || !descriptionText || !categoryId) {
       return res.status(400).json({ error: 'Please fill all required fields' });
     }
-    
-    
-    let effectiveCategoryId = categoryId;
-    if (categoryId === 'other-categories') effectiveCategoryId = '8';
-    const customCategoryValue = (effectiveCategoryId === '8' && customCategory && String(customCategory).trim())
+    if (subjectText.length > 500) {
+      return res.status(400).json({ error: 'Request title is too long. Please keep it under 500 characters.' });
+    }
+
+    let effectiveCategoryId = categoryId === 'other-categories' ? '8' : categoryId;
+    const categoryCheck = await pool.query('SELECT 1 FROM categories WHERE id = $1', [effectiveCategoryId]);
+    if (categoryCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'Please select a valid category.' });
+    }
+    const customCategoryValue = (String(effectiveCategoryId) === '8' && customCategory && String(customCategory).trim())
       ? String(customCategory).trim()
       : null;
-    const countResult = await pool.query("SELECT nextval('requests_id_seq') AS next_num");
-    const nextNum = parseInt(countResult.rows[0].next_num);
-    const id = `REQ-2024-${String(nextNum).padStart(5, '0')}`;
     const clientId = req.user.role === 'client' ? req.user.id : req.body.clientId;
+    if (clientId) {
+      const clientCheck = await pool.query('SELECT 1 FROM users WHERE id = $1', [clientId]);
+      if (clientCheck.rows.length === 0) {
+        return res.status(400).json({ error: 'Selected client was not found.' });
+      }
+    }
     const now = new Date().toISOString();
     
     let clientEmail = '';
@@ -4180,22 +4191,53 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     const defResult = await pool.query("SELECT value FROM system_settings WHERE key IN ('defaultStatus', 'defaultPriority')");
     const defMap = {};
     for (const row of defResult.rows) defMap[row.key] = row.value;
-    const defaultStatusId = defMap.defaultStatus || '1';
-    const defaultPriorityId = defMap.defaultPriority || '2';
 
-    await pool.query(
-      'INSERT INTO requests (id, subject, description, client_id, client_email, category_id, priority_id, status_id, attachments, created_at, updated_at, custom_category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
-      [id, subject, description, clientId, clientEmail || '', effectiveCategoryId, priorityId || defaultPriorityId, defaultStatusId, JSON.stringify(attachments || []), now, now, customCategoryValue]
-    );
+    let effectivePriorityId = priorityId || defMap.defaultPriority || '2';
+    const priorityCheck = await pool.query('SELECT 1 FROM priorities WHERE id = $1', [effectivePriorityId]);
+    if (priorityCheck.rows.length === 0) {
+      const fallbackPriority = await pool.query('SELECT id FROM priorities ORDER BY id LIMIT 1');
+      if (fallbackPriority.rows.length === 0) {
+        return res.status(400).json({ error: 'No priority is configured. Please contact the administrator.' });
+      }
+      effectivePriorityId = fallbackPriority.rows[0].id;
+    }
+
+    let effectiveStatusId = defMap.defaultStatus || '1';
+    const statusCheck = await pool.query('SELECT 1 FROM statuses WHERE id = $1', [effectiveStatusId]);
+    if (statusCheck.rows.length === 0) {
+      const fallbackStatus = await pool.query('SELECT id FROM statuses ORDER BY id LIMIT 1');
+      if (fallbackStatus.rows.length === 0) {
+        return res.status(400).json({ error: 'No status is configured. Please contact the administrator.' });
+      }
+      effectiveStatusId = fallbackStatus.rows[0].id;
+    }
+
+    const attachmentList = Array.isArray(attachments) ? attachments.filter((a) => typeof a === 'string') : [];
+    let id = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const countResult = await pool.query("SELECT nextval('requests_id_seq') AS next_num");
+      const nextNum = parseInt(countResult.rows[0].next_num);
+      id = `REQ-2024-${String(nextNum).padStart(5, '0')}`;
+      try {
+        await pool.query(
+          'INSERT INTO requests (id, subject, description, client_id, client_email, category_id, priority_id, status_id, attachments, created_at, updated_at, custom_category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+          [id, subjectText, descriptionText, clientId, clientEmail || '', effectiveCategoryId, effectivePriorityId, effectiveStatusId, JSON.stringify(attachmentList), now, now, customCategoryValue]
+        );
+        break;
+      } catch (insertErr) {
+        if (insertErr.code === '23505' && attempt < 4) continue;
+        throw insertErr;
+      }
+    }
 
     await pool.query(
       'INSERT INTO activity_log (id, type, request_id, user_id, message, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
       [uuidv4(), 'created', id, req.user.id, 'New request created', now]
     );
-    await logRequestActivity('created', { id, subject }, req.user, req);
-
+    await logRequestActivity('created', { id, subject: subjectText }, req.user, req);
     
-    notifyAdmins('New request created', { type: 'request_created', requestId: id, subject, userId: req.user.id, userName: req.user.name });
+    
+    notifyAdmins('New request created', { type: 'request_created', requestId: id, subject: subjectText, userId: req.user.id, userName: req.user.name });
     
     
     emailAdminOnNewRequest(id, req);
@@ -4219,9 +4261,18 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     } catch (e) { console.error('[auto-assign] failed:', e.message); }
     emailGroupMembersOnNewRequest(id, req.user.id, req);
 
-    res.status(201).json({ id, subject, description, clientId, categoryId: effectiveCategoryId, customCategory: customCategoryValue, priorityId: priorityId || '2', statusId: '1', assignedTo: null, assignedGroup: autoAssignedGroup, assignmentSource: autoAssignedGroup ? autoAssignedGroup.source : null, assignmentWarning: autoAssignedGroup ? null : true, attachments: attachments || [], createdAt: now, updatedAt: now });
+    res.status(201).json({ id, subject: subjectText, description: descriptionText, clientId, categoryId: effectiveCategoryId, customCategory: customCategoryValue, priorityId: effectivePriorityId, statusId: effectiveStatusId, assignedTo: null, assignedGroup: autoAssignedGroup, assignmentSource: autoAssignedGroup ? autoAssignedGroup.source : null, assignmentWarning: autoAssignedGroup ? null : true, attachments: attachmentList, createdAt: now, updatedAt: now });
   } catch (err) {
-    console.error('Create request error:', err.message);
+    console.error('Create request error:', err.code || '', err.message, err.detail || '');
+    if (err.code === '22001') {
+      return res.status(400).json({ error: 'Request title is too long. Please keep it under 500 characters.' });
+    }
+    if (err.code === '23503') {
+      return res.status(400).json({ error: 'Please select a valid category, priority, status, or client.' });
+    }
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'A request with this ID already exists. Please try again.' });
+    }
     res.status(500).json({ error: 'Failed to create request: ' + err.message });
   }
 });
@@ -6818,6 +6869,295 @@ app.delete('/api/attachments/:id', authMiddleware, roleMiddleware('admin'), asyn
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+const DOCUMENT_APP_CACHE = new Map();
+const DOCUMENT_APP_EXECUTABLES = {
+  word: { office: 'WINWORD.EXE', wps: 'wps.exe' },
+  excel: { office: 'EXCEL.EXE', wps: 'et.exe' },
+  powerpoint: { office: 'POWERPNT.EXE', wps: 'wpp.exe' },
+};
+const DOCUMENT_MIME_TYPES = {
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.csv': 'text/csv',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.xml': 'application/xml',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/x-m4v',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
+  '.avi': 'video/x-msvideo',
+  '.mkv': 'video/x-matroska',
+};
+
+function documentKindFromName(name) {
+  const ext = String(name || '').toLowerCase().split('?')[0].split('#')[0].split('.').pop();
+  if (ext === 'doc' || ext === 'docx') return 'word';
+  if (ext === 'xls' || ext === 'xlsx' || ext === 'csv') return 'excel';
+  if (ext === 'ppt' || ext === 'pptx') return 'powerpoint';
+  return null;
+}
+
+function cleanUploadName(value) {
+  let name = String(value || '');
+  try { name = decodeURIComponent(name); } catch (e) { /* keep original */ }
+  name = name.split('?')[0].split('#')[0].replace(/\\/g, '/').split('/').pop() || '';
+  return name.replace(/^\d{10,}-(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-)?/i, '') || 'document';
+}
+
+function isExecutableFile(candidate) {
+  try {
+    return !!candidate && fs.existsSync(candidate) && fs.statSync(candidate).isFile();
+  } catch (e) {
+    return false;
+  }
+}
+
+function findExecutableOnPath(exeName) {
+  const result = spawnSync('where', [exeName], { encoding: 'utf8', windowsHide: true });
+  if (result.status !== 0 || !result.stdout) return null;
+  return result.stdout.split(/\r?\n/).map((line) => line.trim()).find(isExecutableFile) || null;
+}
+
+function findExecutableInRegistry(exeName) {
+  const keys = [
+    `HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${exeName}`,
+    `HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${exeName}`,
+    `HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${exeName}`,
+  ];
+  for (const key of keys) {
+    const result = spawnSync('reg', ['query', key, '/ve'], { encoding: 'utf8', windowsHide: true });
+    if (result.status !== 0 || !result.stdout) continue;
+    const match = result.stdout.match(/REG_SZ\s+(.+?)\s*$/m);
+    if (!match) continue;
+    const candidate = match[1].trim().replace(/^"|"$/g, '');
+    if (isExecutableFile(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findFileRecursive(root, targetLowerName, maxDepth) {
+  const queue = [{ dir: root, depth: 0 }];
+  while (queue.length > 0) {
+    const { dir, depth } = queue.shift();
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (e) {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.toLowerCase() === targetLowerName) {
+        return path.join(dir, entry.name);
+      }
+    }
+    if (depth >= maxDepth) continue;
+    for (const entry of entries) {
+      if (entry.isDirectory()) queue.push({ dir: path.join(dir, entry.name), depth: depth + 1 });
+    }
+  }
+  return null;
+}
+
+function findDocumentAppExecutable(app, kind) {
+  const exeName = DOCUMENT_APP_EXECUTABLES[kind] && DOCUMENT_APP_EXECUTABLES[kind][app];
+  if (!exeName) return null;
+  const cacheKey = `${app}:${kind}`;
+  const cached = DOCUMENT_APP_CACHE.get(cacheKey);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
+  let found = null;
+  if (process.platform === 'win32') {
+    found = findExecutableInRegistry(exeName) || findExecutableOnPath(exeName);
+    if (found) {
+      const exactSibling = path.join(path.dirname(found), exeName);
+      if (isExecutableFile(exactSibling)) found = exactSibling;
+    }
+    if (!found) {
+      const roots = app === 'wps'
+        ? [
+            process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Kingsoft', 'WPS Office'),
+            process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'WPS Office'),
+            process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'Kingsoft', 'WPS Office'),
+            process.env['ProgramFiles(x86)'] && path.join(process.env['ProgramFiles(x86)'], 'WPS Office'),
+            process.env['ProgramFiles(x86)'] && path.join(process.env['ProgramFiles(x86)'], 'Kingsoft', 'WPS Office'),
+            process.env.ProgramW6432 && path.join(process.env.ProgramW6432, 'WPS Office'),
+          ]
+        : [
+            process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'Microsoft Office'),
+            process.env['ProgramFiles(x86)'] && path.join(process.env['ProgramFiles(x86)'], 'Microsoft Office'),
+            process.env.ProgramW6432 && path.join(process.env.ProgramW6432, 'Microsoft Office'),
+          ];
+      for (const root of roots.filter(Boolean)) {
+        if (!fs.existsSync(root)) continue;
+        found = findFileRecursive(root, exeName.toLowerCase(), 6);
+        if (found) break;
+      }
+    }
+  }
+
+  DOCUMENT_APP_CACHE.set(cacheKey, {
+    value: found || null,
+    expires: Date.now() + (found ? 5 * 60 * 1000 : 30 * 1000),
+  });
+  return found || null;
+}
+
+function resolveAttachmentFile(rawPath) {
+  let rel = String(rawPath || '').trim();
+  if (!rel) return null;
+  try { rel = decodeURIComponent(rel); } catch (e) { /* keep original */ }
+  rel = rel.split('?')[0].split('#')[0].replace(/\\/g, '/');
+  const uploadsIndex = rel.indexOf('/uploads/');
+  if (uploadsIndex > 0) rel = rel.slice(uploadsIndex);
+
+  let filePath = null;
+  if (rel.startsWith('/uploads/')) {
+    filePath = path.join(UPLOADS_DIR, path.basename(rel));
+  } else if (rel.startsWith('private://audio/')) {
+    filePath = path.join(PRIVATE_AUDIO_DIR, path.basename(rel.slice('private://audio/'.length)));
+  }
+  if (!filePath) return null;
+  if (!isExecutableFile(filePath)) return null;
+  return { filePath, storedName: path.basename(filePath) };
+}
+
+function launchDetached(executable, filePath) {
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawn(executable, [filePath], { detached: true, stdio: 'ignore', windowsHide: false });
+    } catch (err) {
+      reject(err);
+      return;
+    }
+    let settled = false;
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (err) reject(err);
+      else resolve();
+    };
+    const timer = setTimeout(() => finish(), 1500);
+    child.once('error', finish);
+    child.once('spawn', () => finish());
+    child.unref();
+  });
+}
+
+function launchWithDefaultApp(filePath) {
+  if (process.platform === 'win32') return launchDetached('explorer.exe', filePath);
+  return launchDetached(process.platform === 'darwin' ? 'open' : 'xdg-open', filePath);
+}
+
+async function canViewRequest(user, requestId) {
+  const result = await pool.query('SELECT client_id, assigned_to, status_id FROM requests WHERE id = $1', [requestId]);
+  if (result.rows.length === 0) return false;
+  const request = result.rows[0];
+  if (user.role === 'admin') return true;
+  if (user.role === 'client') return String(request.client_id) === String(user.id);
+  if (String(request.assigned_to) === String(user.id)) return true;
+  const groupAccess = await pool.query(
+    'SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = $1 AND ug.user_id = $2 LIMIT 1',
+    [requestId, user.id]
+  );
+  if (groupAccess.rows.length === 0) return false;
+  if (user.role === 'support' && String(request.status_id) !== '9') return false;
+  return true;
+}
+
+async function canAccessMessageAttachment(user, messageId, rawPath) {
+  const result = await pool.query('SELECT conversation_type, conversation_id, attachments FROM messages WHERE id = $1', [messageId]);
+  if (result.rows.length === 0) return false;
+  const message = result.rows[0];
+  if (!(await canAccessConversation(user, message.conversation_type, message.conversation_id))) return false;
+  if (!rawPath) return true;
+  let attachments = [];
+  try { attachments = JSON.parse(message.attachments || '[]'); } catch (e) { attachments = []; }
+  if (!Array.isArray(attachments)) return false;
+  const target = path.basename(String(rawPath).split('?')[0].split('#')[0]);
+  return attachments.some((att) => {
+    const candidate = typeof att === 'string' ? att : String((att && (att.path || att.url)) || '');
+    if (!candidate) return false;
+    return path.basename(candidate.split('?')[0].split('#')[0]) === target;
+  });
+}
+
+app.post('/api/attachments/open', authMiddleware, async (req, res) => {
+  try {
+    const rawPath = req.body && req.body.path;
+    const providedName = req.body && req.body.name;
+    const requestedApp = String((req.body && req.body.app) || '').toLowerCase();
+    const requestId = req.body && req.body.requestId;
+    const messageId = req.body && req.body.messageId;
+    const displayName = cleanUploadName(providedName || rawPath);
+    const kind = documentKindFromName(displayName);
+    if (!kind) return res.status(400).json({ error: 'This file type cannot be opened in a desktop application.' });
+    if (requestId && !(await canViewRequest(req.user, requestId))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    if (messageId && !(await canAccessMessageAttachment(req.user, messageId, rawPath))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    const resolved = resolveAttachmentFile(rawPath);
+    if (!resolved) return res.status(404).json({ error: 'Attachment not found' });
+
+    if (process.platform !== 'win32') {
+      await launchWithDefaultApp(resolved.filePath);
+      return res.json({ ok: true, app: 'default' });
+    }
+
+    const app = requestedApp === 'wps' || requestedApp === 'office' ? requestedApp : 'office';
+    const executable = findDocumentAppExecutable(app, kind);
+    if (!executable) {
+      return res.status(409).json({ error: 'app_not_installed', app, name: displayName });
+    }
+    await launchDetached(executable, resolved.filePath);
+    res.json({ ok: true, app });
+  } catch (err) {
+    console.error('Open document failed:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Could not open the document on this computer.' });
+  }
+});
+
+app.get('/api/attachments/download', authMiddleware, async (req, res) => {
+  try {
+    if (req.query.requestId && !(await canViewRequest(req.user, req.query.requestId))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    if (req.query.messageId && !(await canAccessMessageAttachment(req.user, req.query.messageId, req.query.path))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    const resolved = resolveAttachmentFile(req.query.path);
+    if (!resolved) return res.status(404).json({ error: 'Attachment not found' });
+    const displayName = cleanUploadName(req.query.name || resolved.storedName);
+    const ext = path.extname(displayName).toLowerCase();
+    const fallbackName = displayName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\\r\n]/g, '_') || 'document';
+    res.setHeader('Content-Type', DOCUMENT_MIME_TYPES[ext] || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(displayName)}`);
+    res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.sendFile(resolved.filePath, (err) => {
+      if (err && !res.headersSent) res.status(404).end();
+    });
+  } catch (err) {
+    console.error('Download attachment failed:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Server error' });
   }
 });
 

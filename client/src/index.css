@@ -2654,6 +2654,14 @@ body.dark-mode .page-header .req-cal-btn-icon { color: #1E2A5A; }
   outline: none;
   border-color: #00b4d8;
 }
+.sf-toolbar-right select.company-filter-select {
+  width: 149px;
+  min-width: 0;
+}
+.sf-toolbar-right.requests-filters select.filter-select {
+  width: 160px;
+  min-width: 0;
+}
 @media (max-width: 640px) {
   .sf-toolbar { flex-direction: column; align-items: stretch; }
   .sf-toolbar-left { width: 100%; }
@@ -2966,6 +2974,18 @@ body.dark-mode .file-preview-name {
   padding: 16px;
   text-decoration: none;
   color: #374151;
+}
+button.attachment-file {
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+}
+button.attachment-file:hover {
+  color: #1D4ED8;
 }
 .attachment-file-icon {
   font-size: 24px;

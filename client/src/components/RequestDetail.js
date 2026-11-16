@@ -7,7 +7,9 @@ import { showStatusToast } from '../notify';
 import { useTranslation } from '../i18n/useTranslation';
 import { transSeeded, translateActivityMessage } from '../i18n/translateServer';
 import Icon from './Icon';
+import OpenWithDialog from './OpenWithDialog';
 import { formatRequestId } from '../utils/format';
+import { cleanDocumentName, documentKind } from '../utils/documents';
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -37,6 +39,7 @@ export default function RequestDetail() {
   const [newFiles, setNewFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const [openDoc, setOpenDoc] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
   const [loadingActivity, setLoadingActivity] = useState(true);
@@ -729,7 +732,7 @@ export default function RequestDetail() {
   }, [showHistory, request?.statusId, request?.status?.name, activityLog.length]);
 
   const isImageFile = (path) => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(path);
-  const getFileName = (path) => path.split('/').pop();
+  const getFileName = (path) => cleanDocumentName(path);
 
   if (loading) return (
     <div className="page-container">
@@ -825,6 +828,11 @@ export default function RequestDetail() {
                       <div key={`existing-${i}`} className="attachment-item">
                         {isImageFile(path) ? (
                           <img src={`${API_BASE}${path}`} alt={getFileName(path)} className="attachment-image" onClick={() => setLightbox(`${API_BASE}${path}`)} />
+                        ) : documentKind(path) ? (
+                          <button type="button" className="attachment-file" onClick={() => setOpenDoc({ path, name: getFileName(path) })}>
+                            <span className="attachment-file-icon"><Icon name="file" size={16} /></span>
+                            <span>{getFileName(path)}</span>
+                          </button>
                         ) : (
                           <a href={`${API_BASE}${path}`} target="_blank" rel="noopener noreferrer" className="attachment-file">
                             <span className="attachment-file-icon"><Icon name="file" size={16} /></span>
@@ -873,6 +881,11 @@ export default function RequestDetail() {
                         <div key={i} className="attachment-item">
                           {isImageFile(path) ? (
                             <img src={`${API_BASE}${path}`} alt={getFileName(path)} className="attachment-image" onClick={() => setLightbox(`${API_BASE}${path}`)} />
+                          ) : documentKind(path) ? (
+                            <button type="button" className="attachment-file" onClick={() => setOpenDoc({ path, name: getFileName(path) })}>
+                              <span className="attachment-file-icon"><Icon name="file" size={16} /></span>
+                              <span>{getFileName(path)}</span>
+                            </button>
                           ) : (
                             <a href={`${API_BASE}${path}`} target="_blank" rel="noopener noreferrer" className="attachment-file">
                             <span className="attachment-file-icon"><Icon name="file" size={16} /></span>
@@ -1272,6 +1285,13 @@ export default function RequestDetail() {
           <button className="lightbox-close" onClick={() => setLightbox(null)} style={{ position: 'absolute', top: 20, right: 20, background: '#fff', color: '#333', border: 'none', borderRadius: '50%', width: 36, height: 36, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
       )}
+      <OpenWithDialog
+        open={!!openDoc}
+        filePath={openDoc?.path}
+        fileName={openDoc?.name}
+        requestId={request?.id || id}
+        onClose={() => setOpenDoc(null)}
+      />
     </div>
   );
 }

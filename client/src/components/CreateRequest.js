@@ -171,7 +171,9 @@ export default function CreateRequest() {
       } else {
         setBlockedError(false);
         setError(err.message);
-        addToast(t('common.failedToCreateRequest') + ': ' + err.message, 'error');
+        const message = err.message || '';
+        const prefix = t('common.failedToCreateRequest');
+        addToast(message.startsWith(prefix) ? message : prefix + ': ' + message, 'error');
       }
     } finally {
       setLoading(false);
@@ -207,7 +209,7 @@ export default function CreateRequest() {
           )}
           <div className="form-group">
             <label>{t('common.requestTitle')} *</label>
-            <input type="text" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder={t('common.briefDescription')} required />
+            <input type="text" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder={t('common.briefDescription')} maxLength={500} required />
           </div>
           <div className="form-row">
           <div className="form-group">

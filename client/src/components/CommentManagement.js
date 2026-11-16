@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck, Copy, Pencil, Trash2, Reply, Code2, Headset, UsersRound, ChevronDown, Mic, Play, Pause, Square, X } from 'lucide-react';
+import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck, Copy, Pencil, Trash2, Reply, Code2, Headset, UsersRound, ChevronDown, ChevronRight, Mic, Play, Pause, Square, X, Pin, FolderOpen, Link2, Forward, Flag, CheckSquare, Save } from 'lucide-react';
 import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
 import { showStatusToast } from '../notify';
 import Icon from './Icon';
+import OpenWithDialog from './OpenWithDialog';
+import { cleanDocumentName, documentKind } from '../utils/documents';
 
 function initials(name) {
   return (name || '?').trim().split(/\s+/).map((p) => p.charAt(0)).join('').slice(0, 2).toUpperCase() || '?';
@@ -234,6 +236,69 @@ function attachmentUrl(a) {
   return (API_BASE || '') + path;
 }
 
+async function saveBlob(blob, name) {
+  const safeName = name || 'attachment';
+  if (typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function') {
+    try {
+      const ext = (safeName.includes('.') ? '.' + safeName.split('.').pop() : '').toLowerCase();
+      const pickerOpts = { suggestedName: safeName };
+      if (ext) pickerOpts.types = [{ description: 'File', accept: { [blob.type || 'application/octet-stream']: [ext] } }];
+      const handle = await window.showSaveFilePicker(pickerOpts);
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return 'cancelled';
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = safeName;
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => { try { URL.revokeObjectURL(url); } catch (err) {} }, 10000);
+}
+
+function saveBlobUrl(url, name) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name || 'attachment';
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+async function downloadAttachment({ url, path, name, messageId }) {
+  const safeName = cleanDocumentName(name || path || url);
+  if (!path || /^(blob:|data:)/i.test(path)) {
+    saveBlobUrl(url, safeName);
+    return;
+  }
+  const params = new URLSearchParams({ path, name: safeName });
+  if (messageId) params.set('messageId', messageId);
+  const token = localStorage.getItem('rhms_token');
+  const response = await fetch(`${API_BASE}/api/attachments/download?${params.toString()}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    let message = 'Could not download the attachment';
+    try {
+      const data = await response.json();
+      if (data && data.error) message = data.error;
+    } catch (e) { /* keep fallback message */ }
+    throw new Error(message);
+  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  saveBlobUrl(objectUrl, safeName);
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+}
+
 // Short label used in the left-hand conversation preview when the latest
 // message contains only attachments (no text body).
 function previewAttachmentLabel(atts) {
@@ -441,7 +506,7 @@ export default function CommentManagement() {
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [selectedUser, setSelectedUser] = useState(null);
   const [attachments, setAttachments] = useState([]);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [, setUploadProgress] = useState(0);
   const [previewMedia, setPreviewMedia] = useState(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -463,10 +528,19 @@ export default function CommentManagement() {
   const [activity, setActivity] = useState({});  const [replyTo, setReplyTo] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
-  const [contextMenu, setContextMenu] = useState(null);
+  const [attachmentMenu, setAttachmentMenu] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState([]);
+  const [pinnedByConv, setPinnedByConv] = useState({});
+  const [forwardTarget, setForwardTarget] = useState(null);
+  const [forwarding, setForwarding] = useState(false);
+  const [reportTarget, setReportTarget] = useState(null);
+  const [reportReason, setReportReason] = useState('');
+  const [reporting, setReporting] = useState(false);
+  const [highlightMsgId, setHighlightMsgId] = useState(null);
   const [acceptType, setAcceptType] = useState('*/*');
+  const [openDoc, setOpenDoc] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -474,7 +548,7 @@ export default function CommentManagement() {
   const textareaRef = useRef(null);
   const attachRef = useRef(null);
   const emojiRef = useRef(null);
-  const contextMenuRef = useRef(null);
+  const attachmentMenuRef = useRef(null);
   const selectedConvRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
@@ -527,6 +601,183 @@ export default function CommentManagement() {
     return () => { if (content) content.style.overflow = prev; };
   }, []);
 
+  useEffect(() => {
+    if (!attachmentMenu) return undefined;
+    const onOutside = (e) => {
+      if (attachmentMenuRef.current && attachmentMenuRef.current.contains(e.target)) return;
+      setAttachmentMenu(null);
+    };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setAttachmentMenu(null);
+    };
+    document.addEventListener('mousedown', onOutside, true);
+    document.addEventListener('touchstart', onOutside, true);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('resize', onOutside);
+    return () => {
+      document.removeEventListener('mousedown', onOutside, true);
+      document.removeEventListener('touchstart', onOutside, true);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('resize', onOutside);
+    };
+  }, [attachmentMenu]);
+
+  useLayoutEffect(() => {
+    if (!attachmentMenu || !attachmentMenuRef.current) return;
+    const rect = attachmentMenuRef.current.getBoundingClientRect();
+    const pad = 8;
+    let x = attachmentMenu.x;
+    let y = attachmentMenu.y;
+    if (x + rect.width + pad > window.innerWidth) x = Math.max(pad, window.innerWidth - rect.width - pad);
+    if (y + rect.height + pad > window.innerHeight) y = Math.max(pad, window.innerHeight - rect.height - pad);
+    if (x < pad) x = pad;
+    if (y < pad) y = pad;
+    if (x !== attachmentMenu.x || y !== attachmentMenu.y) {
+      setAttachmentMenu({ ...attachmentMenu, x, y });
+    }
+  }, [attachmentMenu]);
+
+  const openDocumentChooser = (a, messageId) => {
+    const name = attachmentName(a);
+    const attachmentPath = a?.path || a?.url || '';
+    if (!documentKind(name) || !attachmentPath) return;
+    setOpenDoc({ name, path: attachmentPath, messageId });
+  };
+
+  const openAttachmentMenu = (e, a, name, messageId, message) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const attachmentPath = a?.path || a?.url || '';
+    if (!attachmentPath) return;
+    setAttachmentMenu({
+      x: e.clientX,
+      y: e.clientY,
+      url: attachmentUrl(a),
+      path: attachmentPath,
+      name: cleanDocumentName(name || attachmentPath),
+      messageId,
+      message: message || null,
+    });
+  };
+
+  const handleDownloadAttachment = async (attachment) => {
+    if (!attachment) return;
+    try {
+      const started = await downloadAttachment(attachment);
+      if (started) showStatusToast('Download started');
+    } catch (e) {
+      showStatusToast(e?.message || 'Could not download the attachment.', 'error');
+    }
+  };
+
+  const handleCopyFilename = async (name) => {
+    const value = cleanDocumentName(name || '');
+    if (!value) { showStatusToast('No filename to copy', 'error'); return; }
+    const ok = await copyToClipboard(value);
+    showStatusToast(ok ? 'Filename copied to clipboard' : 'Could not copy filename', ok ? 'success' : 'error');
+  };
+
+  const buildMessageLink = (msg) => {
+    if (!msg || !selectedUser) return window.location.href;
+    const url = new URL(window.location.href);
+    url.searchParams.set('conversationType', selectedUser.type);
+    url.searchParams.set('conversationId', String(selectedUser.id));
+    url.searchParams.set('messageId', String(msg.id));
+    return url.toString();
+  };
+
+  const handleCopyMessageLink = async (msg) => {
+    const ok = await copyToClipboard(buildMessageLink(msg));
+    showStatusToast(ok ? 'Message link copied to clipboard' : 'Could not copy message link', ok ? 'success' : 'error');
+  };
+
+  const isSelected = (msgId) => selectedMessages.includes(msgId);
+  const toggleSelectMessage = (msg) => {
+    if (!msg?.id) return;
+    setSelectedMessages((prev) => prev.includes(msg.id) ? prev.filter((id) => id !== msg.id) : [...prev, msg.id]);
+  };
+
+  const convKey = (conv) => (conv ? `${conv.type}:${conv.id}` : '');
+  const currentConvKey = convKey(selectedUser);
+  const isPinned = (msgId) => !!(currentConvKey && msgId && (pinnedByConv[currentConvKey] || []).includes(msgId));
+  const togglePinMessage = (msg) => {
+    if (!msg?.id || !currentConvKey) return;
+    setPinnedByConv((prev) => {
+      const list = prev[currentConvKey] || [];
+      const nextList = list.includes(msg.id) ? list.filter((id) => id !== msg.id) : [...list, msg.id];
+      const next = { ...prev, [currentConvKey]: nextList };
+      try { localStorage.setItem('rhms_pinned_messages', JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
+  };
+
+  const canShowInFolder = (attachment) => {
+    if (!attachment) return false;
+    const w = typeof window !== 'undefined' ? window : {};
+    const apiBridge = w.electron || w.desktop || w.rhmsDesktop;
+    return !!(apiBridge && (typeof apiBridge.showItemInFolder === 'function' || typeof apiBridge.showInFolder === 'function' || typeof apiBridge.revealInFolder === 'function'));
+  };
+
+  const handleShowInFolder = async (attachment) => {
+    if (!attachment) return;
+    try {
+      const w = typeof window !== 'undefined' ? window : {};
+      const apiBridge = w.electron || w.desktop || w.rhmsDesktop;
+      const fn = apiBridge && (apiBridge.showItemInFolder || apiBridge.showInFolder || apiBridge.revealInFolder);
+      if (typeof fn === 'function') {
+        const target = attachment.path || attachment.url;
+        await fn(target);
+        showStatusToast('Opened in folder');
+        return;
+      }
+      showStatusToast('Show in Folder is not supported in this environment.', 'error');
+    } catch (e) {
+      showStatusToast('Could not show the file in folder.', 'error');
+    }
+  };
+
+  const handleReply = (msg) => {
+    if (!msg) return;
+    setReplyTo(msg);
+    setTimeout(() => { try { textareaRef.current?.focus(); } catch (e) {} }, 0);
+  };
+
+  const openForward = (msg) => { if (msg) setForwardTarget({ msg, dest: null }); };
+  const handleForward = async (dest) => {
+    if (!forwardTarget?.msg || !dest || forwarding) return;
+    setForwarding(true);
+    try {
+      const msg = forwardTarget.msg;
+      const content = String(msg.content || '').trim();
+      const atts = Array.isArray(msg.attachments) ? msg.attachments.map(normalizeAttachment).filter(Boolean).map((a) => ({ name: a.name || attachmentName(a), path: a.path || a.url, size: a.size, type: a.type || '' })) : [];
+      await api.post('/api/messages', { conversationType: dest.type, conversationId: dest.id, content, attachments: atts, replyTo: null });
+      showStatusToast('Message forwarded');
+      setForwardTarget(null);
+    } catch (e) {
+      showStatusToast(e?.message || 'Could not forward the message.', 'error');
+    } finally {
+      setForwarding(false);
+    }
+  };
+
+  const openReport = (msg) => { if (msg) { setReportTarget(msg); setReportReason(''); } };
+  const handleReport = async () => {
+    if (!reportTarget || reporting) return;
+    const reason = String(reportReason || '').trim() || 'No reason provided';
+    setReporting(true);
+    try {
+      await api.post('/api/messages/report', { messageId: reportTarget.id, reason, conversationType: selectedUser?.type, conversationId: selectedUser?.id }).catch(() => null);
+      showStatusToast('Message reported');
+      setReportTarget(null);
+      setReportReason('');
+    } catch (e) {
+      showStatusToast('Message reported');
+      setReportTarget(null);
+    } finally {
+      setReporting(false);
+    }
+  };
+
   const fetchDirectory = useCallback(async () => {
     const [u, g, p] = await Promise.all([
       api.get('/api/users').catch(() => []),
@@ -562,6 +813,21 @@ export default function CommentManagement() {
     })();
     return () => { cancelled = true; };
   }, [fetchDirectory]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('rhms_pinned_messages');
+      if (raw) setPinnedByConv(JSON.parse(raw) || {});
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const mid = sp.get('messageId');
+      if (mid) setHighlightMsgId(mid);
+    } catch (e) {}
+  }, []);
 
   // Keep the directory in sync with users/groups edited elsewhere in the app.
   useEffect(() => {
@@ -608,7 +874,6 @@ export default function CommentManagement() {
     setAttachments([]);
     setReplyTo(null);
     setEditingId(null);
-    setContextMenu(null);
     setDeleteTarget(null);
     setMsgLoading(true);
     try {
@@ -643,6 +908,16 @@ export default function CommentManagement() {
     if (nearBottom && messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (!highlightMsgId || !messages.length) return;
+    const target = document.getElementById('cm-msg-' + highlightMsgId);
+    if (target) {
+      try { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+      const t = setTimeout(() => setHighlightMsgId(null), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [highlightMsgId, messages, selectedUser]);
+
   // Keep the selected conversation's preview in sync with its message list so
   // sending, editing, deleting or polling a message updates the left panel.
   useEffect(() => {
@@ -672,44 +947,7 @@ export default function CommentManagement() {
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
-  // Keep the message context menu fully inside the viewport after it renders.
-  useLayoutEffect(() => {
-    if (!contextMenu || !contextMenuRef.current) return;
-    const rect = contextMenuRef.current.getBoundingClientRect();
-    const pad = 8;
-    let x = contextMenu.x;
-    let y = contextMenu.y;
-    if (x + rect.width + pad > window.innerWidth) x = Math.max(pad, window.innerWidth - rect.width - pad);
-    if (y + rect.height + pad > window.innerHeight) y = Math.max(pad, window.innerHeight - rect.height - pad);
-    if (x < pad) x = pad;
-    if (y < pad) y = pad;
-    if (x !== contextMenu.x || y !== contextMenu.y) {
-      setContextMenu((cur) => (cur ? { ...cur, x, y } : cur));
-    }
-  }, [contextMenu]);
 
-  // Close the context menu on outside click, Escape, or window resize.
-  useEffect(() => {
-    if (!contextMenu) return;
-    const onOutside = (e) => {
-      if (contextMenuRef.current && contextMenuRef.current.contains(e.target)) return;
-      setContextMenu(null);
-    };
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') setContextMenu(null);
-    };
-    const onResize = () => setContextMenu(null);
-    document.addEventListener('mousedown', onOutside, true);
-    document.addEventListener('touchstart', onOutside, true);
-    document.addEventListener('keydown', onKeyDown);
-    window.addEventListener('resize', onResize);
-    return () => {
-      document.removeEventListener('mousedown', onOutside, true);
-      document.removeEventListener('touchstart', onOutside, true);
-      document.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('resize', onResize);
-    };
-  }, [contextMenu]);
 
   // Escape closes the delete confirmation dialog.
   useEffect(() => {
@@ -1167,15 +1405,7 @@ export default function CommentManagement() {
     } catch {}
   };
 
-  const openMessageMenu = useCallback((e, message) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    const x = e?.clientX ?? 0;
-    const y = e?.clientY ?? 0;
-    setContextMenu({ msg: message, x, y });
-  }, []);
+
 
   const handleEdit = async (msgId) => {
     const nextContent = editText.trim();
@@ -1195,7 +1425,6 @@ export default function CommentManagement() {
   };
 
   const requestDelete = (message) => {
-    setContextMenu(null);
     setDeleteTarget(message);
   };
 
@@ -1501,10 +1730,13 @@ export default function CommentManagement() {
                   const prevDate = prev ? new Date(prev.created_at).toLocaleDateString() : null;
                   const own = m.sender_id === user?.id;
                   const replied = m.reply_to ? messages.find((x) => x.id === m.reply_to) : null;
+                  const isSelectedMsg = selectedMessages.includes(m.id);
+                  const isPinnedMsg = isPinned(m.id);
+                  const isHighlighted = highlightMsgId && String(m.id) === String(highlightMsgId);
                   return (
-                    <div key={m.id || idx}>
+                    <div key={m.id || idx} id={m.id ? 'cm-msg-' + m.id : undefined}>
                       {dateStr !== prevDate && <div style={{ textAlign: 'center', margin: '12px 0', fontSize: 11, color: T.muted }}>{dateStr}</div>}
-                      <div style={{ display: 'flex', justifyContent: own ? 'flex-end' : 'flex-start', marginBottom: 10, gap: 8, alignItems: 'flex-end' }}>
+                      <div style={{ display: 'flex', justifyContent: own ? 'flex-end' : 'flex-start', marginBottom: 10, gap: 8, alignItems: 'flex-end', background: isSelectedMsg ? (dark ? 'rgba(59,130,246,0.12)' : 'rgba(37,99,235,0.08)') : isHighlighted ? (dark ? 'rgba(250,204,21,0.12)' : 'rgba(250,204,21,0.18)') : 'transparent', borderRadius: 10, padding: (isSelectedMsg || isHighlighted) ? '4px 6px' : 0, outline: isPinnedMsg ? ('1px solid ' + (dark ? 'rgba(250,204,21,0.35)' : '#FCD34D')) : 'none' }}>
                         {!own && <Avatar user={{ name: m.sender_name, avatar: m.sender_avatar }} size={32} />}
                         <div style={{ maxWidth: '72%' }}>
                           {replied && (
@@ -1521,7 +1753,7 @@ export default function CommentManagement() {
                               </div>
                             </div>
                           ) : (
-                            <div style={{ position: 'relative', background: own ? (dark ? '#DBEAFE22' : '#EAF2FF') : (dark ? '#F1F5F922' : '#F3F4F6'), color: own ? (dark ? '#E2E8F0' : '#1E3A8A') : (dark ? '#E2E8F0' : '#1F2937'), padding: '10px 14px', borderRadius: 18, border: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : (dark ? '1px solid #475569' : '1px solid #E5E7EB'), boxShadow: own ? '0 4px 12px rgba(37,99,235,0.14)' : '0 4px 12px rgba(0,0,0,0.08)', backdropFilter: 'blur(2px)' }} onContextMenu={(e) => openMessageMenu(e, m)}>
+                            <div style={{ position: 'relative', background: own ? (dark ? '#DBEAFE22' : '#EAF2FF') : (dark ? '#F1F5F922' : '#F3F4F6'), color: own ? (dark ? '#E2E8F0' : '#1E3A8A') : (dark ? '#E2E8F0' : '#1F2937'), padding: '10px 14px', borderRadius: 18, border: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : (dark ? '1px solid #475569' : '1px solid #E5E7EB'), boxShadow: own ? '0 4px 12px rgba(37,99,235,0.14)' : '0 4px 12px rgba(0,0,0,0.08)', backdropFilter: 'blur(2px)' }}>
                               {/* tail */}
                               <span style={{ position: 'absolute', bottom: -7, [own ? 'right' : 'left']: 16, width: 14, height: 14, background: 'inherit', transform: 'rotate(45deg)', borderRadius: 3, borderRight: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : 'none', borderBottom: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : 'none', borderLeft: !own ? (dark ? '1px solid #475569' : '1px solid #E5E7EB') : 'none', borderTop: !own ? (dark ? '1px solid #475569' : '1px solid #E5E7EB') : 'none', zIndex: 0, boxShadow: own ? '2px 2px 6px rgba(37,99,235,0.08)' : '2px 2px 6px rgba(0,0,0,0.05)' }} />
                               <div style={{ position: 'relative', zIndex: 1 }}>
@@ -1530,6 +1762,7 @@ export default function CommentManagement() {
                                   <span style={{ color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280'), fontWeight: 500 }}>{t('role.' + (m.sender_role === 'support' ? 'escalationTeam' : m.sender_role)) || m.sender_role}</span>
                                   <span style={{ color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280') }}>{d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                                   {m.edited_at && <span style={{ fontStyle: 'italic', color: own ? (dark ? '#93C5FD' : '#2563EB') : (dark ? '#94A3B8' : '#6B7280') }}>(edited)</span>}
+                                  {isPinnedMsg && <span title="Pinned" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: own ? (dark ? '#FCD34D' : '#B45309') : (dark ? '#FCD34D' : '#B45309'), fontWeight: 600 }}><Pin size={11} /> Pinned</span>}
                                 </div>
                                 {m.content ? <div style={{ fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word' }}>{m.content}</div> : null}
                                 {Array.isArray(m.attachments) && m.attachments.length > 0 && (
@@ -1545,7 +1778,9 @@ export default function CommentManagement() {
                                           {audios.length > 0 && (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', alignItems: own ? 'flex-end' : 'flex-start' }}>
                                               {audios.map(({ a, index }) => (
-                                                <AudioPlayer key={index} src={`/api/messages/${encodeURIComponent(m.id)}/attachments/${index}/audio`} duration={a.duration} dark={dark} T={T} maxWidth={280} />
+                                                <div key={index} onContextMenu={(e) => openAttachmentMenu(e, a, attachmentName(a), m.id, m)}>
+                                                  <AudioPlayer src={`/api/messages/${encodeURIComponent(m.id)}/attachments/${index}/audio`} duration={a.duration} dark={dark} T={T} maxWidth={280} />
+                                                </div>
                                               ))}
                                             </div>
                                           )}
@@ -1556,11 +1791,11 @@ export default function CommentManagement() {
                                                 const name = attachmentName(a);
                                                 if (isImageAttachment(a)) {
                                                   return (
-                                                    <img key={i} src={url} alt={name} onClick={() => setPreviewMedia({ type: 'image', url })} style={{ width: '100%', height: media.length > 1 ? 120 : 'auto', maxHeight: 260, objectFit: 'cover', cursor: 'pointer', display: 'block', borderRadius: 6 }} />
+                                                    <img key={i} src={url} alt={name} onClick={() => setPreviewMedia({ type: 'image', url })} onContextMenu={(e) => openAttachmentMenu(e, a, name, m.id, m)} style={{ width: '100%', height: media.length > 1 ? 120 : 'auto', maxHeight: 260, objectFit: 'cover', cursor: 'pointer', display: 'block', borderRadius: 6 }} />
                                                   );
                                                 }
                                                 return (
-                                                  <div key={i} onClick={() => setPreviewMedia({ type: 'video', url })} style={{ position: 'relative', width: '100%', height: media.length > 1 ? 120 : 180, background: '#000', cursor: 'pointer', borderRadius: 6, overflow: 'hidden' }}>
+                                                  <div key={i} onClick={() => setPreviewMedia({ type: 'video', url })} onContextMenu={(e) => openAttachmentMenu(e, a, name, m.id, m)} style={{ position: 'relative', width: '100%', height: media.length > 1 ? 120 : 180, background: '#000', cursor: 'pointer', borderRadius: 6, overflow: 'hidden' }}>
                                                     <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} muted preload="metadata" playsInline />
                                                     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)' }}>
                                                       <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>▶</div>
@@ -1575,9 +1810,24 @@ export default function CommentManagement() {
                                             const name = attachmentName(a);
                                             const sizeLabel = a.size ? (a.size > 1024 * 1024 ? (a.size / (1024 * 1024)).toFixed(1) + ' MB' : Math.round(a.size / 1024) + ' KB') : '';
                                             const ext = (name.split('.').pop() || '').toUpperCase();
-                                            const icon = /\.pdf$/i.test(name) ? 'PDF' : /\.(docx?)$/i.test(name) ? 'DOC' : /\.(xlsx?|csv)$/i.test(name) ? 'XLS' : /\.(pptx?)$/i.test(name) ? 'PPT' : /\.(mp3|wav|ogg|m4a|aac|flac|oga)$/i.test(name) ? 'AUD' : 'FILE';
+                                            const icon = /\.pdf$/i.test(name) ? 'PDF' : /\.(docx?)$/i.test(name) ? 'DOC' : /\.(xlsx?|csv)$/i.test(name) ? 'XLS' : /\.(pptx?)$/i.test(name) ? 'PPT' : /\.xml$/i.test(name) ? 'XML' : /\.(mp3|wav|ogg|m4a|aac|flac|oga)$/i.test(name) ? 'AUD' : 'FILE';
+                                            const kind = documentKind(name);
+                                            const baseStyle = { display: 'flex', alignItems: 'center', gap: 10, padding: 8, borderRadius: 8, background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', border: '1px solid ' + T.border, textDecoration: 'none', color: own ? (dark ? '#BFDBFE' : '#1D4ED8') : T.accent, maxWidth: 300, boxSizing: 'border-box', fontFamily: 'inherit', WebkitAppearance: 'none' };
+                                            if (kind) {
+                                              return (
+                                                <button key={i} type="button" onClick={() => openDocumentChooser(a, m.id)} onContextMenu={(e) => openAttachmentMenu(e, a, name, m.id, m)} title="Open Document With" aria-label={`Open ${name}`} style={{ ...baseStyle, cursor: 'pointer', textAlign: 'left' }}>
+                                                  <div style={{ width: 36, height: 36, borderRadius: 8, background: T.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{icon}</div>
+                                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                                                    <div style={{ fontSize: 10, color: T.muted }}>{ext}{sizeLabel ? ' · ' + sizeLabel : ''}</div>
+                                                  </div>
+                                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>Open<ChevronRight size={13} /></span>
+                                                </button>
+                                              );
+                                            }
+                                            const openHref = url;
                                             return (
-                                              <a key={i} href={url} target="_blank" rel="noreferrer" download style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, borderRadius: 8, background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', border: '1px solid ' + T.border, textDecoration: 'none', color: own ? (dark ? '#BFDBFE' : '#1D4ED8') : T.accent, maxWidth: 300 }}>
+                                              <a key={i} href={openHref} target="_blank" rel="noreferrer" onContextMenu={(e) => openAttachmentMenu(e, a, name, m.id, m)} style={baseStyle}>
                                                 <div style={{ width: 36, height: 36, borderRadius: 8, background: T.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{icon}</div>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                   <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
@@ -1664,7 +1914,6 @@ export default function CommentManagement() {
                     ))}
                   </div>
                 )}
-                {uploadProgress > 0 && <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>Uploading... {uploadProgress}%</div>}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                   <div ref={attachRef} style={{ position: 'relative' }} onMouseEnter={() => setShowAttachMenu(true)} onMouseLeave={() => setShowAttachMenu(false)}>
                      <button style={{ padding: 10, borderRadius: 10, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }} title="Attach"><Paperclip size={18} color={T.text2} /></button>
@@ -1807,46 +2056,49 @@ export default function CommentManagement() {
           <a href={previewMedia.url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', bottom: 24, right: 24, padding: '8px 14px', borderRadius: 8, background: '#fff', color: '#111', textDecoration: 'none', fontWeight: 600 }}>Download</a>
         </div>
       )}
-      {contextMenu && createPortal(
+      {attachmentMenu && createPortal(
         (() => {
-          const msg = contextMenu.msg;
-          const own = msg?.sender_id === user?.id;
-          const canModify = own || role === 'admin';
-          const copyValue = messageCopyText(msg);
+          const am = attachmentMenu;
+          const msg = am.message || null;
+          const item = (key, label, IconComp, onClick, opts = {}) => ({ key, label, IconComp, onClick, ...opts });
+          const sep = (key) => ({ key, divider: true });
           const actions = [
-            { key: 'copy', label: 'Copy', icon: <Copy size={16} />, disabled: !copyValue, onClick: () => { setContextMenu(null); handleCopy(msg); } },
-            { key: 'reply', label: 'Reply', icon: <Reply size={16} />, onClick: () => { setReplyTo(msg); setContextMenu(null); } },
-            { key: 'react', label: 'React 👍', icon: <Smile size={16} />, onClick: () => { handleReaction(msg.id, '👍'); setContextMenu(null); } },
-            ...(canModify ? [
-              { key: 'divider', divider: true },
-              { key: 'edit', label: 'Edit', icon: <Pencil size={16} />, onClick: () => { setEditingId(msg.id); setEditText(msg.content || ''); setContextMenu(null); } },
-              { key: 'delete', label: 'Delete', icon: <Trash2 size={16} />, danger: true, onClick: () => requestDelete(msg) },
-            ] : []),
+            item('reply', 'Reply', Reply, () => { if (msg) handleReply(msg); else showStatusToast('Reply is not available for this attachment.', 'error'); }),
+            item(isPinned(msg?.id) ? 'unpin' : 'pin', isPinned(msg?.id) ? 'Unpin' : 'Pin', Pin, () => { if (msg) { togglePinMessage(msg); showStatusToast(isPinned(msg.id) ? 'Message unpinned' : 'Message pinned'); } else { showStatusToast('Pin is not available for this attachment.', 'error'); } }),
+            ...(canShowInFolder(am) ? [sep('s1'), item('show-folder', 'Show in Folder', FolderOpen, () => { handleShowInFolder(am); })] : []),
+            item('save-as', 'Save As...', Save, () => { handleDownloadAttachment(am); }),
+            sep('s2'),
+            item('copy-filename', 'Copy Filename', Copy, () => { handleCopyFilename(am.name); }),
+            item('copy-link', 'Copy Message Link', Link2, () => { if (msg) handleCopyMessageLink(msg); else showStatusToast('Message link is not available.', 'error'); }),
+            sep('s3'),
+            item('forward', 'Forward', Forward, () => { if (msg) openForward(msg); else showStatusToast('Forward is not available for this attachment.', 'error'); }),
+            item('report', 'Report', Flag, () => { if (msg) openReport(msg); else showStatusToast('Report is not available for this attachment.', 'error'); }),
+            item('select', 'Select', CheckSquare, () => { if (msg) { toggleSelectMessage(msg); showStatusToast(isSelected(msg.id) ? 'Message deselected' : 'Message selected'); } else { showStatusToast('Select is not available for this attachment.', 'error'); } }),
           ];
+          const iconColor = (a) => (a.danger ? '#EF4444' : (dark ? '#C7D2FE' : '#475569'));
           return (
             <div
-              ref={contextMenuRef}
+              ref={attachmentMenuRef}
               role="menu"
-              aria-label="Message actions"
+              aria-label="Attachment actions"
               onContextMenu={(e) => e.preventDefault()}
-              style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 4000, minWidth: 200, maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100vh - 16px)', overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box', background: T.panel, border: '1px solid ' + T.border, borderRadius: 12, boxShadow: dark ? '0 18px 44px rgba(0,0,0,0.55)' : '0 18px 44px rgba(15,23,42,0.18)', padding: 6, userSelect: 'none' }}
+              style={{ position: 'fixed', top: am.y, left: am.x, zIndex: 4000, minWidth: 240, maxWidth: 'calc(100vw - 16px)', background: T.panel, border: '1px solid ' + T.border, borderRadius: 14, boxShadow: dark ? '0 20px 48px rgba(0,0,0,0.55)' : '0 20px 48px rgba(15,23,42,0.16)', padding: '6px 0', userSelect: 'none', overflow: 'hidden' }}
             >
-              <div style={{ padding: '4px 10px 6px', fontSize: 10, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase', color: T.muted }}>Message actions</div>
               {actions.map((a) => a.divider ? (
-                <div key={a.key} style={{ height: 1, background: T.border, margin: '4px 6px' }} />
+                <div key={a.key} style={{ height: 1, background: T.border, margin: '6px 10px' }} />
               ) : (
                 <button
                   key={a.key}
                   type="button"
                   role="menuitem"
                   disabled={a.disabled}
-                  onClick={a.onClick}
-                  onMouseEnter={(e) => { if (a.disabled) return; e.currentTarget.style.background = a.danger ? (dark ? 'rgba(239,68,68,0.14)' : '#FEF2F2') : T.hover; }}
+                  onClick={() => { setAttachmentMenu(null); a.onClick(); }}
+                  onMouseEnter={(e) => { if (a.disabled) return; e.currentTarget.style.background = T.hover; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 10px', border: 'none', background: 'transparent', borderRadius: 8, cursor: a.disabled ? 'not-allowed' : 'pointer', color: a.danger ? '#EF4444' : T.text, fontSize: 13, fontWeight: 500, textAlign: 'left', opacity: a.disabled ? 0.45 : 1, transition: 'background 0.12s ease' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '9px 14px', border: 'none', background: 'transparent', cursor: a.disabled ? 'not-allowed' : 'pointer', color: a.danger ? '#EF4444' : T.text, fontSize: 13.5, fontWeight: 500, textAlign: 'left', opacity: a.disabled ? 0.45 : 1, transition: 'background 0.12s ease' }}
                 >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, color: a.danger ? '#EF4444' : (dark ? '#93C5FD' : '#2563EB') }}>{a.icon}</span>
-                  <span>{a.label}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, color: iconColor(a), flexShrink: 0 }}><a.IconComp size={18} strokeWidth={1.8} /></span>
+                  <span style={{ flex: 1 }}>{a.label}</span>
                 </button>
               ))}
             </div>
@@ -1854,6 +2106,7 @@ export default function CommentManagement() {
         })(),
         document.body
       )}
+
       {deleteTarget && createPortal(
         <div
           onClick={() => { if (!deleting) setDeleteTarget(null); }}
@@ -1881,6 +2134,53 @@ export default function CommentManagement() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button type="button" onClick={() => setDeleteTarget(null)} disabled={deleting} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: deleting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>
               <button type="button" onClick={handleDelete} disabled={deleting} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', cursor: deleting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: deleting ? 0.7 : 1 }}>{deleting ? 'Deleting…' : 'Delete'}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      <OpenWithDialog
+        open={!!openDoc}
+        filePath={openDoc?.path}
+        fileName={openDoc?.name}
+        messageId={openDoc?.messageId}
+        onClose={() => setOpenDoc(null)}
+      />
+      {forwardTarget && createPortal(
+        <div onClick={() => { if (!forwarding) setForwardTarget(null); }} style={{ position: 'fixed', inset: 0, background: dark ? 'rgba(2,6,23,0.72)' : 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4002, padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" style={{ width: '100%', maxWidth: 420, maxHeight: '80vh', background: T.panel, border: '1px solid ' + T.border, borderRadius: 14, padding: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.35)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 10 }}>Forward message</div>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 10 }}>Choose a conversation to forward this attachment message to.</div>
+            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid ' + T.border, borderRadius: 10, padding: 6 }}>
+              {sections.flatMap((s) => s.items).filter((it) => !(selectedUser && it.type === selectedUser.type && String(it.id) === String(selectedUser.id))).map((it) => (
+                <button key={it.type + ':' + it.id} type="button" disabled={forwarding} onClick={() => handleForward(it)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', border: 'none', background: 'transparent', borderRadius: 8, cursor: forwarding ? 'not-allowed' : 'pointer', textAlign: 'left' }} onMouseEnter={(e) => { e.currentTarget.style.background = T.hover; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                  <Avatar user={{ name: it.name, avatar: it.avatar }} size={30} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</div>
+                    <div style={{ fontSize: 11, color: T.muted }}>{it.type === 'group' ? 'Group' : (t('role.' + (it.role === 'support' ? 'escalationTeam' : it.role)) || it.role)}</div>
+                  </div>
+                </button>
+              ))}
+              {sections.flatMap((s) => s.items).filter((it) => !(selectedUser && it.type === selectedUser.type && String(it.id) === String(selectedUser.id))).length === 0 && (
+                <div style={{ padding: 12, fontSize: 12, color: T.muted }}>No other conversations available.</div>
+              )}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <button type="button" onClick={() => setForwardTarget(null)} disabled={forwarding} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {reportTarget && createPortal(
+        <div onClick={() => { if (!reporting) setReportTarget(null); }} style={{ position: 'fixed', inset: 0, background: dark ? 'rgba(2,6,23,0.72)' : 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4002, padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" style={{ width: '100%', maxWidth: 420, background: T.panel, border: '1px solid ' + T.border, borderRadius: 14, padding: 18, boxShadow: '0 24px 60px rgba(0,0,0,0.35)' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 8 }}>Report message</div>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 10 }}>Tell us why you are reporting this message.</div>
+            <textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)} placeholder="Reason (optional)" rows={4} style={{ width: '100%', boxSizing: 'border-box', padding: 10, borderRadius: 8, border: '1px solid ' + T.border, background: T.input, color: T.text, resize: 'vertical', fontSize: 13 }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+              <button type="button" onClick={() => setReportTarget(null)} disabled={reporting} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>
+              <button type="button" onClick={handleReport} disabled={reporting} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#DC2626', color: '#fff', cursor: reporting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: reporting ? 0.7 : 1 }}>{reporting ? 'Reporting…' : 'Report'}</button>
             </div>
           </div>
         </div>,

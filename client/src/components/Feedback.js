@@ -98,6 +98,8 @@ export default function Feedback() {
     return 'veryDissatisfied';
   };
 
+  const feedbackIds = new Map(feedback.map((f, i) => [f.id, feedback.length - i]));
+
   const filtered = feedback.filter(f => {
     if (satisfactionFilter && satisfactionKeyFor(f.rating) !== satisfactionFilter) return false;
     if (!searchQuery) return true;
@@ -110,7 +112,7 @@ export default function Feedback() {
     if (!sort.key) return 0;
     let aVal, bVal;
     switch (sort.key) {
-      case 'id': aVal = a.id || 0; bVal = b.id || 0; break;
+      case 'id': aVal = feedbackIds.get(a.id) || 0; bVal = feedbackIds.get(b.id) || 0; break;
       case 'rating': aVal = a.rating || 0; bVal = b.rating || 0; break;
       case 'user_name': aVal = (a.user_name || '').toLowerCase(); bVal = (b.user_name || '').toLowerCase(); break;
       case 'comment': aVal = (a.comment || '').toLowerCase(); bVal = (b.comment || '').toLowerCase(); break;
@@ -452,7 +454,7 @@ export default function Feedback() {
                   {paginated.map((f, i) => (
                     <tr key={f.id}>
                       <td><span className="feedback-cell-muted">
-                        {(page - 1) * perPage + i + 1}
+                        {feedbackIds.get(f.id) ?? ((page - 1) * perPage + i + 1)}
                       </span></td>
                       <td>{renderRating(f.rating)}</td>
                       <td>
