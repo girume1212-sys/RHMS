@@ -513,6 +513,12 @@ export default function CommentManagement() {
   const [emojiTab, setEmojiTab] = useState('stickers');
   const [emojiSearch, setEmojiSearch] = useState('');
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const attachCloseTimerRef = useRef(null);
+  const emojiCloseTimerRef = useRef(null);
+  const openAttachMenu = () => { if (attachCloseTimerRef.current) { clearTimeout(attachCloseTimerRef.current); attachCloseTimerRef.current = null; } setShowAttachMenu(true); };
+  const scheduleCloseAttachMenu = () => { if (attachCloseTimerRef.current) clearTimeout(attachCloseTimerRef.current); attachCloseTimerRef.current = setTimeout(() => { setShowAttachMenu(false); attachCloseTimerRef.current = null; }, 180); };
+  const openEmojiPicker = () => { if (emojiCloseTimerRef.current) { clearTimeout(emojiCloseTimerRef.current); emojiCloseTimerRef.current = null; } setShowEmojiPicker(true); };
+  const scheduleCloseEmojiPicker = () => { if (emojiCloseTimerRef.current) clearTimeout(emojiCloseTimerRef.current); emojiCloseTimerRef.current = setTimeout(() => { setShowEmojiPicker(false); emojiCloseTimerRef.current = null; }, 180); };
   const [messages, setMessages] = useState([]);
   const [msgLoading, setMsgLoading] = useState(false);
   const [text, setText] = useState('');
@@ -649,15 +655,47 @@ export default function CommentManagement() {
     e.stopPropagation();
     const attachmentPath = a?.path || a?.url || '';
     if (!attachmentPath) return;
+    const estW = 240;
+    const estH = 420;
+    const pad = 8;
     setAttachmentMenu({
-      x: e.clientX,
-      y: e.clientY,
+      type: 'attachment',
+      x: Math.max(pad, Math.min(e.clientX, window.innerWidth - estW - pad)),
+      y: Math.max(pad, Math.min(e.clientY, window.innerHeight - estH - pad)),
       url: attachmentUrl(a),
       path: attachmentPath,
       name: cleanDocumentName(name || attachmentPath),
       messageId,
       message: message || null,
     });
+  };
+
+  const openMessageMenu = (e, message) => {
+    if (!message) return;
+    const t = e.target;
+    if (t && t.closest && t.closest('button, a, input, textarea, select, [contenteditable="true"], audio, video, [data-attachment-item="true"]')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const estW = 240;
+    const estH = 360;
+    const pad = 8;
+    setAttachmentMenu({
+      type: 'message',
+      x: Math.max(pad, Math.min(e.clientX, window.innerWidth - estW - pad)),
+      y: Math.max(pad, Math.min(e.clientY, window.innerHeight - estH - pad)),
+      name: '',
+      path: '',
+      url: '',
+      messageId: message.id,
+      message,
+    });
+  };
+
+  const handleCopyMessageText = async (msg) => {
+    const text = messageCopyText(msg);
+    if (!text) { showStatusToast('No message text to copy', 'error'); return; }
+    const ok = await copyToClipboard(text);
+    showStatusToast(ok ? 'Message text copied to clipboard' : 'Could not copy message text', ok ? 'success' : 'error');
   };
 
   const handleDownloadAttachment = async (attachment) => {
@@ -1736,7 +1774,15 @@ export default function CommentManagement() {
                   return (
                     <div key={m.id || idx} id={m.id ? 'cm-msg-' + m.id : undefined}>
                       {dateStr !== prevDate && <div style={{ textAlign: 'center', margin: '12px 0', fontSize: 11, color: T.muted }}>{dateStr}</div>}
-                      <div style={{ display: 'flex', justifyContent: own ? 'flex-end' : 'flex-start', marginBottom: 10, gap: 8, alignItems: 'flex-end', background: isSelectedMsg ? (dark ? 'rgba(59,130,246,0.12)' : 'rgba(37,99,235,0.08)') : isHighlighted ? (dark ? 'rgba(250,204,21,0.12)' : 'rgba(250,204,21,0.18)') : 'transparent', borderRadius: 10, padding: (isSelectedMsg || isHighlighted) ? '4px 6px' : 0, outline: isPinnedMsg ? ('1px solid ' + (dark ? 'rgba(250,204,21,0.35)' : '#FCD34D')) : 'none' }}>
+                      <div
+                        onClick={(e) => {
+                          if (!isSelectedMsg || editingId === m.id) return;
+                          const t = e.target;
+                          if (t && t.closest && t.closest('button, a, input, textarea, select, [contenteditable="true"], audio, video, [role="menu"], [role="menuitem"], [data-attachment-item="true"]')) return;
+                          toggleSelectMessage(m);
+                        }}
+                        style={{ display: 'flex', justifyContent: own ? 'flex-end' : 'flex-start', marginBottom: 10, gap: 8, alignItems: 'flex-end', background: isSelectedMsg ? (dark ? 'rgba(59,130,246,0.12)' : 'rgba(37,99,235,0.08)') : isHighlighted ? (dark ? 'rgba(250,204,21,0.12)' : 'rgba(250,204,21,0.18)') : 'transparent', borderRadius: 10, padding: (isSelectedMsg || isHighlighted) ? '4px 6px' : 0, outline: isPinnedMsg ? ('1px solid ' + (dark ? 'rgba(250,204,21,0.35)' : '#FCD34D')) : 'none', cursor: (isSelectedMsg && editingId !== m.id) ? 'pointer' : 'default' }}
+                      >
                         {!own && <Avatar user={{ name: m.sender_name, avatar: m.sender_avatar }} size={32} />}
                         <div style={{ maxWidth: '72%' }}>
                           {replied && (
@@ -1753,7 +1799,7 @@ export default function CommentManagement() {
                               </div>
                             </div>
                           ) : (
-                            <div style={{ position: 'relative', background: own ? (dark ? '#DBEAFE22' : '#EAF2FF') : (dark ? '#F1F5F922' : '#F3F4F6'), color: own ? (dark ? '#E2E8F0' : '#1E3A8A') : (dark ? '#E2E8F0' : '#1F2937'), padding: '10px 14px', borderRadius: 18, border: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : (dark ? '1px solid #475569' : '1px solid #E5E7EB'), boxShadow: own ? '0 4px 12px rgba(37,99,235,0.14)' : '0 4px 12px rgba(0,0,0,0.08)', backdropFilter: 'blur(2px)' }}>
+                            <div onContextMenu={(e) => openMessageMenu(e, m)} style={{ position: 'relative', background: own ? (dark ? '#DBEAFE22' : '#EAF2FF') : (dark ? '#F1F5F922' : '#F3F4F6'), color: own ? (dark ? '#E2E8F0' : '#1E3A8A') : (dark ? '#E2E8F0' : '#1F2937'), padding: '10px 14px', borderRadius: 18, border: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : (dark ? '1px solid #475569' : '1px solid #E5E7EB'), boxShadow: own ? '0 4px 12px rgba(37,99,235,0.14)' : '0 4px 12px rgba(0,0,0,0.08)', backdropFilter: 'blur(2px)' }}>
                               {/* tail */}
                               <span style={{ position: 'absolute', bottom: -7, [own ? 'right' : 'left']: 16, width: 14, height: 14, background: 'inherit', transform: 'rotate(45deg)', borderRadius: 3, borderRight: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : 'none', borderBottom: own ? (dark ? '1px solid #2563EB55' : '1px solid #93C5FD') : 'none', borderLeft: !own ? (dark ? '1px solid #475569' : '1px solid #E5E7EB') : 'none', borderTop: !own ? (dark ? '1px solid #475569' : '1px solid #E5E7EB') : 'none', zIndex: 0, boxShadow: own ? '2px 2px 6px rgba(37,99,235,0.08)' : '2px 2px 6px rgba(0,0,0,0.05)' }} />
                               <div style={{ position: 'relative', zIndex: 1 }}>
@@ -1915,10 +1961,11 @@ export default function CommentManagement() {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                  <div ref={attachRef} style={{ position: 'relative' }} onMouseEnter={() => setShowAttachMenu(true)} onMouseLeave={() => setShowAttachMenu(false)}>
+                  <div ref={attachRef} style={{ position: 'relative' }} onMouseEnter={openAttachMenu} onMouseLeave={scheduleCloseAttachMenu}>
                      <button style={{ padding: 10, borderRadius: 10, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }} title="Attach"><Paperclip size={18} color={T.text2} /></button>
                      {showAttachMenu && (
-                       <div style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 8, background: T.panel, border: '1px solid ' + T.border, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: 6, zIndex: 60, minWidth: 190 }}>
+                       <div onMouseEnter={openAttachMenu} onMouseLeave={scheduleCloseAttachMenu} style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 0, paddingBottom: 8, zIndex: 60 }}>
+                         <div style={{ background: T.panel, border: '1px solid ' + T.border, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: 6, minWidth: 190 }}>
                          {[
                            { label: 'Photos', icon: <ImageIcon size={16} color="#2B547E" />, accept: 'image/*' },
                            { label: 'Videos', icon: <Video size={16} color="#2B547E" />, accept: 'video/*' },
@@ -1933,6 +1980,7 @@ export default function CommentManagement() {
                              {opt.icon} {opt.label}
                            </button>
                          ))}
+                         </div>
                        </div>
                      )}
                    </div>
@@ -1948,10 +1996,11 @@ export default function CommentManagement() {
                     onFocus={(e) => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.boxShadow = '0 0 0 3px ' + (dark ? 'rgba(59,130,246,0.2)' : 'rgba(8,102,245,0.15)'); }}
                     onBlur={(e) => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = 'none'; }}
                   />
-                  <div ref={emojiRef} style={{ position: 'relative' }} onMouseEnter={() => setShowEmojiPicker(true)} onMouseLeave={() => setShowEmojiPicker(false)}>
+                  <div ref={emojiRef} style={{ position: 'relative' }} onMouseEnter={openEmojiPicker} onMouseLeave={scheduleCloseEmojiPicker}>
                      <button style={{ padding: 10, borderRadius: 10, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }} title="Emoji"><Smile size={18} color={T.text2} /></button>
                      {showEmojiPicker && (
-                       <div style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: 8, background: T.panel, border: '1px solid ' + T.border, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', width: 320, maxHeight: 360, overflow: 'hidden', zIndex: 60, display: 'flex', flexDirection: 'column' }}>
+                       <div onMouseEnter={openEmojiPicker} onMouseLeave={scheduleCloseEmojiPicker} style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: 0, paddingBottom: 8, zIndex: 60 }}>
+                         <div style={{ background: T.panel, border: '1px solid ' + T.border, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', width: 320, maxHeight: 360, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                          <div style={{ display: 'flex', borderBottom: '1px solid ' + T.border, background: T.surface }}>
                            {['stickers','emoji','more'].map((tab) => (
                              <button key={tab} onClick={() => setEmojiTab(tab)}
@@ -2017,6 +2066,7 @@ export default function CommentManagement() {
                              </div>
                            )}
                          </div>
+                         </div>
                        </div>
                      )}
                     </div>
@@ -2060,11 +2110,24 @@ export default function CommentManagement() {
         (() => {
           const am = attachmentMenu;
           const msg = am.message || null;
+          const isMsgMenu = am.type === 'message';
           const item = (key, label, IconComp, onClick, opts = {}) => ({ key, label, IconComp, onClick, ...opts });
           const sep = (key) => ({ key, divider: true });
-          const actions = [
+          const canDeleteMsg = !!(msg && (msg.sender_id === user?.id || user?.role === 'admin'));
+          const actions = isMsgMenu ? [
+            item('reply', 'Reply', Reply, () => { if (msg) handleReply(msg); }),
+            item(isPinned(msg?.id) ? 'unpin' : 'pin', isPinned(msg?.id) ? 'Unpin' : 'Pin', Pin, () => { if (msg) { const was = isPinned(msg.id); togglePinMessage(msg); showStatusToast(was ? 'Message unpinned' : 'Message pinned'); } }),
+            sep('s1'),
+            item('copy-text', 'Copy Message Text', Copy, () => { if (msg) handleCopyMessageText(msg); }),
+            item('copy-link', 'Copy Message Link', Link2, () => { if (msg) handleCopyMessageLink(msg); }),
+            sep('s2'),
+            item('forward', 'Forward', Forward, () => { if (msg) openForward(msg); }),
+            item(isSelected(msg?.id) ? 'deselect' : 'select', isSelected(msg?.id) ? 'Deselect' : 'Select', CheckSquare, () => { if (msg) { const was = isSelected(msg.id); toggleSelectMessage(msg); showStatusToast(was ? 'Message deselected' : 'Message selected'); } }),
+            item('report', 'Report', Flag, () => { if (msg) openReport(msg); }),
+            ...(canDeleteMsg ? [sep('s3'), item('delete', 'Delete', Trash2, () => { if (msg) requestDelete(msg); }, { danger: true })] : []),
+          ] : [
             item('reply', 'Reply', Reply, () => { if (msg) handleReply(msg); else showStatusToast('Reply is not available for this attachment.', 'error'); }),
-            item(isPinned(msg?.id) ? 'unpin' : 'pin', isPinned(msg?.id) ? 'Unpin' : 'Pin', Pin, () => { if (msg) { togglePinMessage(msg); showStatusToast(isPinned(msg.id) ? 'Message unpinned' : 'Message pinned'); } else { showStatusToast('Pin is not available for this attachment.', 'error'); } }),
+            item(isPinned(msg?.id) ? 'unpin' : 'pin', isPinned(msg?.id) ? 'Unpin' : 'Pin', Pin, () => { if (msg) { const was = isPinned(msg.id); togglePinMessage(msg); showStatusToast(was ? 'Message unpinned' : 'Message pinned'); } else { showStatusToast('Pin is not available for this attachment.', 'error'); } }),
             ...(canShowInFolder(am) ? [sep('s1'), item('show-folder', 'Show in Folder', FolderOpen, () => { handleShowInFolder(am); })] : []),
             item('save-as', 'Save As...', Save, () => { handleDownloadAttachment(am); }),
             sep('s2'),
@@ -2073,7 +2136,7 @@ export default function CommentManagement() {
             sep('s3'),
             item('forward', 'Forward', Forward, () => { if (msg) openForward(msg); else showStatusToast('Forward is not available for this attachment.', 'error'); }),
             item('report', 'Report', Flag, () => { if (msg) openReport(msg); else showStatusToast('Report is not available for this attachment.', 'error'); }),
-            item('select', 'Select', CheckSquare, () => { if (msg) { toggleSelectMessage(msg); showStatusToast(isSelected(msg.id) ? 'Message deselected' : 'Message selected'); } else { showStatusToast('Select is not available for this attachment.', 'error'); } }),
+            item(isSelected(msg?.id) ? 'deselect' : 'select', isSelected(msg?.id) ? 'Deselect' : 'Select', CheckSquare, () => { if (msg) { const was = isSelected(msg.id); toggleSelectMessage(msg); showStatusToast(was ? 'Message deselected' : 'Message selected'); } else { showStatusToast('Select is not available for this attachment.', 'error'); } }),
           ];
           const iconColor = (a) => (a.danger ? '#EF4444' : (dark ? '#C7D2FE' : '#475569'));
           return (
