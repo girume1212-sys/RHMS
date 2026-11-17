@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
       }
       if (data.systemName) setSystemName(data.systemName);
       if (data.systemLogo) setSystemLogo(data.systemLogo);
-      if (data.language) {
+      if (data.language && !localStorage.getItem('rhms_language')) {
         localStorage.setItem('rhms_language', data.language);
       }
     }).catch(() => {});

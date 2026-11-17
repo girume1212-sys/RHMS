@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { FileText, FileSpreadsheet, Presentation, Download, X, ChevronRight } from 'lucide-react';
 import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
+import { useTranslation } from '../i18n/useTranslation';
 import { cleanDocumentName, documentApps, documentKind, DOCUMENT_META } from '../utils/documents';
 
 const KIND_ICONS = {
@@ -25,6 +26,7 @@ function toServerPath(filePath) {
 
 export default function OpenWithDialog({ open, filePath, fileName, requestId, messageId, onClose }) {
   const { darkMode } = useAuth();
+  const { t } = useTranslation();
   const dark = !!darkMode;
   const T = dark
     ? { panel: '#111C2E', surface: '#16243A', border: '#263750', text: '#E6EDF7', text2: '#9AAAC0', muted: '#71829B', accent: '#3B82F6', hover: '#1C2B45' }
@@ -235,7 +237,7 @@ export default function OpenWithDialog({ open, filePath, fileName, requestId, me
         <div style={{ padding: '16px 22px 20px' }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 14, color: T.muted, fontSize: 11.5, lineHeight: 1.5 }}>
             <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid ' + T.border, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0, marginTop: 1 }}>i</span>
-            <span>The document opens from its original location. RHMS does not convert, copy, or modify the file.</span>
+            <span>{t('documentViewer.openNotice', { appName: t('general.appName') })}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button type="button" disabled={!!busy} onClick={() => onClose && onClose()} style={{ padding: '8px 16px', borderRadius: 9, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: busy ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>

@@ -31,8 +31,9 @@ const FILE_TYPE_OPTIONS = ['jpg', 'png', 'gif', 'svg', 'pdf', 'doc', 'docx', 'xl
 export default function Settings() {
   const goBack = useBackNavigation(getMenuAbove('/settings'));
   const { applyTheme } = useAuth();
-  const { changeLanguage } = useLanguage();
+  const { language, changeLanguage } = useLanguage();
   const { t } = useTranslation();
+  const appName = t('general.appName');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -361,7 +362,7 @@ addToast(t('settings.saved'));
           <h3>{t('settings.general')}</h3>
           <div className="settings-field">
             <label>{t('settings.systemName')}</label>
-            <input type="text" value={form.systemName} onChange={e => handleChange('systemName', e.target.value)} />
+            <input type="text" value={language === 'am' && form.systemName === 'RHMS Support System' ? t('loginPage.systemName', { appName }) : form.systemName} onChange={e => handleChange('systemName', e.target.value)} />
           </div>
           <div className="settings-field">
             <label>{t('settings.companyName')}</label>
@@ -545,7 +546,7 @@ addToast(t('settings.saved'));
           <div className="toggle-row-settings">
             <div>
               <span className="toggle-label">Client Account Approval</span>
-              <span className="toggle-sublabel">Require Admin approval before newly registered Client accounts can access RHMS</span>
+              <span className="toggle-sublabel">{t('settings.clientApprovalDesc', { appName })}</span>
             </div>
             <label className="toggle">
               <input type="checkbox" checked={form.clientApprovalRequired} onChange={e => handleChange('clientApprovalRequired', e.target.checked)} />

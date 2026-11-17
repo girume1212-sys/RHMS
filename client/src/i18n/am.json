@@ -34,7 +34,7 @@
     "signOut": "ውጣ"
   },
   "general": {
-    "appName": "RHMS",
+    "appName": "አር.ኤች.ኤም.ኤስ",
     "supportSystem": "የድጋፍ ስርዓት",
     "administrator": "አስተዳዳሪ",
     "escalationTeam": "የማሳደጊያ ቡድን",
@@ -546,6 +546,7 @@
     "comfortable": "ምቹ",
     "language": "ቋንቋ",
     "languageDescription": "ለበይነገጹ የሚመርጡትን ቋንቋ ይምረጡ",
+    "clientApprovalDesc": "አዲስ የተመዘገቡ የደንበኛ መለያዎች {appName}ን እንዲጠቀሙ የአስተዳዳሪ ማፅደቅ ያስፈልጋል",
     "currentLanguage": "አሁን ያለ ቋንቋ",
     "english": "እንግሊዝኛ",
     "amharic": "አማርኛ",
@@ -1010,5 +1011,34 @@
     "searchConversations": "ውይይቶችን ፈልግ...",
     "searchEmoji": "ኢሞጂ ፈልግ...",
     "send": "ላክ"
+  },
+  "loginPage": {
+    "systemName": "{appName} የድጋፍ ስርዓት",
+    "subtitle": "የጥያቄ አያያዝ የአስተዳደር ስርዓት",
+    "headlineW1": "ጥያቄዎችን",
+    "headlineW2": "ያስተዳድሩ",
+    "headlineW3": "ድጋፍ",
+    "headlineW4": "ያቅርቡ",
+    "headlineW5": "መፍትሄዎችን",
+    "headlineW6": "ያግኙ",
+    "headlinePeriod": "።",
+    "desc1": "{appName} ጥያቄዎችን ማስገባት፣ መከታተል እና መፍታት የሚቻልበት ለሁሉም ቡድኖች የተዋሃደ የድጋፍ መድረክ ነው።",
+    "desc2": "ለሚጠይቁ፣ ለድጋፍ ሰራተኞች እና ለአስተዳዳሪዎች አንድ ግልጽ የስራ ቦታ።",
+    "desc3": "ፈጣን ምላሽ፣ ግልጽ እይታ እና ወጥ አገልግሎት።",
+    "featureSubmit1": "ጥያቄ",
+    "featureSubmit2": "ማስገባት",
+    "featureTrack1": "እድገት",
+    "featureTrack2": "መከታተል",
+    "featureGet1": "መፍትሄ",
+    "featureGet2": "ማግኘት",
+    "usernamePlaceholder": "አስተዳዳሪ",
+    "required": "ያስፈልጋል",
+    "googleNoAccount": "ለዚህ የGoogle መለያ የ{appName} መለያ አልተገኘም። እባክዎ መጀመሪያ ይመዝገቡ።",
+    "accountBlocked": "መለያዎ ተቆልፏል። እባክዎ አስተዳዳሪውን ያግኙ።",
+    "resendIn": "ድጋሚ ላክ በ{seconds} ሴኮንድ",
+    "digit": "አሃዝ {number}"
+  },
+  "documentViewer": {
+    "openNotice": "ሰነዱ ከመጀመሪያው አካባቢ ይከፈታል። {appName} ፋይሉን አይቀይርም፣ አይገልብጥም፣ አያስተካክልም።"
   }
 }

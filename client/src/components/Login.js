@@ -8,8 +8,131 @@ import LanguageSelector from './LanguageSelector';
 import Icon from './Icon';
 import { api, API_BASE } from '../api';
 
+function LoginIllustration() {
+  return (
+    <svg className="login-illustration-svg" viewBox="0 0 920 520" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="lhOrbit" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.16" />
+          <stop offset="45%" stopColor="#8FE9FF" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#0869C7" stopOpacity="0.4" />
+        </linearGradient>
+        <linearGradient id="lhLaptopFrame" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#1D4373" />
+          <stop offset="55%" stopColor="#0C2241" />
+          <stop offset="100%" stopColor="#06152B" />
+        </linearGradient>
+        <linearGradient id="lhScreenFill" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#10549A" />
+          <stop offset="55%" stopColor="#093A72" />
+          <stop offset="100%" stopColor="#071F45" />
+        </linearGradient>
+        <linearGradient id="lhBaseFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#174577" />
+          <stop offset="48%" stopColor="#0C2A52" />
+          <stop offset="100%" stopColor="#061830" />
+        </linearGradient>
+        <linearGradient id="lhGlassFill" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#F2FCFF" stopOpacity="0.94" />
+          <stop offset="45%" stopColor="#C3EDFF" stopOpacity="0.82" />
+          <stop offset="100%" stopColor="#71C9F6" stopOpacity="0.68" />
+        </linearGradient>
+        <filter id="lhSoftGlow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="7" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+
+      <ellipse cx="255" cy="432" rx="240" ry="34" fill="#0B6FC7" opacity="0.14" filter="url(#lhSoftGlow)" />
+
+      <g fill="none" filter="url(#lhSoftGlow)">
+        <ellipse cx="610" cy="232" rx="268" ry="76" transform="rotate(-16 610 232)" stroke="url(#lhOrbit)" strokeWidth="2.2" />
+        <ellipse cx="610" cy="232" rx="252" ry="58" transform="rotate(13 610 232)" stroke="#90EBFF" strokeOpacity="0.62" strokeWidth="1.5" />
+        <ellipse cx="610" cy="232" rx="86" ry="222" transform="rotate(24 610 232)" stroke="url(#lhOrbit)" strokeOpacity="0.55" strokeWidth="1.3" />
+        <circle cx="610" cy="232" r="224" stroke="#FFFFFF" strokeOpacity="0.12" strokeWidth="1" />
+      </g>
+
+      <g filter="url(#lhSoftGlow)">
+        <circle cx="352" cy="144" r="3.6" fill="#FFFFFF" />
+        <circle cx="872" cy="256" r="3" fill="#8FE9FF" />
+        <circle cx="810" cy="382" r="2.6" fill="#FFFFFF" />
+        <circle cx="552" cy="400" r="2.6" fill="#8FE9FF" />
+        <circle cx="404" cy="212" r="2.4" fill="#8FE9FF" />
+      </g>
+
+      <g transform="translate(243 300) scale(1.10) translate(-243 -300)">
+      <g transform="skewY(-10)">
+        <rect x="102" y="180" width="266" height="204" rx="9" fill="url(#lhLaptopFrame)" stroke="#4A8DCC" strokeOpacity="0.7" strokeWidth="1.5" />
+        <rect x="110" y="188" width="250" height="188" rx="4" fill="url(#lhScreenFill)" />
+        <path d="M110 192 A4 4 0 0 1 114 188 H356 A4 4 0 0 1 360 192 V206 H110 Z" fill="#0B2B55" />
+        <circle cx="124" cy="197" r="2.6" fill="#FF6B6B" />
+        <circle cx="134" cy="197" r="2.6" fill="#F5A000" />
+        <circle cx="144" cy="197" r="2.6" fill="#3ED598" />
+        <rect x="184" y="193" width="96" height="8" rx="4" fill="#FFFFFF" fillOpacity="0.1" />
+        <rect x="132" y="216" width="206" height="132" rx="12" fill="#FFFFFF" fillOpacity="0.11" stroke="#A7E8FF" strokeOpacity="0.5" />
+        <g transform="translate(158 230)">
+          <path d="M5 26 V18 a15 15 0 0 1 30 0 v8" stroke="#8FE9FF" strokeWidth="3" fill="none" strokeLinecap="round" />
+          <rect x="0" y="20" width="9" height="15" rx="4.5" fill="#0B7FD4" />
+          <rect x="31" y="20" width="9" height="15" rx="4.5" fill="#0B7FD4" />
+          <path d="M35 35 v4 a6 6 0 0 1 -6 6 h-5" stroke="#8FE9FF" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+          <circle cx="20" cy="46" r="2.6" fill="#F5A000" />
+        </g>
+        <rect x="210" y="234" width="106" height="8" rx="4" fill="#F1FCFF" fillOpacity="0.9" />
+        <rect x="210" y="250" width="84" height="6" rx="3" fill="#A7E8FF" fillOpacity="0.6" />
+        <rect x="210" y="264" width="98" height="6" rx="3" fill="#A7E8FF" fillOpacity="0.42" />
+        <circle cx="142" cy="316" r="6" fill="#3ED598" />
+        <circle cx="160" cy="316" r="6" fill="#08B7D8" />
+        <circle cx="178" cy="316" r="6" fill="#F5A000" />
+        <rect x="196" y="312" width="120" height="8" rx="4" fill="#FFFFFF" fillOpacity="0.18" />
+      </g>
+      <path d="M102 366 L368 319 L428 366 L58 417 Z" fill="url(#lhBaseFill)" stroke="#5296D6" strokeOpacity="0.6" strokeWidth="1.5" />
+      <path d="M124 370 L352 331 L392 366 L104 401 Z" fill="#071B34" stroke="#2D6FB4" strokeOpacity="0.5" />
+      <path d="M132 377 L344 341 M126 385 L356 347 M118 393 L368 353" stroke="#2E86D6" strokeOpacity="0.45" strokeWidth="2" strokeDasharray="8 5" />
+      <path d="M160 374 L140 397 M200 367 L180 390 M240 360 L220 383 M280 353 L260 376 M320 346 L300 369" stroke="#2E86D6" strokeOpacity="0.35" strokeWidth="1.5" />
+      <path d="M206 397 L286 384 L302 397 L222 410 Z" fill="#2A6FB6" fillOpacity="0.4" stroke="#6CC6FF" strokeOpacity="0.55" />
+      <path d="M102 366 L368 319" stroke="#7AE1FF" strokeWidth="3" strokeOpacity="0.85" filter="url(#lhSoftGlow)" />
+      <path d="M58 417 L428 366" stroke="#2FA8E8" strokeWidth="2" strokeOpacity="0.55" />
+      </g>
+
+      <g filter="url(#lhSoftGlow)">
+        <path d="M330 214 C380 184 420 170 460 168" stroke="#08B7D8" strokeWidth="2" strokeOpacity="0.6" fill="none" />
+        <path d="M520 202 C550 190 578 196 604 210" stroke="#FFFFFF" strokeWidth="1.5" strokeOpacity="0.55" fill="none" />
+      </g>
+
+      <g transform="rotate(-8 478 170)">
+        <rect x="402" y="118" width="152" height="104" rx="14" fill="url(#lhGlassFill)" stroke="#FFFFFF" strokeOpacity="0.9" strokeWidth="1.6" />
+        <rect x="402" y="118" width="152" height="104" rx="14" fill="none" stroke="#08B7D8" strokeOpacity="0.5" strokeWidth="1" />
+        <circle cx="432" cy="150" r="15" fill="#0B7FD4" />
+        <path d="M425 153 v-4 a7 7 0 0 1 14 0 v4" stroke="#EEFCFF" strokeWidth="2.2" fill="none" />
+        <rect x="424" y="150" width="3.5" height="8" rx="1.7" fill="#EEFCFF" />
+        <rect x="437" y="150" width="3.5" height="8" rx="1.7" fill="#EEFCFF" />
+        <rect x="457" y="138" width="78" height="7" rx="3.5" fill="#0B63B4" fillOpacity="0.85" />
+        <rect x="457" y="152" width="62" height="6" rx="3" fill="#0B8FD4" fillOpacity="0.55" />
+        <rect x="418" y="182" width="118" height="6" rx="3" fill="#FFFFFF" fillOpacity="0.75" />
+        <rect x="418" y="196" width="88" height="5" rx="2.5" fill="#FFFFFF" fillOpacity="0.5" />
+      </g>
+
+      <g transform="rotate(7 502 330)">
+        <rect x="452" y="258" width="104" height="146" rx="14" fill="url(#lhGlassFill)" stroke="#FFFFFF" strokeOpacity="0.85" strokeWidth="1.5" />
+        <circle cx="476" cy="290" r="11" fill="#0869C7" />
+        <path d="M471 290 l4 4 l7 -8" stroke="#FFFFFF" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <rect x="495" y="287" width="46" height="6" rx="3" fill="#0B63B4" fillOpacity="0.8" />
+        <rect x="495" y="297" width="34" height="4" rx="2" fill="#0B8FD4" fillOpacity="0.5" />
+        <circle cx="476" cy="332" r="11" fill="#08B7D8" />
+        <path d="M471 332 l4 4 l7 -8" stroke="#FFFFFF" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <rect x="495" y="329" width="46" height="6" rx="3" fill="#0B63B4" fillOpacity="0.8" />
+        <rect x="495" y="339" width="34" height="4" rx="2" fill="#0B8FD4" fillOpacity="0.5" />
+        <circle cx="476" cy="374" r="11" fill="#F5A000" />
+        <path d="M471 374 l4 4 l7 -8" stroke="#FFFFFF" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <rect x="495" y="371" width="46" height="6" rx="3" fill="#0B63B4" fillOpacity="0.8" />
+        <rect x="495" y="381" width="34" height="4" rx="2" fill="#0B8FD4" fillOpacity="0.5" />
+      </g>
+    </svg>
+  );
+}
+
 export default function Login() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -28,6 +151,9 @@ export default function Login() {
   const [notice, setNotice] = useState('');
   const [errors, setErrors] = useState({ forgotEmail: '', otp: '', newPassword: '', confirmPassword: '' });
   const { login, googleLogin, systemName, systemLogo, darkMode, toggleDarkMode } = useAuth();
+  const appName = t('general.appName');
+  const displaySystemName = language === 'am' ? t('loginPage.systemName', { appName }) : (systemName || t('loginPage.systemName', { appName }));
+  const logoUrl = systemLogo ? `${API_BASE}${systemLogo}` : `${API_BASE}/uploads/1791231885644-logo.png`;
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleUnavailable, setGoogleUnavailable] = useState(!process.env.REACT_APP_GOOGLE_CLIENT_ID);
   const navigate = useNavigate();
@@ -206,7 +332,7 @@ export default function Login() {
     if (name === 'forgotEmail') err = validateEmail(value);
     else if (name === 'usernameOrEmail') {
       if (value.includes('@')) err = validateEmail(value);
-      else if (!value.trim()) err = t('common.required') || 'Required';
+      else if (!value.trim()) err = t('loginPage.required');
     }
     setErrors(prev => ({ ...prev, [name]: err }));
     return err;
@@ -240,7 +366,7 @@ export default function Login() {
       } else if (msg.includes('no longer exists')) {
         setError(t('common.accountDeleted'));
       } else if (msg.includes('blocked')) {
-        setError('Your account is blocked. Please contact the administrator.');
+        setError(t('loginPage.accountBlocked'));
       } else {
         setError(msg);
       }
@@ -356,6 +482,7 @@ export default function Login() {
       if (data.valid) {
         
         
+        
         setResendSeconds(0);
         setForgotStep('password');
         setForgotMsg('');
@@ -422,10 +549,97 @@ export default function Login() {
   };
 
   return (
-    <div className="login-page">
-      <div className="login-orbs">
-        <div className="login-orb login-orb-1"></div>
-        <div className="login-orb login-orb-2"></div>
+    <div className="login-page" id="rhms-login-page">
+      <div className="login-bg" aria-hidden="true">
+        <div className="login-bg-glow"></div>
+        <div className="login-wave login-wave-1"></div>
+        <div className="login-wave login-wave-2"></div>
+        <div className="login-wave login-wave-3"></div>
+        <div className="login-wave login-wave-4"></div>
+        <div className="login-dots login-dots-tl"></div>
+        <div className="login-dots login-dots-bl"></div>
+        <svg className="login-world-dots" viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="lhWorldDot" width="9" height="9" patternUnits="userSpaceOnUse">
+              <circle cx="2" cy="2" r="1.5" fill="#3E8FD0" />
+            </pattern>
+          </defs>
+          <path d="M60 60 L130 45 L165 70 L150 105 L115 120 L100 150 L75 130 L65 95 Z" fill="url(#lhWorldDot)" />
+          <path d="M135 160 L170 150 L185 185 L170 235 L150 260 L138 220 Z" fill="url(#lhWorldDot)" />
+          <path d="M275 55 L320 50 L330 75 L300 90 L275 80 Z" fill="url(#lhWorldDot)" />
+          <path d="M285 110 L340 105 L350 150 L325 205 L295 185 L280 140 Z" fill="url(#lhWorldDot)" />
+          <path d="M340 50 L460 45 L500 75 L470 110 L420 120 L385 100 L350 95 Z" fill="url(#lhWorldDot)" />
+          <path d="M470 175 L520 170 L535 205 L500 220 L475 205 Z" fill="url(#lhWorldDot)" />
+        </svg>
+        <div className="login-spark login-spark-1"></div>
+        <div className="login-spark login-spark-2"></div>
+        <div className="login-spark login-spark-3"></div>
+        <div className="login-spark login-spark-4"></div>
+        <div className="login-network" aria-hidden="true">
+          <svg viewBox="0 0 520 720" preserveAspectRatio="xMaxYMid slice" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="loginTechGrid" width="44" height="44" patternUnits="userSpaceOnUse">
+                <path d="M 44 0 L 0 0 0 44" fill="none" stroke="#9FD6FF" strokeWidth="0.6" opacity="0.35" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#loginTechGrid)" opacity="0.45" />
+          </svg>
+        </div>
+      </div>
+
+      <div className="login-showcase" aria-hidden="true">
+        <div className="login-showcase-brand">
+          <img src={logoUrl} alt="" className="login-showcase-logo" />
+          <div className="login-showcase-brand-text">
+            <div className="login-showcase-title">{displaySystemName}</div>
+            <div className="login-showcase-subtitle">{t('loginPage.subtitle')}</div>
+          </div>
+        </div>
+
+        <div className="login-showcase-copy">
+            <div className="login-headline-text">
+              <em>{t('loginPage.headlineW1')}</em>{' '}{t('loginPage.headlineW2')}{t('loginPage.headlinePeriod')}{' '}<em>{t('loginPage.headlineW3')}</em>{' '}{t('loginPage.headlineW4')}{t('loginPage.headlinePeriod')}<br />
+              <em>{t('loginPage.headlineW5')}</em>{' '}{t('loginPage.headlineW6')}{t('loginPage.headlinePeriod')}
+            </div>
+            <div className="login-headline-divider"></div>
+            <p className="login-showcase-description">
+              {t('loginPage.desc1', { appName })}<br />
+              {t('loginPage.desc2')}<br />
+              {t('loginPage.desc3')}
+            </p>
+
+          <div className="login-showcase-features">
+          <div className="login-feature">
+            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+              <g transform="rotate(-8 20 20)">
+                <path d="M7 10 H33 A3 3 0 0 1 36 13 V16 A3 3 0 0 0 36 22 V25 A3 3 0 0 1 33 28 H7 A3 3 0 0 1 4 25 V22 A3 3 0 0 0 4 16 V13 A3 3 0 0 1 7 10 Z" fill="none" stroke="#0869C7" strokeWidth="2.4" />
+                <path d="M14 19 H26" stroke="#0869C7" strokeWidth="2" strokeDasharray="3 3" strokeLinecap="round" />
+              </g>
+            </svg>
+            <div className="login-feature-label">{t('loginPage.featureSubmit1')}<br />{t('loginPage.featureSubmit2')}</div>
+          </div>
+          <div className="login-feature">
+            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="20" cy="12" r="6" fill="#0869C7" />
+              <path d="M8 31 A12 12 0 0 1 32 31 Z" fill="#0869C7" />
+              <circle cx="7" cy="16" r="4" fill="#0869C7" />
+              <circle cx="33" cy="16" r="4" fill="#0869C7" />
+            </svg>
+            <div className="login-feature-label">{t('loginPage.featureTrack1')}<br />{t('loginPage.featureTrack2')}</div>
+          </div>
+          <div className="login-feature">
+            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="20" cy="20" r="15" fill="#0869C7" />
+              <path d="M13 20 l5 5 l10 -11" fill="none" stroke="#FFFFFF" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <div className="login-feature-label">{t('loginPage.featureGet1')}<br />{t('loginPage.featureGet2')}</div>
+          </div>
+          </div>
+
+          <div className="login-showcase-illustration">
+            <LoginIllustration />
+          </div>
+        </div>
       </div>
 
       <div className="login-top-controls">
@@ -444,21 +658,17 @@ export default function Login() {
 
       <div className="login-card">
         <div className="login-brand-header">
-          {systemLogo ? (
-            <img src={`${API_BASE}${systemLogo}`} alt="System logo" className="login-brand-logo" />
-          ) : (
-            <img src={`${API_BASE}/uploads/1791231885644-logo.png`} alt="RHMS logo" className="login-brand-logo" />
-          )}
+          <img src={logoUrl} alt={displaySystemName} className="login-brand-logo" />
           <div className="login-brand-text">
-            <span className="login-brand-name">{systemName || 'RHMS Support System'}</span>
-            <span className="login-brand-sub">Request Handling Management System</span>
+            <span className="login-brand-name">{displaySystemName}</span>
+            <span className="login-brand-sub">{t('loginPage.subtitle')}</span>
           </div>
         </div>
         <h2 className="login-title">{t('common.login')}</h2>
         <p className="login-subtitle">{t('common.welcomeSubtitle')}</p>
 
         {error && <div className="login-error">{error}</div>}
-        {notice && <div style={{ background: '#F0FDF4', color: '#15803D', padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{notice}</div>}
+        {notice && <div className="login-inline-notice" style={{ background: '#F0FDF4', color: '#15803D', padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{notice}</div>}
 
         <form onSubmit={handleSubmit}>
           <div className="login-field">
@@ -471,7 +681,7 @@ export default function Login() {
                 type="text"
                 value={usernameOrEmail}
                 onChange={(e) => setUsernameOrEmail(e.target.value)}
-                placeholder={t('common.userNameOrEmail')}
+                placeholder={t('loginPage.usernamePlaceholder')}
                 required
               />
             </div>
@@ -487,7 +697,7 @@ export default function Login() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={t('common.password')}
+                placeholder="••••••••"
                 required
               />
               <button
@@ -524,7 +734,7 @@ export default function Login() {
 
         {!googleUnavailable && (
           <>
-            <div className="login-divider"><span>{t('common.or') || 'OR'}</span></div>
+            <div className="login-divider"><span>{t('common.or')}</span></div>
             <div className="google-btn-wrapper" aria-busy={googleLoading} style={{ position: 'relative' }}>
               <button
                 type="button"
@@ -560,7 +770,7 @@ export default function Login() {
             {forgotStep === 'email' && <p>{t('common.enterEmail')}</p>}
             {forgotStep === 'otp' && <p>{t('common.otpSent')}</p>}
             {forgotStep === 'password' && <p>{t('common.setNewPassword')}</p>}
-            {forgotMsg && <div style={{ background: '#F0FDF4', color: '#15803D', padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{forgotMsg}</div>}
+            {forgotMsg && <div className="login-inline-notice" style={{ background: '#F0FDF4', color: '#15803D', padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>{forgotMsg}</div>}
             {forgotError && <div className="login-error" style={{ marginBottom: '16px' }}>{forgotError}</div>}
             {forgotStep === 'email' && (
               <form onSubmit={handleSendOtp}>
@@ -605,7 +815,7 @@ export default function Login() {
                         onKeyDown={(e) => handleOtpKeyDown(i, e)}
                         onFocus={(e) => e.target.select()}
                         className={`otp-box${errors.otp ? ' input-error' : ''}${otp[i] ? ' otp-filled' : ''}`}
-                        aria-label={`Digit ${i + 1}`}
+                        aria-label={t('loginPage.digit', { number: i + 1 })}
                         required={i === 0}
                       />
                     ))}
@@ -617,7 +827,7 @@ export default function Login() {
                     <button type="button" className="btn btn-outline" onClick={closeForgot}>{t('common.cancel')}</button>
                     {resendSeconds > 0 ? (
                       <span style={{ fontSize: '13px', color: darkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)' }}>
-                        Resend in {resendSeconds}s
+                        {t('loginPage.resendIn', { seconds: resendSeconds })}
                       </span>
                     ) : (
                       <button type="button" className="forgot-link" onClick={(e) => handleSendOtp(e, true)} disabled={forgotLoading}>

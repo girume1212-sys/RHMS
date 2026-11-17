@@ -546,6 +546,7 @@
     "comfortable": "Comfortable",
     "language": "Language",
     "languageDescription": "Select your preferred language for the interface",
+    "clientApprovalDesc": "Require Admin approval before newly registered Client accounts can access {appName}",
     "currentLanguage": "Current Language",
     "english": "English",
     "amharic": "Amharic",
@@ -1010,5 +1011,34 @@
     "searchConversations": "Search conversations...",
     "searchEmoji": "Search emoji...",
     "send": "Send"
+  },
+  "loginPage": {
+    "systemName": "{appName} Support System",
+    "subtitle": "Request Handling Management System",
+    "headlineW1": "Manage",
+    "headlineW2": "Requests",
+    "headlineW3": "Provide",
+    "headlineW4": "Support",
+    "headlineW5": "Drive",
+    "headlineW6": "Solutions",
+    "headlinePeriod": ".",
+    "desc1": "{appName} is a unified support platform that streamlines how requests are submitted, tracked, and resolved across every team.",
+    "desc2": "One workspace for requesters, support staff, and managers.",
+    "desc3": "Faster responses and clearer visibility across every team.",
+    "featureSubmit1": "Submit",
+    "featureSubmit2": "Requests",
+    "featureTrack1": "Track",
+    "featureTrack2": "Progress",
+    "featureGet1": "Get",
+    "featureGet2": "Solutions",
+    "usernamePlaceholder": "admin",
+    "required": "Required",
+    "googleNoAccount": "No {appName} account found for this Google account. Please sign up first.",
+    "accountBlocked": "Your account is blocked. Please contact the administrator.",
+    "resendIn": "Resend in {seconds}s",
+    "digit": "Digit {number}"
+  },
+  "documentViewer": {
+    "openNotice": "The document opens from its original location. {appName} does not convert, copy, or modify the file."
   }
 }

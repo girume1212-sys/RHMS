@@ -43,6 +43,10 @@ export function LanguageProvider({ children }) {
     return str;
   }, [language]);
 
+  useEffect(() => {
+    document.title = `${t('general.appName')} - ${t('general.supportSystem')}`;
+  }, [t]);
+
   return (
     <LanguageContext.Provider value={{ language, changeLanguage, t }}>
       {children}

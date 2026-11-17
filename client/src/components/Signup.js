@@ -308,10 +308,42 @@ export default function Signup() {
   };
 
   return (
-    <div className="login-page">
-      <div className="login-orbs">
-        <div className="login-orb login-orb-1"></div>
-        <div className="login-orb login-orb-2"></div>
+    <div className="login-page" id="rhms-login-page">
+      <div className="login-bg" aria-hidden="true">
+        <div className="login-bg-glow"></div>
+        <div className="login-wave login-wave-1"></div>
+        <div className="login-wave login-wave-2"></div>
+        <div className="login-wave login-wave-3"></div>
+        <div className="login-wave login-wave-4"></div>
+        <div className="login-dots login-dots-tl"></div>
+        <div className="login-dots login-dots-bl"></div>
+        <svg className="login-world-dots" viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="lhWorldDot" width="9" height="9" patternUnits="userSpaceOnUse">
+              <circle cx="2" cy="2" r="1.5" fill="#3E8FD0" />
+            </pattern>
+          </defs>
+          <path d="M60 60 L130 45 L165 70 L150 105 L115 120 L100 150 L75 130 L65 95 Z" fill="url(#lhWorldDot)" />
+          <path d="M135 160 L170 150 L185 185 L170 235 L150 260 L138 220 Z" fill="url(#lhWorldDot)" />
+          <path d="M275 55 L320 50 L330 75 L300 90 L275 80 Z" fill="url(#lhWorldDot)" />
+          <path d="M285 110 L340 105 L350 150 L325 205 L295 185 L280 140 Z" fill="url(#lhWorldDot)" />
+          <path d="M340 50 L460 45 L500 75 L470 110 L420 120 L385 100 L350 95 Z" fill="url(#lhWorldDot)" />
+          <path d="M470 175 L520 170 L535 205 L500 220 L475 205 Z" fill="url(#lhWorldDot)" />
+        </svg>
+        <div className="login-spark login-spark-1"></div>
+        <div className="login-spark login-spark-2"></div>
+        <div className="login-spark login-spark-3"></div>
+        <div className="login-spark login-spark-4"></div>
+        <div className="login-network" aria-hidden="true">
+          <svg viewBox="0 0 520 720" preserveAspectRatio="xMaxYMid slice" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="loginTechGrid" width="44" height="44" patternUnits="userSpaceOnUse">
+                <path d="M 44 0 L 0 0 0 44" fill="none" stroke="#9FD6FF" strokeWidth="0.6" opacity="0.35" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#loginTechGrid)" opacity="0.45" />
+          </svg>
+        </div>
       </div>
 
       <div className="login-top-controls">
