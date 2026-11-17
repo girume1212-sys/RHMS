@@ -30,16 +30,32 @@ export default function Signup() {
   const navigate = useNavigate();
   const { darkMode, toggleDarkMode, googleLogin } = useAuth();
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleUnavailable, setGoogleUnavailable] = useState(!process.env.REACT_APP_GOOGLE_CLIENT_ID);
 
   useEffect(() => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
     if (!clientId) {
-      setError('Google sign-up is not configured. Set REACT_APP_GOOGLE_CLIENT_ID.');
+      setGoogleUnavailable(true);
       return;
     }
 
+    let cancelled = false;
+    let timeoutId;
+
+    const fail = () => {
+      if (cancelled) return;
+      console.warn('[RHMS] Google sign-up is unavailable (the Google Identity script could not be loaded).');
+      setGoogleUnavailable(true);
+    };
+
     const init = () => {
-      if (!window.google || !window.google.accounts || !window.google.accounts.id) return;
+      if (cancelled) return;
+      if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+        fail();
+        return;
+      }
+      clearTimeout(timeoutId);
+      setGoogleUnavailable(false);
       window.google.accounts.id.initialize({
         client_id: clientId,
         auto_select: false,
@@ -77,20 +93,42 @@ export default function Signup() {
 
     if (window.google && window.google.accounts && window.google.accounts.id) {
       init();
-      return;
+      return () => { cancelled = true; clearTimeout(timeoutId); };
     }
     const existing = document.getElementById('google-gsi-script');
     if (existing) {
-      return;
+      if (existing.dataset.failed === 'true') {
+        fail();
+      } else {
+        existing.addEventListener('load', init);
+        existing.addEventListener('error', fail);
+      }
+      return () => {
+        cancelled = true;
+        clearTimeout(timeoutId);
+        existing.removeEventListener('load', init);
+        existing.removeEventListener('error', fail);
+      };
     }
     const script = document.createElement('script');
     script.id = 'google-gsi-script';
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
-    script.onload = init;
-    script.onerror = () => setError('Unable to load Google sign-up. Please try again later.');
+    script.onload = () => {
+      script.dataset.loaded = 'true';
+      init();
+    };
+    script.onerror = () => {
+      script.dataset.failed = 'true';
+      fail();
+    };
     document.head.appendChild(script);
+    timeoutId = setTimeout(() => {
+      if (!(window.google && window.google.accounts && window.google.accounts.id)) fail();
+    }, 10000);
+
+    return () => { cancelled = true; clearTimeout(timeoutId); };
   }, [googleLogin, navigate, t]);
 
   useEffect(() => {
@@ -101,12 +139,12 @@ export default function Signup() {
 
   const handleGoogleSignIn = () => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      setError('Google sign-up is not configured. Set REACT_APP_GOOGLE_CLIENT_ID.');
+    if (!clientId || googleUnavailable) {
+      setError(t('common.googleSignInFailed'));
       return;
     }
     if (!window.google || !window.google.accounts || !window.google.accounts.id) {
-      setError(t('common.cannotConnectServer'));
+      setError(t('common.googleSignInFailed'));
       return;
     }
     setGoogleLoading(true);
@@ -424,6 +462,8 @@ export default function Signup() {
 
         {step === 'details' && (
         <>
+          {!googleUnavailable && (
+          <>
           <div className="login-divider"><span>{t('common.or')}</span></div>
           <div className="google-btn-wrapper" aria-busy={googleLoading} style={{ position: 'relative' }}>
             <button
@@ -445,6 +485,8 @@ export default function Signup() {
             </button>
             <div id="rhms-google-btn-signup" style={{ position: 'absolute', inset: 0, opacity: 0, overflow: 'hidden', zIndex: 2, pointerEvents: 'auto' }} />
           </div>
+          </>
+          )}
         </>
         )}
 

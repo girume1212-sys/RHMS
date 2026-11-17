@@ -29,6 +29,7 @@ export default function Login() {
   const [errors, setErrors] = useState({ forgotEmail: '', otp: '', newPassword: '', confirmPassword: '' });
   const { login, googleLogin, systemName, systemLogo, darkMode, toggleDarkMode } = useAuth();
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleUnavailable, setGoogleUnavailable] = useState(!process.env.REACT_APP_GOOGLE_CLIENT_ID);
   const navigate = useNavigate();
   const location = useLocation();
   const otpRefs = useRef([]);
@@ -65,10 +66,28 @@ export default function Login() {
   
   useEffect(() => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
-    if (!clientId) return;
+    if (!clientId) {
+      setGoogleUnavailable(true);
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId;
+
+    const fail = () => {
+      if (cancelled) return;
+      console.warn('[RHMS] Google sign-in is unavailable (the Google Identity script could not be loaded).');
+      setGoogleUnavailable(true);
+    };
 
     const init = () => {
-      if (!window.google || !window.google.accounts || !window.google.accounts.id) return;
+      if (cancelled) return;
+      if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+        fail();
+        return;
+      }
+      clearTimeout(timeoutId);
+      setGoogleUnavailable(false);
       window.google.accounts.id.initialize({
         client_id: clientId,
         auto_select: false,
@@ -106,30 +125,52 @@ export default function Login() {
 
     if (window.google && window.google.accounts && window.google.accounts.id) {
       init();
-      return;
+      return () => { cancelled = true; clearTimeout(timeoutId); };
     }
     const existing = document.getElementById('google-gsi-script');
     if (existing) {
-      return;
+      if (existing.dataset.failed === 'true') {
+        fail();
+      } else {
+        existing.addEventListener('load', init);
+        existing.addEventListener('error', fail);
+      }
+      return () => {
+        cancelled = true;
+        clearTimeout(timeoutId);
+        existing.removeEventListener('load', init);
+        existing.removeEventListener('error', fail);
+      };
     }
     const script = document.createElement('script');
     script.id = 'google-gsi-script';
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
-    script.onload = init;
-    script.onerror = () => setError('Unable to load Google sign-in. Please try again later.');
+    script.onload = () => {
+      script.dataset.loaded = 'true';
+      init();
+    };
+    script.onerror = () => {
+      script.dataset.failed = 'true';
+      fail();
+    };
     document.head.appendChild(script);
+    timeoutId = setTimeout(() => {
+      if (!(window.google && window.google.accounts && window.google.accounts.id)) fail();
+    }, 10000);
+
+    return () => { cancelled = true; clearTimeout(timeoutId); };
   }, [googleLogin, navigate, t]);
 
   const handleGoogleSignIn = () => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      setError('Google sign-in is not configured. Set REACT_APP_GOOGLE_CLIENT_ID.');
+    if (!clientId || googleUnavailable) {
+      setError(t('common.googleSignInFailed'));
       return;
     }
     if (!window.google || !window.google.accounts || !window.google.accounts.id) {
-      setError(t('common.cannotConnectServer'));
+      setError(t('common.googleSignInFailed'));
       return;
     }
     setGoogleLoading(true);
@@ -481,27 +522,31 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="login-divider"><span>{t('common.or') || 'OR'}</span></div>
-        <div className="google-btn-wrapper" aria-busy={googleLoading} style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className="google-btn"
-            onClick={handleGoogleSignIn}
-            disabled={googleLoading}
-            aria-label={t('common.googleContinue')}
-          >
-            <span className="google-btn-icon">
-              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-                <path fill="#FBBC05" d="M10.53 28.57a14.5 14.5 0 0 1 0-9.14l-7.98-6.19a24.0 24.0 0 0 0 0 21.52l7.98-6.19z"/>
-                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-              </svg>
-            </span>
-            <span className="google-btn-text">{googleLoading ? t('common.googleSignIn') : t('common.googleContinue')}</span>
-          </button>
-          <div id="rhms-google-btn" style={{ position: 'absolute', inset: 0, opacity: 0, overflow: 'hidden', zIndex: 2, pointerEvents: 'auto' }} />
-        </div>
+        {!googleUnavailable && (
+          <>
+            <div className="login-divider"><span>{t('common.or') || 'OR'}</span></div>
+            <div className="google-btn-wrapper" aria-busy={googleLoading} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="google-btn"
+                onClick={handleGoogleSignIn}
+                disabled={googleLoading}
+                aria-label={t('common.googleContinue')}
+              >
+                <span className="google-btn-icon">
+                  <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                    <path fill="#FBBC05" d="M10.53 28.57a14.5 14.5 0 0 1 0-9.14l-7.98-6.19a24.0 24.0 0 0 0 0 21.52l7.98-6.19z"/>
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                  </svg>
+                </span>
+                <span className="google-btn-text">{googleLoading ? t('common.googleSignIn') : t('common.googleContinue')}</span>
+              </button>
+              <div id="rhms-google-btn" style={{ position: 'absolute', inset: 0, opacity: 0, overflow: 'hidden', zIndex: 2, pointerEvents: 'auto' }} />
+            </div>
+          </>
+        )}
 
         <p className="signup-link">
           {t('common.noAccount')} <button type="button" className="signup-btn" onClick={() => navigate('/signup')}>{t('common.signUp')}</button>
