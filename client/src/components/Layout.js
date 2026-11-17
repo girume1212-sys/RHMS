@@ -148,11 +148,18 @@ export default function Layout() {
   }, [mapNotifRows]);
 
   const refreshUnreadCommentTotal = useCallback(() => {
-    api.get('/api/messages/unread-total').then(data => {
-      setUnreadCommentTotal(data?.count || 0);
-    }).catch(() => {});
+    let muted = [];
+    try {
+      const raw = localStorage.getItem('rhms_muted_conversations');
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) muted = parsed;
+    } catch (e) {}
+    const mutedSet = new Set(muted);
     api.get('/api/messages/unread-conversations').then(data => {
-      setUnreadConversations(Array.isArray(data?.items) ? data.items : []);
+      const items = (Array.isArray(data?.items) ? data.items : [])
+        .filter((item) => !mutedSet.has(`${item.conversationType}:${item.conversationId}`));
+      setUnreadConversations(items);
+      setUnreadCommentTotal(items.reduce((sum, item) => sum + (item.count || 0), 0));
     }).catch(() => {});
   }, []);
 

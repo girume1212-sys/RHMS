@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck, Copy, Pencil, Trash2, Reply, Code2, Headset, UsersRound, ChevronDown, ChevronRight, Mic, Play, Pause, Square, X, Pin, FolderOpen, Link2, Forward, Flag, CheckSquare, Save } from 'lucide-react';
+import { MessageCircleMore, Image as ImageIcon, Video, FileText, Music, Paperclip, Smile, Search, ShieldCheck, Copy, Pencil, Trash2, Reply, Code2, Headset, UsersRound, ChevronDown, ChevronRight, Mic, Play, Pause, Square, X, Pin, PinOff, FolderOpen, Link2, Forward, Flag, CheckSquare, Save, MoreVertical, Bell, BellOff, RefreshCw, Info, CheckCheck } from 'lucide-react';
 import { api, API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTranslation } from '../i18n/useTranslation';
@@ -547,6 +547,13 @@ export default function CommentManagement() {
   const [highlightMsgId, setHighlightMsgId] = useState(null);
   const [acceptType, setAcceptType] = useState('*/*');
   const [openDoc, setOpenDoc] = useState(null);
+  const [pinnedConversations, setPinnedConversations] = useState([]);
+  const [mutedConversations, setMutedConversations] = useState([]);
+  const [contactInfo, setContactInfo] = useState(null);
+  const [showMsgSearch, setShowMsgSearch] = useState(false);
+  const [msgSearch, setMsgSearch] = useState('');
+  const [msgSearchIndex, setMsgSearchIndex] = useState(0);
+  const msgSearchRef = useRef(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -610,6 +617,7 @@ export default function CommentManagement() {
   useEffect(() => {
     if (!attachmentMenu) return undefined;
     const onOutside = (e) => {
+      if (e.target && e.target.closest && e.target.closest('[data-conv-menu-toggle="true"]')) return;
       if (attachmentMenuRef.current && attachmentMenuRef.current.contains(e.target)) return;
       setAttachmentMenu(null);
     };
@@ -698,6 +706,25 @@ export default function CommentManagement() {
     showStatusToast(ok ? 'Message text copied to clipboard' : 'Could not copy message text', ok ? 'success' : 'error');
   };
 
+  const openConversationMenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selectedUser) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const estW = 248;
+    const pad = 8;
+    setAttachmentMenu({
+      type: 'conversation',
+      x: Math.max(pad, Math.min(rect.right - estW, window.innerWidth - estW - pad)),
+      y: rect.bottom + 6,
+      name: '',
+      path: '',
+      url: '',
+      messageId: null,
+      message: null,
+    });
+  };
+
   const handleDownloadAttachment = async (attachment) => {
     if (!attachment) return;
     try {
@@ -747,6 +774,77 @@ export default function CommentManagement() {
       try { localStorage.setItem('rhms_pinned_messages', JSON.stringify(next)); } catch (e) {}
       return next;
     });
+  };
+
+  const isConvPinned = (conv) => !!conv && pinnedConversations.includes(convKey(conv));
+  const isConvMuted = (conv) => !!conv && mutedConversations.includes(convKey(conv));
+
+  const togglePinnedConversation = (conv) => {
+    if (!conv) return;
+    const key = convKey(conv);
+    setPinnedConversations((prev) => {
+      const pinned = prev.includes(key);
+      const next = pinned ? prev.filter((k) => k !== key) : [...prev, key];
+      try { localStorage.setItem('rhms_pinned_conversations', JSON.stringify(next)); } catch (e) {}
+      showStatusToast(pinned ? 'Conversation unpinned' : 'Conversation pinned');
+      return next;
+    });
+  };
+
+  const toggleMutedConversation = (conv) => {
+    if (!conv) return;
+    const key = convKey(conv);
+    setMutedConversations((prev) => {
+      const muted = prev.includes(key);
+      const next = muted ? prev.filter((k) => k !== key) : [...prev, key];
+      try { localStorage.setItem('rhms_muted_conversations', JSON.stringify(next)); } catch (e) {}
+      try { window.dispatchEvent(new Event('rhms:unread-changed')); } catch (e) {}
+      showStatusToast(muted ? 'Conversation unmuted' : 'Conversation muted');
+      return next;
+    });
+  };
+
+  const markConversationRead = async () => {
+    if (!selectedUser) return;
+    try {
+      await api.put('/api/messages/read', { conversationType: selectedUser.type, conversationId: selectedUser.id });
+      setUnreadMap((m) => ({ ...m, [convKey(selectedUser)]: 0 }));
+      try { window.dispatchEvent(new Event('rhms:unread-changed')); } catch (e) {}
+      showStatusToast('Conversation marked as read');
+    } catch (e) {
+      showStatusToast(e?.message || 'Could not mark the conversation as read', 'error');
+    }
+  };
+
+  const handleCopyUserId = async () => {
+    if (!selectedUser) return;
+    const ok = await copyToClipboard(String(selectedUser.id));
+    showStatusToast(ok ? (selectedUser.type === 'group' ? 'Group ID copied to clipboard' : 'User ID copied to clipboard') : 'Could not copy the ID', ok ? 'success' : 'error');
+  };
+
+  const handleCopyUserEmail = async () => {
+    if (!selectedUser?.email) { showStatusToast('No email address to copy', 'error'); return; }
+    const ok = await copyToClipboard(selectedUser.email);
+    showStatusToast(ok ? 'Email address copied to clipboard' : 'Could not copy the email address', ok ? 'success' : 'error');
+  };
+
+  const refreshConversation = async () => {
+    if (!selectedUser) return;
+    setMsgLoading(true);
+    try {
+      const data = await api.get(`/api/messages?conversationType=${selectedUser.type}&conversationId=${encodeURIComponent(selectedUser.id)}`);
+      setMessages(Array.isArray(data) ? data : []);
+      showStatusToast('Conversation refreshed');
+    } catch (e) {
+      showStatusToast(e?.message || 'Could not refresh the conversation', 'error');
+    } finally {
+      setMsgLoading(false);
+    }
+  };
+
+  const openMessageSearch = () => {
+    setShowMsgSearch(true);
+    setTimeout(() => { try { msgSearchRef.current?.focus(); } catch (e) {} }, 30);
   };
 
   const canShowInFolder = (attachment) => {
@@ -857,6 +955,20 @@ export default function CommentManagement() {
       const raw = localStorage.getItem('rhms_pinned_messages');
       if (raw) setPinnedByConv(JSON.parse(raw) || {});
     } catch (e) {}
+    try {
+      const raw = localStorage.getItem('rhms_pinned_conversations');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) setPinnedConversations(list);
+      }
+    } catch (e) {}
+    try {
+      const raw = localStorage.getItem('rhms_muted_conversations');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) setMutedConversations(list);
+      }
+    } catch (e) {}
   }, []);
 
   useEffect(() => {
@@ -902,7 +1014,12 @@ export default function CommentManagement() {
     return bAct - aAct;
   });
   sections.forEach((s) => {
-    s.items.sort((a, b) => (activity[b.id] || 0) - (activity[a.id] || 0));
+    s.items.sort((a, b) => {
+      const aPinned = pinnedConversations.includes(a.type + ':' + a.id) ? 1 : 0;
+      const bPinned = pinnedConversations.includes(b.type + ':' + b.id) ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+      return (activity[b.id] || 0) - (activity[a.id] || 0);
+    });
   });
 
   const openConversation = useCallback(async (conv) => {
@@ -913,6 +1030,9 @@ export default function CommentManagement() {
     setReplyTo(null);
     setEditingId(null);
     setDeleteTarget(null);
+    setShowMsgSearch(false);
+    setMsgSearch('');
+    setMsgSearchIndex(0);
     setMsgLoading(true);
     try {
       const data = await api.get(`/api/messages?conversationType=${conv.type}&conversationId=${encodeURIComponent(conv.id)}`);
@@ -1503,6 +1623,41 @@ export default function CommentManagement() {
 
   const totalUnread = flatItems.reduce((a, it) => a + (unreadMap[it.type + ':' + it.id] || 0), 0);
 
+  const msgSearchTerm = msgSearch.trim().toLowerCase();
+  const msgSearchMatches = msgSearchTerm
+    ? messages.filter((m) => String(m.content || '').toLowerCase().includes(msgSearchTerm))
+    : [];
+  const msgSearchMatchIds = msgSearchMatches.map((m) => m.id);
+
+  useEffect(() => { setMsgSearchIndex(0); }, [msgSearch]);
+
+  const jumpToMessageMatch = (dir) => {
+    if (!msgSearchMatchIds.length) return;
+    setMsgSearchIndex((prev) => {
+      const len = msgSearchMatchIds.length;
+      const next = ((prev + dir) % len + len) % len;
+      const id = msgSearchMatchIds[next];
+      setHighlightMsgId(id);
+      setTimeout(() => {
+        const el = document.getElementById('cm-msg-' + id);
+        if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} }
+      }, 0);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!showMsgSearch || !msgSearchTerm || !msgSearchMatchIds.length) return undefined;
+    const id = msgSearchMatchIds[0];
+    setHighlightMsgId(id);
+    const timer = setTimeout(() => {
+      const el = document.getElementById('cm-msg-' + id);
+      if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} }
+    }, 80);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [msgSearchTerm, showMsgSearch]);
+
   const directorySections = filteredSections
     .map((s) => ({
       ...s,
@@ -1637,7 +1792,9 @@ export default function CommentManagement() {
                         const preview = previews[key];
                         const previewBody = buildPreviewText(preview, user?.id);
                         const previewStamp = previewTimeLabel(preview?.createdAt);
-                        const showNewMessage = unread > 0 && !isActive;
+                        const isPinnedItem = pinnedConversations.includes(key);
+                        const isMutedItem = mutedConversations.includes(key);
+                        const showNewMessage = unread > 0 && !isActive && !isMutedItem;
                         return (
                           <div
                             key={key}
@@ -1658,6 +1815,8 @@ export default function CommentManagement() {
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 650, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
+                                {isPinnedItem && <span title="Pinned" style={{ display: 'inline-flex', flexShrink: 0 }}><Pin size={11} color={T.muted} /></span>}
+                                {isMutedItem && <span title="Muted" style={{ display: 'inline-flex', flexShrink: 0 }}><BellOff size={11} color={T.muted} /></span>}
                                 {(previewStamp || it.time) ? <span style={{ fontSize: 10.5, color: T.muted, flexShrink: 0 }}>{previewStamp || it.time}</span> : null}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, minWidth: 0 }}>
@@ -1754,10 +1913,45 @@ export default function CommentManagement() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button style={{ padding: 8, borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }} title="Call">📞</button>
-                  <button style={{ padding: 8, borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, cursor: 'pointer' }} title="More">⋯</button>
+                  <button
+                    type="button"
+                    data-conv-menu-toggle="true"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      if (attachmentMenu?.type === 'conversation') { setAttachmentMenu(null); return; }
+                      openConversationMenu(e);
+                    }}
+                    aria-haspopup="menu"
+                    aria-expanded={attachmentMenu?.type === 'conversation'}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, padding: 0, borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: 'pointer' }}
+                    title="Conversation options"
+                  >
+                    <MoreVertical size={18} />
+                  </button>
                 </div>
               </div>
+              {showMsgSearch && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid ' + T.border, background: T.surface }}>
+                  <Search size={14} color={T.muted} />
+                  <input
+                    ref={msgSearchRef}
+                    value={msgSearch}
+                    onChange={(e) => setMsgSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); jumpToMessageMatch(e.shiftKey ? -1 : 1); }
+                      if (e.key === 'Escape') { setShowMsgSearch(false); setMsgSearch(''); }
+                    }}
+                    placeholder="Search in conversation..."
+                    style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: T.text }}
+                  />
+                  <span style={{ fontSize: 11.5, color: T.muted, whiteSpace: 'nowrap' }}>
+                    {msgSearchTerm ? `${msgSearchMatchIds.length ? msgSearchIndex + 1 : 0} / ${msgSearchMatchIds.length}` : '0 / 0'}
+                  </span>
+                  <button type="button" onClick={() => jumpToMessageMatch(-1)} disabled={!msgSearchMatchIds.length} title="Previous match" style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: msgSearchMatchIds.length ? 'pointer' : 'not-allowed', opacity: msgSearchMatchIds.length ? 1 : 0.5, fontSize: 10, lineHeight: 1 }}>▲</button>
+                  <button type="button" onClick={() => jumpToMessageMatch(1)} disabled={!msgSearchMatchIds.length} title="Next match" style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: msgSearchMatchIds.length ? 'pointer' : 'not-allowed', opacity: msgSearchMatchIds.length ? 1 : 0.5, fontSize: 10, lineHeight: 1 }}>▼</button>
+                  <button type="button" onClick={() => { setShowMsgSearch(false); setMsgSearch(''); }} title="Close search" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: 'pointer' }}><X size={14} /></button>
+                </div>
+              )}
               <div ref={messagesContainerRef} className="cm-messages" style={{ flex: 1, overflowY: 'auto', padding: 16, background: T.bg }}>
                 {msgLoading && <div style={{ textAlign: 'center', color: T.muted }}>Loading...</div>}
                 {!msgLoading && messages.length === 0 && <div style={{ textAlign: 'center', color: T.muted }}>{t('messages.noMessagesYet')}</div>}
@@ -1771,6 +1965,7 @@ export default function CommentManagement() {
                   const isSelectedMsg = selectedMessages.includes(m.id);
                   const isPinnedMsg = isPinned(m.id);
                   const isHighlighted = highlightMsgId && String(m.id) === String(highlightMsgId);
+                  const isSearchMatch = !!msgSearchTerm && String(m.content || '').toLowerCase().includes(msgSearchTerm);
                   return (
                     <div key={m.id || idx} id={m.id ? 'cm-msg-' + m.id : undefined}>
                       {dateStr !== prevDate && <div style={{ textAlign: 'center', margin: '12px 0', fontSize: 11, color: T.muted }}>{dateStr}</div>}
@@ -1781,7 +1976,7 @@ export default function CommentManagement() {
                           if (t && t.closest && t.closest('button, a, input, textarea, select, [contenteditable="true"], audio, video, [role="menu"], [role="menuitem"], [data-attachment-item="true"]')) return;
                           toggleSelectMessage(m);
                         }}
-                        style={{ display: 'flex', justifyContent: own ? 'flex-end' : 'flex-start', marginBottom: 10, gap: 8, alignItems: 'flex-end', background: isSelectedMsg ? (dark ? 'rgba(59,130,246,0.12)' : 'rgba(37,99,235,0.08)') : isHighlighted ? (dark ? 'rgba(250,204,21,0.12)' : 'rgba(250,204,21,0.18)') : 'transparent', borderRadius: 10, padding: (isSelectedMsg || isHighlighted) ? '4px 6px' : 0, outline: isPinnedMsg ? ('1px solid ' + (dark ? 'rgba(250,204,21,0.35)' : '#FCD34D')) : 'none', cursor: (isSelectedMsg && editingId !== m.id) ? 'pointer' : 'default' }}
+                        style={{ display: 'flex', justifyContent: own ? 'flex-end' : 'flex-start', marginBottom: 10, gap: 8, alignItems: 'flex-end', background: isSelectedMsg ? (dark ? 'rgba(59,130,246,0.12)' : 'rgba(37,99,235,0.08)') : isSearchMatch ? (dark ? 'rgba(250,204,21,0.16)' : 'rgba(250,204,21,0.24)') : isHighlighted ? (dark ? 'rgba(250,204,21,0.12)' : 'rgba(250,204,21,0.18)') : 'transparent', borderRadius: 10, padding: (isSelectedMsg || isHighlighted || isSearchMatch) ? '4px 6px' : 0, outline: isSearchMatch ? '2px solid #F59E0B' : isPinnedMsg ? ('1px solid ' + (dark ? 'rgba(250,204,21,0.35)' : '#FCD34D')) : 'none', cursor: (isSelectedMsg && editingId !== m.id) ? 'pointer' : 'default' }}
                       >
                         {!own && <Avatar user={{ name: m.sender_name, avatar: m.sender_avatar }} size={32} />}
                         <div style={{ maxWidth: '72%' }}>
@@ -2111,10 +2306,24 @@ export default function CommentManagement() {
           const am = attachmentMenu;
           const msg = am.message || null;
           const isMsgMenu = am.type === 'message';
+          const isConvMenu = am.type === 'conversation';
           const item = (key, label, IconComp, onClick, opts = {}) => ({ key, label, IconComp, onClick, ...opts });
           const sep = (key) => ({ key, divider: true });
           const canDeleteMsg = !!(msg && (msg.sender_id === user?.id || user?.role === 'admin'));
-          const actions = isMsgMenu ? [
+          const pinnedConv = isConvPinned(selectedUser);
+          const mutedConv = isConvMuted(selectedUser);
+          const actions = isConvMenu ? [
+            item('info', selectedUser?.type === 'group' ? 'View group info' : 'View contact info', Info, () => setContactInfo(selectedUser)),
+            item('search', 'Search in conversation', Search, openMessageSearch),
+            sep('c1'),
+            item('read', 'Mark as read', CheckCheck, markConversationRead),
+            item(pinnedConv ? 'unpin-conv' : 'pin-conv', pinnedConv ? 'Unpin conversation' : 'Pin conversation', pinnedConv ? PinOff : Pin, () => togglePinnedConversation(selectedUser)),
+            item(mutedConv ? 'unmute-conv' : 'mute-conv', mutedConv ? 'Unmute conversation' : 'Mute conversation', mutedConv ? Bell : BellOff, () => toggleMutedConversation(selectedUser)),
+            ...(selectedUser?.email ? [item('copy-email', 'Copy email address', Copy, handleCopyUserEmail)] : []),
+            item('copy-id', selectedUser?.type === 'group' ? 'Copy group ID' : 'Copy user ID', Copy, handleCopyUserId),
+            sep('c2'),
+            item('refresh', 'Refresh conversation', RefreshCw, refreshConversation),
+          ] : isMsgMenu ? [
             item('reply', 'Reply', Reply, () => { if (msg) handleReply(msg); }),
             item(isPinned(msg?.id) ? 'unpin' : 'pin', isPinned(msg?.id) ? 'Unpin' : 'Pin', Pin, () => { if (msg) { const was = isPinned(msg.id); togglePinMessage(msg); showStatusToast(was ? 'Message unpinned' : 'Message pinned'); } }),
             sep('s1'),
@@ -2143,7 +2352,7 @@ export default function CommentManagement() {
             <div
               ref={attachmentMenuRef}
               role="menu"
-              aria-label="Attachment actions"
+              aria-label={isConvMenu ? 'Conversation actions' : 'Attachment actions'}
               onContextMenu={(e) => e.preventDefault()}
               style={{ position: 'fixed', top: am.y, left: am.x, zIndex: 4000, minWidth: 240, maxWidth: 'calc(100vw - 16px)', background: T.panel, border: '1px solid ' + T.border, borderRadius: 14, boxShadow: dark ? '0 20px 48px rgba(0,0,0,0.55)' : '0 20px 48px rgba(15,23,42,0.16)', padding: '6px 0', userSelect: 'none', overflow: 'hidden' }}
             >
@@ -2167,6 +2376,93 @@ export default function CommentManagement() {
             </div>
           );
         })(),
+        document.body
+      )}
+
+      {contactInfo && createPortal(
+        <div
+          onClick={() => setContactInfo(null)}
+          style={{ position: 'fixed', inset: 0, background: dark ? 'rgba(2,6,23,0.72)' : 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4001, padding: 20 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Contact info"
+            style={{ width: '100%', maxWidth: 400, background: T.panel, border: '1px solid ' + T.border, borderRadius: 16, boxShadow: dark ? '0 24px 60px rgba(0,0,0,0.6)' : '0 24px 60px rgba(15,23,42,0.2)', overflow: 'hidden' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 16, borderBottom: '1px solid ' + T.border, background: T.surface }}>
+              <Avatar user={{ name: contactInfo.name, avatar: contactInfo.avatar }} size={46} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 16, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{contactInfo.name}</div>
+                <div style={{ fontSize: 12, color: T.text2 }}>
+                  {contactInfo.type === 'group' ? `${contactInfo.members?.length || 0} members` : (contactInfo.online ? t('common.online') : t('common.offline'))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setContactInfo(null)}
+                aria-label="Close contact info"
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: 'pointer' }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Type</div>
+                <div style={{ fontSize: 13.5, color: T.text }}>{contactInfo.type === 'group' ? 'Group chat' : 'Direct message'}</div>
+              </div>
+              {contactInfo.type !== 'group' && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Role</div>
+                  <div style={{ fontSize: 13.5, color: T.text }}>{t('role.' + (contactInfo.role === 'support' ? 'escalationTeam' : contactInfo.role)) || contactInfo.role}</div>
+                </div>
+              )}
+              {contactInfo.email && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Email</div>
+                  <div style={{ fontSize: 13.5, color: T.text, wordBreak: 'break-all' }}>{contactInfo.email}</div>
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>{contactInfo.type === 'group' ? 'Group ID' : 'User ID'}</div>
+                <div style={{ fontSize: 13.5, color: T.text, wordBreak: 'break-all' }}>{contactInfo.id}</div>
+              </div>
+              {contactInfo.type === 'group' && Array.isArray(contactInfo.members) && contactInfo.members.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Members</div>
+                  <div style={{ fontSize: 13.5, color: T.text }}>{contactInfo.members.map((m) => m?.name).filter(Boolean).join(', ')}</div>
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 16px', borderTop: '1px solid ' + T.border }}>
+              <button
+                type="button"
+                onClick={handleCopyUserId}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+              >
+                <Copy size={14} /> Copy ID
+              </button>
+              {contactInfo.email && (
+                <button
+                  type="button"
+                  onClick={handleCopyUserEmail}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid ' + T.border, background: T.panel, color: T.text, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                >
+                  <Copy size={14} /> Copy Email
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setContactInfo(null)}
+                style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: T.btn, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
         document.body
       )}
 
@@ -2299,6 +2595,7 @@ function buildSections(role, me, users, groups, t, ctx = {}) {
       id: it.id,
       name: it.name,
       role: it.role,
+      email: it.email || '',
       members: it.members,
       avatar: it.avatar,
       online: it.online || false,
@@ -2311,7 +2608,7 @@ function buildSections(role, me, users, groups, t, ctx = {}) {
 }
 
 function toItem(type) {
-  return (u) => ({ type, id: u.id, name: u.name, role: u.role, avatar: u.avatar, online: u.online || u.status === 'online' || u.isOnline, members: null, last: '', time: '' });
+  return (u) => ({ type, id: u.id, name: u.name, role: u.role, email: u.email || '', avatar: u.avatar, online: u.online || u.status === 'online' || u.isOnline, members: null, last: '', time: '' });
 }
 
 function sharesGroup(u, me, groups) {
