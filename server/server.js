@@ -994,6 +994,43 @@ async function addUserRequestGroup(userId, groupId) {
 
 
 
+async function associateUnassignedCompanyRequestsWithGroup(db, companyId, groupId) {
+  if (!companyId || !groupId) return [];
+  const companyResult = await db.query('SELECT name FROM companies WHERE id = $1', [companyId]);
+  if (companyResult.rows.length === 0) return [];
+  const companyName = companyResult.rows[0].name || '';
+  const candidates = await db.query(
+    `SELECT r.id
+     FROM requests r
+     JOIN users u ON u.id = r.client_id
+     WHERE (u.company_id = $1 OR (u.company_id IS NULL AND $2 <> '' AND LOWER(COALESCE(u.company_name, '')) = LOWER($2)))
+       AND NOT EXISTS (SELECT 1 FROM user_groups ug WHERE ug.user_id = u.id)
+       AND r.assigned_group IS NULL
+       AND NOT EXISTS (SELECT 1 FROM request_groups rg WHERE rg.request_id = r.id)
+     ORDER BY r.created_at ASC`,
+    [companyId, companyName]
+  );
+  const associated = [];
+  for (const row of candidates.rows) {
+    const updated = await db.query(
+      `UPDATE requests
+       SET assigned_group = $1, assignment_source = 'company', updated_at = NOW()
+       WHERE id = $2
+         AND assigned_group IS NULL
+         AND NOT EXISTS (SELECT 1 FROM request_groups rg WHERE rg.request_id = $2)
+       RETURNING id`,
+      [groupId, row.id]
+    );
+    if (updated.rows.length === 0) continue;
+    await db.query(
+      'INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [row.id, groupId]
+    );
+    associated.push(row.id);
+  }
+  return associated;
+}
+
 async function removeUserRequestGroup(userId, groupId) {
   if (!userId || !groupId) return;
   await pool.query(
@@ -1222,6 +1259,18 @@ async function getCompanyNameById(companyId) {
   }
 }
 
+async function resolveSignupCompany(companyId, companyName) {
+  const normalizedName = String(companyName || '').trim();
+  if (companyId) {
+    const r = await pool.query('SELECT id, name FROM companies WHERE id = $1', [companyId]);
+    if (r.rows.length === 0) return null;
+    return { id: r.rows[0].id, name: r.rows[0].name || normalizedName };
+  }
+  if (!normalizedName) return null;
+  const id = await resolveCompanyIdByName(normalizedName);
+  return id ? { id, name: normalizedName } : null;
+}
+
 const mapRequest = (r) => ({
   id: r.id,
   subject: r.subject,
@@ -1387,10 +1436,10 @@ function workflowSectionTitle(title) {
 
 
 
-async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hello', lead, leadHtml, groupLine, statusBadge, infoTitle, infoRows, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature, viewLabel, req, requestId }) {
+async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hello', lead, leadHtml, groupLine, statusBadge, infoTitle, infoRows, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature, viewLabel, viewUrl, req, requestId }) {
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
-  const appLink = req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '';
+  const appLink = viewUrl || (req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '');
   const badgeColors = { NEW: '#3B82F6', ASSIGNED: '#8B5CF6', ESCALATED: '#EF4444', RESOLVED: '#10B981', FEEDBACK: '#10B981' };
   const badgeColor = (statusBadge && badgeColors[statusBadge]) || '#3B82F6';
   const para = (t) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#E8EEFF;">${t}</p>`;
@@ -1449,21 +1498,22 @@ async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hel
     ).join('') +
     `<tr><td style="padding:18px 32px 0;">` +
     closing.map(escPara).join('') +
-    signatureBlock +
     `</td></tr>` +
     (appLink
-      ? `<tr><td align="center" style="padding:24px 32px 8px;">` +
-        `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;"><tr><td align="center" bgcolor="#2563EB" style="border-radius:8px;">` +
+      ? `<tr><td align="left" style="padding:18px 32px 0;">` +
+        `<p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#93C5FD;">${escapeEmailHtml(viewLabel || 'View Request')}:</p>` +
+        `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td align="center" bgcolor="#2563EB" style="border-radius:8px;">` +
         `<a href="${escapeEmailHtml(appLink)}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">${escapeEmailHtml(viewLabel || 'View Request')}</a>` +
         `</td></tr></table></td></tr>`
       : '') +
+    `<tr><td style="padding:18px 32px 0;">` + signatureBlock + `</td></tr>` +
     `<tr><td style="padding:16px 32px 32px;"><p style="margin:0;font-size:12px;line-height:1.6;color:#9ca3af;">This is an automated message from the RHMS Support Request System.</p></td></tr>` +
     contactFooter +
     `</table></td></tr></table></body></html>`;
   return { html, logoAttachment };
 }
 
-function buildRequestWorkflowText({ title, greetingName, salutation = 'Hello', lead, leadText, groupLine, statusBadge, infoTitle, infoText, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature }) {
+function buildRequestWorkflowText({ title, greetingName, salutation = 'Hello', lead, leadText, groupLine, statusBadge, infoTitle, infoText, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature, viewLabel, viewUrl }) {
   const allExtraSections = [];
   if (extraSection) allExtraSections.push(extraSection);
   if (Array.isArray(extraSections)) allExtraSections.push(...extraSections.filter(Boolean));
@@ -1477,10 +1527,11 @@ function buildRequestWorkflowText({ title, greetingName, salutation = 'Hello', l
       : '') +
     (resolution != null ? `Resolution\n${resolution}\n\n` : '') +
     allExtraSections.map((section) => `${section.title}\n${section.body}\n\n`).join('') +
-    closing.join('\n\n') +
+    (closing.length > 0 ? `${closing.join('\n\n')}\n\n` : '') +
+    (viewUrl ? `${viewLabel || 'View Request'}: ${viewUrl}\n\n` : '') +
     (signature
-      ? `\n\n${signature.thanks || ''}\n\nBest regards,\n${signature.brand || 'RHMS Support System'}\n${signature.subtitle || 'Automated Notification Service'}`
-      : `\n\nThank you,\nRHMS Notification System`)
+      ? `${signature.thanks || 'Best regards,'}\n${signature.brand || 'RHMS Support System'}${signature.subtitle ? `\n${signature.subtitle}` : ''}`
+      : `Thank you,\nRHMS Notification System`)
   );
 }
 
@@ -1495,6 +1546,37 @@ function workflowInfoRowHtml(label, valueHtml) {
 
 function workflowPill(label, color) {
   return `<span style="display:inline-block;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:700;color:#ffffff;background:${color || '#6B7280'};">${escapeEmailHtml(label)}</span>`;
+}
+
+const RHMS_EMAIL_SIGNATURE = {
+  thanks: 'Best regards,',
+  brand: 'RHMS – Request Handling Management System for developers',
+  subtitle: '',
+};
+
+const RHMS_ESCALATION_EMAIL_SIGNATURE = {
+  thanks: 'Best regards,',
+  brand: 'RHMS – Request Handling Management System',
+  subtitle: '',
+};
+
+function rhmsRequestDetails({ requestId, subject, companyName, clientName, submittedOn, extraRows = '', extraText = '' }) {
+  return {
+    infoRows:
+      workflowInfoRowHtml('Request ID', `<span style="color:#FACC15;font-weight:700;">#${escapeEmailHtml(requestId)}</span>`) +
+      workflowInfoRow('Request Title', subject || 'N/A') +
+      workflowInfoRow('Company', companyName || 'N/A') +
+      workflowInfoRow('Submitted By', clientName || 'Client') +
+      workflowInfoRow('Submission Date', submittedOn) +
+      extraRows,
+    infoText:
+      `Request ID: #${requestId}\n` +
+      `Request Title: ${subject || 'N/A'}\n` +
+      `Company: ${companyName || 'N/A'}\n` +
+      `Submitted By: ${clientName || 'Client'}\n` +
+      `Submission Date: ${submittedOn}` +
+      extraText,
+  };
 }
 
 
@@ -1534,8 +1616,9 @@ function fireWorkflowEmail({ to, subject, tag, req, requestId, body, recipientId
         console.log(`[WorkflowEmail:${tag}] SMTP not configured; email to ${to} not sent (subject: ${subject})`);
         return;
       }
-      const { html, logoAttachment } = await buildRequestWorkflowHtml({ ...body, req, requestId });
-      const text = buildRequestWorkflowText(body);
+      const viewUrl = req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '';
+      const { html, logoAttachment } = await buildRequestWorkflowHtml({ ...body, req, requestId, viewUrl });
+      const text = buildRequestWorkflowText({ ...body, viewUrl });
       const info = await mailer.sendMail({ to, subject, text, html, ...(logoAttachment ? { attachments: [logoAttachment] } : {}) });
       await updateStatus('sent', { messageId: info.messageId || null });
       console.log(`[WorkflowEmail:${tag}] sent to ${to} (messageId: ${info.messageId || 'n/a'})`);
@@ -1632,14 +1715,15 @@ async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, s
       if (restrictToUserId && String(m.id) !== String(restrictToUserId)) continue;
       if (submitterId && String(m.id) === String(submitterId)) continue;
       emailedKeys.push(dedupKey);
-      const leadText = isDirect
-        ? `A new support request has been assigned to your group.\n\nPlease log in to the RHMS Support System to review and manage the request.`
-        : `A new support request has been submitted by ${clientName} from ${companyName} and assigned to your group.\n\nPlease log in to the RHMS Support System to review and manage the request.`;
-      const leadHtml = isDirect
-        ? `A new support request has been assigned to your group.<br><br>Please log in to the RHMS Support System to review and manage the request.`
-        : `A new support request has been submitted by <strong style="color:#ffffff;">${escapeEmailHtml(clientName)}</strong> from <strong style="color:#ffffff;">${escapeEmailHtml(companyName)}</strong> and assigned to your group.<br><br>Please log in to the RHMS Support System to review and manage the request.`;
-      const companyRowHtml = isDirect ? '' : workflowInfoRow('Company Name', companyName) + '\n';
-      const companyRowText = isDirect ? '' : `Company Name: ${companyName}\n`;
+      const leadText = `A new support request has been assigned to your group by **${clientName}** from **${companyName}**.`;
+      const leadHtml = `A new support request has been assigned to your group by <strong style="color:#ffffff;">${escapeEmailHtml(clientName)}</strong> from <strong style="color:#ffffff;">${escapeEmailHtml(companyName)}</strong>.`;
+      const details = rhmsRequestDetails({
+        requestId,
+        subject: ctx.subject,
+        companyName,
+        clientName,
+        submittedOn,
+      });
       fireWorkflowEmail({
         to: m.email,
         subject,
@@ -1655,29 +1739,14 @@ async function emailGroupMembersForRequestGroup(requestId, groupId, groupName, s
           lead: leadText,
           leadHtml,
           leadText,
-          infoTitle: 'Request Details',
-          infoRows:
-            workflowInfoRowHtml('Request ID', `<span style="color:#FACC15;font-weight:700;">#${escapeEmailHtml(requestId)}</span>`) +
-            workflowInfoRow('Client Name', clientName) +
-            (isDirect ? '' : workflowInfoRow('Company Name', companyName)) +
-            workflowInfoRow('Assigned Group', assignedGroupName) +
-            workflowInfoRow('Request Category', category) +
-            workflowInfoRowHtml('Priority', workflowPill(ctx.priority_name || 'N/A', ctx.priority_color || '#6B7280')) +
-            workflowInfoRow('Submitted Date', submittedOn),
-          infoText:
-            `Request ID: #${requestId}\nClient Name: ${clientName}\n` +
-            (isDirect ? '' : `Company Name: ${companyName}\n`) +
-            `Assigned Group: ${assignedGroupName}\nRequest Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\n` +
-            `Submitted Date: ${submittedOn}`,
+          infoTitle: 'Request Details:',
+          infoRows: details.infoRows,
+          infoText: details.infoText,
           detailsBody: null,
           resolution: null,
-          closing: [],
-          signature: {
-            thanks: 'Thank you for your commitment and support.',
-            brand: 'RHMS Support System',
-            subtitle: 'Automated Notification Service',
-          },
-          viewLabel: 'View Request in RHMS',
+          closing: ['Please review the request and take the necessary action.'],
+          signature: RHMS_EMAIL_SIGNATURE,
+          viewLabel: 'View Request',
         },
       });
     }
@@ -1714,6 +1783,62 @@ async function emailGroupDevelopersForSyncedRequests(requestIds, groupId, req, o
 
 
 
+
+async function emailGroupMembersOnCompanyAssignment(companyId, groupId, requestIds, req) {
+  try {
+    if (!Array.isArray(requestIds) || requestIds.length === 0) return;
+    const groupResult = await pool.query('SELECT name FROM groups WHERE id = $1', [groupId]);
+    const groupName = groupResult.rows.length > 0 ? groupResult.rows[0].name : groupId;
+    const members = await getAssignmentGroupRecipients(groupId);
+    if (members.length === 0) return;
+    for (const requestId of requestIds) {
+      const ctx = await getRequestEmailContext(requestId);
+      if (!ctx) continue;
+      const clientName = ctx.client_name || ctx.client_email || 'Client';
+      const companyName = ctx.client_company || (await getCompanyNameById(companyId)) || 'N/A';
+      const submittedOn = formatEmailDateTime(ctx.created_at);
+      const details = rhmsRequestDetails({
+        requestId,
+        subject: ctx.subject,
+        companyName,
+        clientName,
+        submittedOn,
+      });
+      const leadText = `A new support request has been assigned to your group by **${clientName}** from **${companyName}**.`;
+      const leadHtml = `A new support request has been assigned to your group by <strong style="color:#ffffff;">${escapeEmailHtml(clientName)}</strong> from <strong style="color:#ffffff;">${escapeEmailHtml(companyName)}</strong>.`;
+      for (const m of members) {
+        if (m.role !== 'developer') continue;
+        fireWorkflowEmail({
+          to: m.email,
+          subject: `Company ${companyName} Assigned to ${groupName} - Request #${requestId}`,
+          tag: 'company-group-assigned', req, requestId,
+          recipientId: m.id,
+          groupId,
+          eventType: 'company_group_assignment',
+          dedupKey: `company-group-assignment:${companyId}:${groupId}:${requestId}:${m.id}`,
+          body: {
+            title: 'New Support Request Assigned to Your Group',
+            salutation: 'Dear',
+            greetingName: m.name || 'Developer',
+            lead: leadText,
+            leadHtml,
+            leadText,
+            infoTitle: 'Request Details:',
+            infoRows: details.infoRows,
+            infoText: details.infoText,
+            detailsBody: null,
+            resolution: null,
+            closing: ['Please review the request and take the necessary action.'],
+            signature: RHMS_EMAIL_SIGNATURE,
+            viewLabel: 'View Request',
+          },
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[WorkflowEmail:company-group-assigned] failed:', err.message);
+  }
+}
 
 async function emailAdminOnFeedback(requestId, rating, comment, req) {
   try {
@@ -1859,30 +1984,37 @@ async function emailDeveloperOnAssignment(requestId, assigneeId, assignerName, r
       console.log(`[WorkflowEmail:assign-dev] skipped — ${to} is not a verified email`);
       return;
     }
-    const category = workflowCategoryOf(ctx);
-    const assignedOn = formatEmailDateTime(ctx.updated_at);
+    const clientName = ctx.client_name || 'Client';
+    const companyName = ctx.client_company || 'N/A';
+    const submittedOn = formatEmailDateTime(ctx.created_at);
+    const details = rhmsRequestDetails({
+      requestId,
+      subject: ctx.subject,
+      companyName,
+      clientName,
+      submittedOn,
+    });
+    const leadText = `A new support request has been assigned to you by **${clientName}** from **${companyName}**.`;
+    const leadHtml = `A new support request has been assigned to you by <strong style="color:#ffffff;">${escapeEmailHtml(clientName)}</strong> from <strong style="color:#ffffff;">${escapeEmailHtml(companyName)}</strong>.`;
     fireWorkflowEmail({
       to,
       subject: `Support Request Assigned to You - #${requestId}`,
       tag: 'assign-dev', req, requestId,
       body: {
         title: 'Support Request Assigned to You',
+        salutation: 'Dear',
         greetingName: devName,
-        lead: 'A support request has been assigned to you and requires your attention. Please review the request details below and take the necessary action according to the RHMS support workflow.',
-        statusBadge: 'ASSIGNED',
-        infoRows:
-          workflowInfoRow('Request ID', `#${requestId}`) +
-          workflowInfoRow('Client', ctx.client_name || 'N/A') +
-          workflowInfoRow('Category', category) +
-          workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
-          workflowInfoRow('Assigned On', assignedOn),
-        infoText:
-          `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nCategory: ${category}\n` +
-          `Priority: ${ctx.priority_name || 'N/A'}\nAssigned On: ${assignedOn}`,
-        detailsTitle: ctx.subject,
+        lead: leadText,
+        leadHtml,
+        leadText,
+        infoTitle: 'Request Details:',
+        infoRows: details.infoRows,
+        infoText: details.infoText,
         detailsBody: ctx.description || 'N/A',
         resolution: null,
-        closing: ['Please review the request and begin the necessary work.'],
+        closing: ['Please review the request and take the necessary action.'],
+        signature: RHMS_EMAIL_SIGNATURE,
+        viewLabel: 'View Request',
       },
     });
   } catch (err) {
@@ -1906,47 +2038,47 @@ async function emailEscalationTeamOnAssignment(requestId, groupId, assignerName,
     }
     const members = [];
     for (const m of await getAssignmentGroupRecipients(groupId)) {
-      if (excludeUserId && String(m.id) === String(excludeUserId)) continue;
-      if (!(await isEmailVerified(m.email))) {
-        console.log(`[WorkflowEmail:assign-team] skipped — ${m.email} is not a verified email`);
-        continue;
-      }
+        if (m.role !== 'developer') continue;
+        if (excludeUserId && String(m.id) === String(excludeUserId)) continue;
+        if (!(await isEmailVerified(m.email))) {
+          console.log(`[WorkflowEmail:assign-team] skipped — ${m.email} is not a verified email`);
+          continue;
+        }
       members.push(m);
     }
     if (members.length === 0) { console.log('[WorkflowEmail:assign-team] skipped — no verified team member emails'); return; }
-    const category = workflowCategoryOf(ctx);
-    
-    
-    const groupName = ctx.group_name || 'N/A';
+    const clientName = ctx.client_name || 'Client';
+    const companyName = ctx.client_company || 'N/A';
     const submittedOn = formatEmailDateTime(ctx.created_at);
-    
-    
-    
+    const details = rhmsRequestDetails({
+      requestId,
+      subject: ctx.subject,
+      companyName,
+      clientName,
+      submittedOn,
+    });
+    const leadText = `A new support request has been assigned to your group by **${clientName}** from **${companyName}**.`;
+    const leadHtml = `A new support request has been assigned to your group by <strong style="color:#ffffff;">${escapeEmailHtml(clientName)}</strong> from <strong style="color:#ffffff;">${escapeEmailHtml(companyName)}</strong>.`;
     for (const m of members) {
       fireWorkflowEmail({
         to: m.email,
-        subject: `New Support Request for Your Group - #${requestId}`,
+        subject: `New Support Request Assigned to Your Group - #${requestId}`,
         tag: 'assign-team', req, requestId,
         body: {
-          title: 'New Support Request for Your Group',
-          greetingName: m.name || 'Team Member',
-          lead: 'A new support request has been received and assigned to your group.',
-          groupLine: groupName,
-          statusBadge: 'ASSIGNED',
-          infoRows:
-            workflowInfoRow('Request ID', `#${requestId}`) +
-            workflowInfoRow('Client', ctx.client_name || 'N/A') +
-            workflowInfoRow('Group', groupName) +
-            workflowInfoRow('Category', category) +
-            workflowInfoRow('Priority', ctx.priority_name || 'N/A') +
-            workflowInfoRow('Submitted On', submittedOn),
-          infoText:
-            `Request ID: #${requestId}\nClient: ${ctx.client_name || 'N/A'}\nGroup: ${groupName}\nCategory: ${category}\n` +
-            `Priority: ${ctx.priority_name || 'N/A'}\nSubmitted On: ${submittedOn}`,
-          detailsTitle: ctx.subject,
-          detailsBody: ctx.description || 'N/A',
+          title: 'New Support Request Assigned to Your Group',
+          salutation: 'Dear',
+          greetingName: m.name || 'Developer',
+          lead: leadText,
+          leadHtml,
+          leadText,
+          infoTitle: 'Request Details:',
+          infoRows: details.infoRows,
+          infoText: details.infoText,
+          detailsBody: null,
           resolution: null,
-          closing: ['Please review this request and proceed with the necessary action.'],
+          closing: ['Please review the request and take the necessary action.'],
+          signature: RHMS_EMAIL_SIGNATURE,
+          viewLabel: 'View Request',
         },
       });
     }
@@ -1979,18 +2111,32 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
   try {
     const ctx = await getRequestEmailContext(requestId);
     if (!ctx) return;
-    const sourceRow = await pool.query('SELECT assignment_source FROM requests WHERE id = $1', [requestId]);
-    const assignmentSource = sourceRow.rows.length > 0 ? sourceRow.rows[0].assignment_source : null;
+    const requestRow = await pool.query('SELECT assignment_source, assigned_group FROM requests WHERE id = $1', [requestId]);
+    const assignmentSource = requestRow.rows.length > 0 ? requestRow.rows[0].assignment_source : null;
+    const assignedGroupId = requestRow.rows.length > 0 ? requestRow.rows[0].assigned_group : null;
     const isDirect = assignmentSource === 'direct';
-    const grp = await pool.query(
-      'SELECT g.id, g.name FROM request_groups rg JOIN groups g ON g.id = rg.group_id WHERE rg.request_id = $1',
-      [requestId]
-    );
+    let grp = { rows: [] };
+    if (assignedGroupId) {
+      grp = await pool.query(
+        `SELECT g.id, g.name FROM groups g
+         WHERE g.id = $1
+           AND (EXISTS (SELECT 1 FROM request_groups rg WHERE rg.request_id = $2 AND rg.group_id = g.id)
+             OR EXISTS (SELECT 1 FROM requests r WHERE r.id = $2 AND r.assigned_group = g.id))`,
+        [assignedGroupId, requestId]
+      );
+    }
+    if (grp.rows.length === 0) {
+      grp = await pool.query(
+        'SELECT g.id, g.name FROM request_groups rg JOIN groups g ON g.id = rg.group_id WHERE rg.request_id = $1',
+        [requestId]
+      );
+    }
     if (grp.rows.length === 0) { console.log('[WorkflowEmail:escalated] skipped — request has no group'); return; }
-    const category = workflowCategoryOf(ctx);
     const clientName = ctx.client_name || 'Client';
     const clientCompany = ctx.client_company || 'N/A';
     const escalationEventId = ctx.updated_at ? new Date(ctx.updated_at).toISOString() : 'unknown';
+    const escalatedOn = formatEmailDateTime(ctx.updated_at);
+    const submittedOn = formatEmailDateTime(ctx.created_at);
     const note = await getEscalationNote(requestId);
     const escalatorName = (escalator && escalator.name) || 'Developer';
     const escalatorId = escalator && escalator.id;
@@ -2010,7 +2156,23 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
         if (alreadyEmailed.has(key)) continue;
         alreadyEmailed.add(key);
         sent += 1;
-        const leadText = `A support request has been escalated to your group by ${escalatorName}.\n\nPlease log in to the RHMS Support System to review the escalated request and take the necessary action.`;
+        const leadText = `A support request has been escalated to your group by **${escalatorName}**.`;
+        const leadHtml = `A support request has been escalated to your group by <strong style="color:#ffffff;">${escapeEmailHtml(escalatorName)}</strong>.`;
+        const details = rhmsRequestDetails({
+          requestId,
+          subject: ctx.subject,
+          companyName: clientCompany,
+          clientName,
+          submittedOn,
+          extraRows:
+            workflowInfoRow('Escalated By', escalatorName) +
+            workflowInfoRow('Escalation Date', escalatedOn) +
+            workflowInfoRow('Escalation Reason', note),
+          extraText:
+            `\nEscalated By: ${escalatorName}` +
+            `\nEscalation Date: ${escalatedOn}` +
+            `\nEscalation Reason: ${note}`,
+        });
         fireWorkflowEmail({
           to: m.email,
           subject,
@@ -2024,42 +2186,16 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
             salutation: 'Dear',
             greetingName: m.name || 'Escalation Team Member',
             lead: leadText,
-            leadHtml:
-              `A support request has been escalated to your group by <strong style="color:#ffffff;">${escapeEmailHtml(escalatorName)}</strong>.<br><br>` +
-              `Please log in to the RHMS Support System to review the escalated request and take the necessary action.`,
+            leadHtml,
             leadText,
-            infoTitle: 'Request Details',
-            infoRows:
-              workflowInfoRowHtml('Request ID', `<span style="color:#FACC15;font-weight:700;">#${escapeEmailHtml(requestId)}</span>`) +
-              workflowInfoRow('Client Name', clientName) +
-              workflowInfoRow('Company Name', clientCompany) +
-              workflowInfoRow('Assigned Group', g.name || ctx.group_name || 'N/A') +
-              workflowInfoRow('Escalated By', escalatorName) +
-              workflowInfoRow('Category', category) +
-              workflowInfoRowHtml('Priority', workflowPill(ctx.priority_name || 'N/A', ctx.priority_color || '#6B7280')) +
-              workflowInfoRowHtml('Current Status', workflowPill('Escalated', '#EF4444')),
-            infoText:
-              `Request ID: #${requestId}\nClient Name: ${clientName}\nCompany Name: ${clientCompany}\n` +
-              `Assigned Group: ${g.name || ctx.group_name || 'N/A'}\nEscalated By: ${escalatorName}\n` +
-              `Category: ${category}\nPriority: ${ctx.priority_name || 'N/A'}\nCurrent Status: Escalated`,
-            detailsSectionTitle: 'Issue Description',
-            detailsTitle: null,
-            detailsBody: ctx.description || 'N/A',
+            infoTitle: 'Request Details:',
+            infoRows: details.infoRows,
+            infoText: details.infoText,
+            detailsBody: null,
             resolution: null,
-            extraSections: [
-              { title: 'Escalation Reason', body: note },
-              {
-                title: 'Required Action',
-                body: 'Please review the escalated request, investigate the issue, and take the necessary action to resolve it.',
-              },
-            ],
-            closing: [],
-            signature: {
-              thanks: 'Your prompt attention and cooperation are appreciated.',
-              brand: 'RHMS Support System',
-              subtitle: 'Automated Notification Service',
-            },
-            viewLabel: 'View Escalated Request in RHMS',
+            closing: ['Please review the escalated request and take the necessary action.'],
+            signature: RHMS_ESCALATION_EMAIL_SIGNATURE,
+            viewLabel: 'View Request',
           },
         });
       }
@@ -2194,13 +2330,26 @@ app.get('/api/notifications/stream', async (req, res) => {
 });
 
 
+app.get('/api/public/companies', async (req, res) => {
+  try {
+    const result = await pool.query("SELECT id, name FROM companies WHERE name IS NOT NULL AND name <> '' ORDER BY name");
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Public companies error:', err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { name, password, companyName, language } = req.body;
+    const { name, password, companyName, companyId, language } = req.body;
     const email = (req.body.email || '').trim().toLowerCase();
     const verificationCode = (req.body.code || req.body.verificationCode || '').trim();
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
+    }
+    if (!companyId && !String(companyName || '').trim()) {
+      return res.status(400).json({ error: 'Company is required' });
     }
     if (!EMAIL_REGEX.test(String(email).trim())) {
       return res.status(400).json({ error: 'This email address does not exist or cannot be verified. Please use a valid email address.' });
@@ -2234,13 +2383,15 @@ app.post('/api/auth/signup', async (req, res) => {
     }
     const id = uuidv4();
     const hashedPassword = await bcrypt.hash(password, 10);
-    const normalizedCompanyName = String(companyName || '').trim();
-    const companyId = await resolveCompanyIdByName(normalizedCompanyName);
+    const company = await resolveSignupCompany(companyId, companyName);
+    if (!company) {
+      return res.status(400).json({ error: 'Selected company does not exist' });
+    }
     let result;
     try {
       result = await pool.query(
         'INSERT INTO users (id, name, email, password, role, company_name, company_id, language, approved, moderated, client_approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, name, email, role, avatar, created_at, company_name, company_id, language, approved, moderated, client_approved',
-        [id, name, email, hashedPassword, 'client', normalizedCompanyName, companyId, ['en', 'am'].includes(language) ? language : 'en', true, false, (await (async()=>{try{const v=await getSettingValue('clientApprovalRequired');return v==='true'?false:true;}catch(e){return true;}})())]
+        [id, name, email, hashedPassword, 'client', company.name, company.id, ['en', 'am'].includes(language) ? language : 'en', true, false, (await (async()=>{try{const v=await getSettingValue('clientApprovalRequired');return v==='true'?false:true;}catch(e){return true;}})())]
       );
     } catch (err) {
       if (err.code === '23505') {
@@ -2454,10 +2605,13 @@ app.post('/api/auth/logout', authMiddleware, async (req, res) => {
 
 app.post('/api/auth/google', async (req, res) => {
   try {
-    const { credential, intent } = req.body;
+    const { credential, intent, companyId, companyName } = req.body;
     const googleIntent = intent === 'signup' ? 'signup' : 'login';
     if (!credential) {
       return res.status(400).json({ error: 'Google credential is required' });
+    }
+    if (googleIntent === 'signup' && !companyId && !String(companyName || '').trim()) {
+      return res.status(400).json({ error: 'Company is required' });
     }
 
     const googleClientId = process.env.GOOGLE_CLIENT_ID;
@@ -2518,10 +2672,14 @@ app.post('/api/auth/google', async (req, res) => {
         
         
         const id = uuidv4();
+        const company = await resolveSignupCompany(companyId, companyName);
+        if (!company) {
+          return res.status(400).json({ error: 'Selected company does not exist' });
+        }
         result = await pool.query(
-          `INSERT INTO users (id, name, email, password, role, avatar, google_id, approved, moderated)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-          [id, name, email, await bcrypt.hash(googleId, 10), 'client', picture, googleId, true, false]
+          `INSERT INTO users (id, name, email, password, role, avatar, google_id, approved, moderated, company_name, company_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+          [id, name, email, await bcrypt.hash(googleId, 10), 'client', picture, googleId, true, false, company.name, company.id]
         );
         user = result.rows[0];
         isNewUser = true;
@@ -4457,7 +4615,7 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
       
       
       
-      if (statusId === '9' || statusName === 'Escalated') {
+      if ((statusId === '9' || statusName === 'Escalated') && req.user.role === 'developer') {
         emailEscalationTeamOnEscalation(req.params.id, { id: req.user.id, name: req.user.name }, req, existing.rows[0].assigned_group, oldStatusName);
       }
     }
@@ -5873,15 +6031,21 @@ app.post('/api/groups', authMiddleware, roleMiddleware('admin'), async (req, res
       'INSERT INTO groups (id, name, description, color, company_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [id, name, description || '', color || '#6B7280', primaryCompanyId]
     );
+    const assignmentNotifications = [];
     for (const companyId of companyIds) {
       await client.query(
         'INSERT INTO company_groups (company_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
         [companyId, id]
       );
+      const requestIds = await associateUnassignedCompanyRequestsWithGroup(client, companyId, id);
+      if (requestIds.length > 0) assignmentNotifications.push({ companyId, requestIds });
     }
     await client.query('COMMIT');
     await logGroupActivity('group_created', { id, name }, req.user, req);
     res.status(201).json({ ...result.rows[0], company_ids: companyIds, companies: companyIds });
+    for (const assignment of assignmentNotifications) {
+      emailGroupMembersOnCompanyAssignment(assignment.companyId, id, assignment.requestIds, req);
+    }
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (e) {}
     if (err.code === '23503') return res.status(400).json({ error: 'One or more selected companies do not exist' });
@@ -5914,6 +6078,7 @@ app.put('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (req, 
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Group not found' });
     }
+    const assignmentNotifications = [];
     if (companyProvided) {
       await client.query('DELETE FROM company_groups WHERE group_id = $1', [req.params.id]);
       for (const companyId of companyIds) {
@@ -5921,11 +6086,16 @@ app.put('/api/groups/:id', authMiddleware, roleMiddleware('admin'), async (req, 
           'INSERT INTO company_groups (company_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
           [companyId, req.params.id]
         );
+        const requestIds = await associateUnassignedCompanyRequestsWithGroup(client, companyId, req.params.id);
+        if (requestIds.length > 0) assignmentNotifications.push({ companyId, requestIds });
       }
     }
     await client.query('COMMIT');
     await logGroupActivity('group_updated', { id: req.params.id, name }, req.user, req);
     res.json({ ...result.rows[0], company_ids: companyIds, companies: companyIds });
+    for (const assignment of assignmentNotifications) {
+      emailGroupMembersOnCompanyAssignment(assignment.companyId, req.params.id, assignment.requestIds, req);
+    }
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (e) {}
     if (err.code === '23503') return res.status(400).json({ error: 'One or more selected companies do not exist' });

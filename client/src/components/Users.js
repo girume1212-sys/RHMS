@@ -22,6 +22,7 @@ export default function Users() {
   const { t } = useTranslation();
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [groups, setGroups] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,8 +55,18 @@ export default function Users() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  const getRoleLabel = useCallback((role) => {
+    if (!role) return '';
+    const definedRole = roles.find(r => (r.id || r.name) === role);
+    const translationKey = `role.${role === 'support' ? 'escalationTeam' : role}`;
+    const translated = t(translationKey);
+    if (translated !== translationKey) return translated;
+    return definedRole?.name || role;
+  }, [roles, t]);
+
   useEffect(() => {
     loadUsers();
+    api.get('/api/roles').then(data => setRoles(Array.isArray(data) ? data : [])).catch(() => setRoles([]));
     api.get('/api/groups').then(setGroups).catch(() => {});
     api.get('/api/companies').then(setCompanies).catch(() => {});
     const refreshSettings = () => {
@@ -106,6 +117,20 @@ export default function Users() {
     return [...new Set([...fromDb, ...fromUsers])].sort((a, b) => a.localeCompare(b));
   })();
 
+  const roleOptions = (() => {
+    const ids = [
+      'admin', 'support', 'developer', 'client',
+      ...roles.map(r => r.id || r.name),
+      ...users.map(u => u.role)
+    ].filter(Boolean);
+    const seen = new Set();
+    return ids.filter(id => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    }).map(id => ({ id, label: getRoleLabel(id) }));
+  })();
+
   const filteredUsers = users.filter(u => {
     if (roleFilter && u.role !== roleFilter) return false;
     if (groupFilter && (!u.groupIds || !u.groupIds.includes(groupFilter))) return false;
@@ -116,6 +141,7 @@ export default function Users() {
         (u.name || '').toLowerCase().includes(q) ||
         (u.email || '').toLowerCase().includes(q) ||
         (u.role || '').toLowerCase().includes(q) ||
+        getRoleLabel(u.role).toLowerCase().includes(q) ||
         (u.companyName || '').toLowerCase().includes(q)
       );
     }
@@ -126,7 +152,7 @@ export default function Users() {
     switch (sort.key) {
       case 'name': aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase(); break;
       case 'email': aVal = (a.email || '').toLowerCase(); bVal = (b.email || '').toLowerCase(); break;
-      case 'role': aVal = (a.role || '').toLowerCase(); bVal = (b.role || '').toLowerCase(); break;
+      case 'role': aVal = getRoleLabel(a.role).toLowerCase(); bVal = getRoleLabel(b.role).toLowerCase(); break;
       case 'group': aVal = (a.groupNames?.[0] || '').toLowerCase(); bVal = (b.groupNames?.[0] || '').toLowerCase(); break;
       case 'company': aVal = (a.companyName || '').toLowerCase(); bVal = (b.companyName || '').toLowerCase(); break;
       case 'createdAt': aVal = new Date(a.createdAt || 0); bVal = new Date(b.createdAt || 0); break;
@@ -313,10 +339,9 @@ export default function Users() {
             <div className="sf-toolbar-right">
               <select className="filter-select" value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}>
                 <option value="">{t('common.allRoles')}</option>
-                <option value="admin">{t('role.admin')}</option>
-                <option value="support">{t('role.escalationTeam')}</option>
-                <option value="developer">{t('role.developer')}</option>
-                <option value="client">{t('role.client')}</option>
+                {roleOptions.map(role => (
+                  <option key={role.id} value={role.id}>{role.label}</option>
+                ))}
               </select>
               <select className="filter-select" value={groupFilter} onChange={(e) => { setGroupFilter(e.target.value); setPage(1); }}>
                 <option value="">{t('common.allGroups')}</option>
@@ -368,7 +393,7 @@ export default function Users() {
                        </div>
                     </td>
                     <td><span className="truncate-cell">{u.email}</span></td>
-                    <td><span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>{t('role.' + u.role)}</span></td>
+                    <td><span className="role-badge" style={{ background: getRoleColor(u.role) + '20', color: getRoleColor(u.role) }}>{getRoleLabel(u.role)}</span></td>
                     <td>
                       {u.groupNames && u.groupNames.length > 0 ? (
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
@@ -491,7 +516,7 @@ export default function Users() {
                 <h3 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: 700 }}>{viewingUser.name}</h3>
                 <p style={{ margin: '0 0 12px', opacity: 0.8, fontSize: '14px' }}>{viewingUser.email}</p>
                 <div style={{ background: 'rgba(255,255,255,0.2)', padding: '6px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, backdropFilter: 'blur(10px)' }}>
-                  {t('role.' + viewingUser.role)}
+                  {getRoleLabel(viewingUser.role)}
                 </div>
                 <div style={{ marginTop: '20px', width: '100%', opacity: 0.9, fontSize: '13px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
@@ -500,7 +525,7 @@ export default function Users() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
                     <span>{t('common.role')}</span>
-                    <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{t('role.' + viewingUser.role)}</span>
+                    <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{getRoleLabel(viewingUser.role)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
                     <span>{t('common.language')}</span>
@@ -523,7 +548,7 @@ export default function Users() {
                     { label: t('common.fullName'), value: viewingUser.name, icon: 'user', color: '#2563EB' },
                     { label: t('common.email'), value: viewingUser.email, icon: 'mail', color: '#0284c7' },
                     { label: t('common.company'), value: viewingUser.companyName || '-', icon: 'company', color: '#1e40af' },
-                    { label: t('common.role'), value: t('role.' + viewingUser.role), icon: 'shield', color: '#3730a3' },
+                    { label: t('common.role'), value: getRoleLabel(viewingUser.role), icon: 'shield', color: '#3730a3' },
                     { label: t('common.group'), value: viewingUser.groupNames?.join(', ') || '-', icon: 'users', color: '#0e7490' },
                     { label: t('common.language'), value: viewingUser.language || '-', icon: 'globe', color: '#047857' },
                     { label: t('common.memberSince'), value: viewingUser.createdAt ? new Date(viewingUser.createdAt).toLocaleDateString() : '-', icon: 'calendar', color: '#1d4ed8' },
@@ -586,10 +611,9 @@ export default function Users() {
               <div className="form-group">
                 <label>{t('common.role')}</label>
                 <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                  <option value="client">{t('role.client')}</option>
-                  <option value="support">{t('role.escalationTeam')}</option>
-                  <option value="developer">{t('role.developer')}</option>
-                  <option value="admin">{t('role.admin')}</option>
+                  {roleOptions.map(role => (
+                    <option key={role.id} value={role.id}>{role.label}</option>
+                  ))}
                 </select>
               </div>
               <div className="form-group">

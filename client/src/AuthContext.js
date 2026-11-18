@@ -105,13 +105,13 @@ export function AuthProvider({ children }) {
     }
   }, [token, fetchUser]);
 
-  const googleLogin = useCallback(async (credential, intent = 'login') => {
+  const googleLogin = useCallback(async (credential, intent = 'login', companyData = null) => {
     let res;
     try {
       res = await fetch(`${API_BASE}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential, intent })
+        body: JSON.stringify({ credential, intent, ...(companyData || {}) })
       });
     } catch (err) {
       throw new Error('Cannot connect to server. Is the backend running on port 5000?');

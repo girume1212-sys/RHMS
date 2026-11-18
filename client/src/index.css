@@ -257,6 +257,38 @@ body {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.login-input-wrapper select {
+  width: 100%;
+  padding: 14px 16px 14px 44px;
+  border: 1px solid rgba(0, 180, 216, 0.2);
+  border-radius: 10px;
+  font-size: 14px;
+  color: #ffffff;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.05);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  box-sizing: border-box;
+  appearance: none;
+}
+
+.login-input-wrapper select option {
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.login-input-wrapper select:hover {
+  border-color: #00b4d8;
+  background: rgba(0, 180, 216, 0.12);
+  box-shadow: 0 0 0 2px rgba(0, 180, 216, 0.18);
+}
+
+.login-input-wrapper select:focus {
+  outline: none;
+  border-color: rgba(0, 180, 216, 0.5);
+  box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .show-password-btn {
   position: absolute;
   right: 14px;
@@ -8357,7 +8389,8 @@ body:not(.dark-mode) .login-subtitle {
 body:not(.dark-mode) .login-input-icon {
   color: #64748b;
 }
-body:not(.dark-mode) .login-input-wrapper input {
+body:not(.dark-mode) .login-input-wrapper input,
+body:not(.dark-mode) .login-input-wrapper select {
   color: #0f172a;
   background: rgba(255, 255, 255, 0.9);
   border-color: rgba(0, 180, 216, 0.3);

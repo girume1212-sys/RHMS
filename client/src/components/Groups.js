@@ -102,7 +102,7 @@ export default function Groups() {
       const body = { name: form.name, description: form.description, color: form.color, companyIds: form.companyId ? [form.companyId] : [], company_id: form.companyId || null };
       await api.put(`/api/groups/${editingGroup.id}`, body);
       setEditingGroup(null);
-setForm({ name: '', description: '', color: '#3B82F6', companyIds: [] });
+setForm({ name: '', description: '', color: '#3B82F6', companyId: '' });
       loadGroups();
       addToast(t('common.updatedSuccess', { item: t('common.group') }));
       showStatusToast(t('common.groupUpdatedWithName', { name: form.name }), 'status');
@@ -142,7 +142,7 @@ setForm({ name: '', description: '', color: '#3B82F6', companyIds: [] });
 
   const openCreate = () => {
     setEditingGroup(null);
-    setForm({ name: '', description: '', color: '#3B82F6', companyIds: [] });
+    setForm({ name: '', description: '', color: '#3B82F6', companyId: '' });
     setShowModal(true);
   };
 
