@@ -1054,9 +1054,31 @@ async function associateUnassignedCompanyRequestsWithGroup(db, companyId, groupI
      FROM requests r
      JOIN users u ON u.id = r.client_id
      WHERE (u.company_id = $1 OR (u.company_id IS NULL AND $2 <> '' AND LOWER(COALESCE(u.company_name, '')) = LOWER($2)))
-       AND NOT EXISTS (SELECT 1 FROM user_groups ug WHERE ug.user_id = u.id)
-       AND r.assigned_group IS NULL
-       AND NOT EXISTS (SELECT 1 FROM request_groups rg WHERE rg.request_id = r.id)
+       AND NOT EXISTS (
+         SELECT 1
+         FROM request_groups rg
+         JOIN groups g ON g.id = rg.group_id
+         WHERE rg.request_id = r.id
+           AND EXISTS (
+             SELECT 1
+             FROM user_groups ug
+             JOIN users su ON su.id = ug.user_id
+             WHERE ug.group_id = g.id
+               AND su.role IN ('developer', 'support')
+               AND COALESCE(su.approved, TRUE) = TRUE
+           )
+       )
+       AND (
+         r.assigned_group IS NULL
+         OR NOT EXISTS (
+           SELECT 1
+           FROM user_groups ug
+           JOIN users su ON su.id = ug.user_id
+           WHERE ug.group_id = r.assigned_group
+             AND su.role IN ('developer', 'support')
+             AND COALESCE(su.approved, TRUE) = TRUE
+         )
+       )
      ORDER BY r.created_at ASC`,
     [companyId, companyName]
   );
@@ -1066,12 +1088,11 @@ async function associateUnassignedCompanyRequestsWithGroup(db, companyId, groupI
       `UPDATE requests
        SET assigned_group = $1, assignment_source = 'company', updated_at = NOW()
        WHERE id = $2
-         AND assigned_group IS NULL
-         AND NOT EXISTS (SELECT 1 FROM request_groups rg WHERE rg.request_id = $2)
        RETURNING id`,
       [groupId, row.id]
     );
     if (updated.rows.length === 0) continue;
+    await db.query('DELETE FROM request_groups WHERE request_id = $1', [row.id]);
     await db.query(
       'INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
       [row.id, groupId]
@@ -1144,6 +1165,26 @@ async function groupHasCompany(groupId) {
   }
 }
 
+async function groupHasStaff(groupId) {
+  if (!groupId) return false;
+  try {
+    const r = await pool.query(
+      `SELECT 1
+       FROM user_groups ug
+       JOIN users u ON u.id = ug.user_id
+       WHERE ug.group_id = $1
+         AND u.role IN ('developer', 'support')
+         AND COALESCE(u.approved, TRUE) = TRUE
+       LIMIT 1`,
+      [groupId]
+    );
+    return r.rows.length > 0;
+  } catch (e) {
+    console.error('[auto-assign] group staff lookup failed:', e.message);
+    return false;
+  }
+}
+
 async function requestGroupHasCompany(requestId) {
   if (!requestId) return false;
   try {
@@ -1207,40 +1248,48 @@ async function resolveGroupForClient(clientId) {
     const userRes = await pool.query('SELECT company_id, company_name FROM users WHERE id = $1', [clientId]);
     if (userRes.rows.length === 0) return null;
 
-    // Direct client-to-group assignment takes precedence.
+    const staffCheck = (alias) =>
+      `EXISTS (
+         SELECT 1
+         FROM user_groups ug_staff
+         JOIN users u_staff ON u_staff.id = ug_staff.user_id
+         WHERE ug_staff.group_id = ${alias}.id
+           AND u_staff.role IN ('developer', 'support')
+           AND COALESCE(u_staff.approved, TRUE) = TRUE
+       )`;
+
     const direct = await pool.query(
-      `SELECT g.id, g.name
+      `SELECT g.id, g.name, ${staffCheck('g')} AS has_staff
        FROM user_groups ug
        JOIN groups g ON g.id = ug.group_id
        WHERE ug.user_id = $1
-       ORDER BY COALESCE(g.is_default, FALSE) ASC, g.name ASC
-       LIMIT 1`,
+       ORDER BY has_staff DESC, COALESCE(g.is_default, FALSE) ASC, g.name ASC`,
       [clientId]
     );
-    if (direct.rows.length > 0) return { ...direct.rows[0], source: 'direct' };
+    const staffedDirect = direct.rows.find((row) => row.has_staff);
+    if (staffedDirect) return { id: staffedDirect.id, name: staffedDirect.name, source: 'direct' };
 
     const companyId = await resolveClientCompanyId(clientId);
     if (companyId) {
       const mapped = await pool.query(
-        `SELECT g.id, g.name
+        `SELECT g.id, g.name, ${staffCheck('g')} AS has_staff
          FROM company_groups cg
          JOIN groups g ON g.id = cg.group_id
          WHERE cg.company_id = $1
-         ORDER BY COALESCE(g.is_default, FALSE) ASC, g.name ASC
-         LIMIT 1`,
+         ORDER BY has_staff DESC, COALESCE(g.is_default, FALSE) ASC, g.name ASC`,
         [companyId]
       );
-      if (mapped.rows.length > 0) return { ...mapped.rows[0], source: 'company' };
+      if (mapped.rows.length > 0) return { id: mapped.rows[0].id, name: mapped.rows[0].name, source: 'company' };
       const legacy = await pool.query(
-        `SELECT g.id, g.name
+        `SELECT g.id, g.name, ${staffCheck('g')} AS has_staff
          FROM groups g
          WHERE g.company_id = $1
-         ORDER BY COALESCE(g.is_default, FALSE) ASC, g.name ASC
-         LIMIT 1`,
+         ORDER BY has_staff DESC, COALESCE(g.is_default, FALSE) ASC, g.name ASC`,
         [companyId]
       );
-      if (legacy.rows.length > 0) return { ...legacy.rows[0], source: 'company' };
+      if (legacy.rows.length > 0) return { id: legacy.rows[0].id, name: legacy.rows[0].name, source: 'company' };
     }
+    if (direct.rows.length > 0) return { id: direct.rows[0].id, name: direct.rows[0].name, source: 'direct' };
     return null;
   } catch (e) {
     console.error('[auto-assign] group lookup failed:', e.message);
@@ -1753,7 +1802,7 @@ function assignmentEmailContent({ assignmentType, isSupport, ctx, actorName }) {
     return {
       subject: 'A New Support Request Has Been Assigned to Your Group',
       tag: 'company-group-assignment',
-      leadText: `A new support request has been assigned to your group by **${clientName} from ${companyName} company**.`,
+      leadText: `A new support request has been assigned to your group by ${clientName} from ${companyName} company.`,
       leadHtml: `A new support request has been assigned to your group by <strong style="color:#ffffff;">${escapeEmailHtml(clientName)} from ${escapeEmailHtml(companyName)} company</strong>.`
     };
   }
@@ -4561,11 +4610,8 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
     notifyAdmins('New request created', { type: 'request_created', requestId: id, subject: subjectText, userId: req.user.id, userName: req.user.name });
     
     
-    emailAdminOnNewRequest(id, req);
-    
-    
-    
-    
+    let clientCompanyId = null;
+    try { clientCompanyId = await resolveClientCompanyId(clientId); } catch (e) {  }
     let autoAssignedGroup = null;
     try {
       const assignedGroup = await resolveGroupForClient(clientId);
@@ -4580,6 +4626,9 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
         notifyAdmins(`New request #${id} requires manual assignment (client has no assigned group)`, { type: 'manual_assignment_needed', requestId: id, userId: req.user.id, userName: req.user.name });
       }
     } catch (e) { console.error('[auto-assign] failed:', e.message); }
+    if (!clientCompanyId) {
+      emailAdminOnNewRequest(id, req);
+    }
     if (autoAssignedGroup) {
       await emailAssignmentGroupStaff({
         requestId: id,
