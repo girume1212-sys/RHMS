@@ -992,6 +992,56 @@ async function addUserRequestGroup(userId, groupId) {
   return result.rows.map((row) => row.request_id);
 }
 
+async function assignAndNotifyGrouplessClientRequests(userId, groupIds, req) {
+  const assignedRequestIds = [];
+  try {
+    const groupList = Array.isArray(groupIds) ? groupIds.filter(Boolean).map(String) : [];
+    if (!userId || groupList.length === 0) return assignedRequestIds;
+    const clientRequests = await pool.query(
+      `SELECT r.id
+       FROM requests r
+       WHERE r.client_id = $1
+         AND r.status_id = '1'
+         AND r.assigned_group IS NULL
+         AND NOT EXISTS (SELECT 1 FROM request_groups rg WHERE rg.request_id = r.id)
+       ORDER BY r.created_at ASC`,
+      [userId]
+    );
+    const groups = await pool.query(
+      'SELECT id, name FROM groups WHERE id::text = ANY($1::text[])',
+      [groupList]
+    );
+    for (const r of clientRequests.rows) {
+      await pool.query(
+        `UPDATE requests SET assigned_group = $1, assignment_source = 'direct', updated_at = NOW()
+         WHERE id = $2 AND assigned_group IS NULL`,
+        [groupList[0], r.id]
+      );
+      for (const gid of groupList) {
+        await pool.query(
+          'INSERT INTO request_groups (request_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [r.id, gid]
+        );
+      }
+      for (const g of groups.rows) {
+        await emailAssignmentGroupStaff({
+          requestId: r.id,
+          groupId: g.id,
+          groupName: g.name,
+          req,
+          assignmentType: 'client',
+          actorName: req.user?.name || 'Developer',
+          actorId: req.user?.id
+        });
+      }
+      assignedRequestIds.push(r.id);
+    }
+  } catch (err) {
+    console.error('[late-group-assign] failed:', err.message);
+  }
+  return assignedRequestIds;
+}
+
 
 
 async function associateUnassignedCompanyRequestsWithGroup(db, companyId, groupId) {
@@ -1291,6 +1341,20 @@ const mapRequest = (r) => ({
 
 
 
+function publicAppOrigin(req) {
+  const configured = String(process.env.APP_URL || process.env.PUBLIC_URL || process.env.CLIENT_URL || '').trim();
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch (e) {  }
+  }
+  const forwardedProto = String((req && req.headers && req.headers['x-forwarded-proto']) || '').split(',')[0].trim();
+  const protocol = forwardedProto || ((req && req.socket && req.socket.encrypted) ? 'https' : ((req && req.protocol) || 'http'));
+  const forwardedHost = String((req && req.headers && req.headers['x-forwarded-host']) || '').split(',')[0].trim();
+  const host = forwardedHost || String((req && req.get && req.get('host')) || '').split(',')[0].trim() || `localhost:${process.env.PORT || 5000}`;
+  return `${protocol}://${host}`;
+}
+
 async function getEmailLogoBlock(req) {
   const escapeHtml = (v) => String(v == null ? '' : v)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -1306,12 +1370,12 @@ async function getEmailLogoBlock(req) {
         if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext) && fs.existsSync(filePath)) {
           logoAttachment = { filename: `rhms-logo${ext}`, path: filePath, cid: 'rhmslogo' };
         } else if (req) {
-          logoUrl = `${req.protocol}://${req.get('host')}${logoPath}`;
+          logoUrl = `${publicAppOrigin(req)}${logoPath}`;
         }
       } else if (req) {
         logoUrl = logoPath.startsWith('http')
           ? logoPath
-          : `${req.protocol}://${req.get('host')}${logoPath.startsWith('/') ? '' : '/'}${logoPath}`;
+          : `${publicAppOrigin(req)}${logoPath.startsWith('/') ? '' : '/'}${logoPath}`;
       } else {
         logoUrl = logoPath;
       }
@@ -1436,10 +1500,10 @@ function workflowSectionTitle(title) {
 
 
 
-async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hello', lead, leadHtml, groupLine, statusBadge, infoTitle, infoRows, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature, viewLabel, viewUrl, req, requestId }) {
+async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hello', lead, leadHtml, introClosing = [], groupLine, statusBadge, infoTitle, infoRows, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature, viewLabel, viewUrl, req, requestId }) {
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
-  const appLink = viewUrl || (req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '');
+  const appLink = viewUrl || (req ? `${publicAppOrigin(req)}/requests/${requestId}` : '');
   const badgeColors = { NEW: '#3B82F6', ASSIGNED: '#8B5CF6', ESCALATED: '#EF4444', RESOLVED: '#10B981', FEEDBACK: '#10B981' };
   const badgeColor = (statusBadge && badgeColors[statusBadge]) || '#3B82F6';
   const para = (t) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#E8EEFF;">${t}</p>`;
@@ -1464,6 +1528,7 @@ async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hel
     `<tr><td style="padding:0 32px 8px;">` +
     escPara(`${salutation} ${greetingName},`) +
     (leadHtml != null ? para(leadHtml) : escPara(lead)) +
+    introClosing.map(escPara).join('') +
     (groupLine
       ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#E8EEFF;"><strong style="color:#ffffff;">Group:</strong> ${escapeEmailHtml(groupLine)}</p>`
       : '') +
@@ -1513,12 +1578,13 @@ async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hel
   return { html, logoAttachment };
 }
 
-function buildRequestWorkflowText({ title, greetingName, salutation = 'Hello', lead, leadText, groupLine, statusBadge, infoTitle, infoText, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature, viewLabel, viewUrl }) {
+function buildRequestWorkflowText({ title, greetingName, salutation = 'Hello', lead, leadText, introClosing = [], groupLine, statusBadge, infoTitle, infoText, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature, viewLabel, viewUrl }) {
   const allExtraSections = [];
   if (extraSection) allExtraSections.push(extraSection);
   if (Array.isArray(extraSections)) allExtraSections.push(...extraSections.filter(Boolean));
   return (
     `${title}\n\n${salutation} ${greetingName},\n\n${leadText || lead}\n\n` +
+    (introClosing.length > 0 ? `${introClosing.join('\n\n')}\n\n` : '') +
     (groupLine ? `Group: ${groupLine}\n\n` : '') +
     (statusBadge ? `Request Status: ${statusBadge}\n\n` : '') +
     `${infoTitle || 'Request Information'}\n${infoText}\n\n` +
@@ -1555,6 +1621,12 @@ const RHMS_EMAIL_SIGNATURE = {
 };
 
 const RHMS_ESCALATION_EMAIL_SIGNATURE = {
+  thanks: 'Best regards,',
+  brand: 'RHMS – Request Handling Management System',
+  subtitle: '',
+};
+
+const RHMS_ASSIGNMENT_EMAIL_SIGNATURE = {
   thanks: 'Best regards,',
   brand: 'RHMS – Request Handling Management System',
   subtitle: '',
@@ -1616,7 +1688,7 @@ function fireWorkflowEmail({ to, subject, tag, req, requestId, body, recipientId
         console.log(`[WorkflowEmail:${tag}] SMTP not configured; email to ${to} not sent (subject: ${subject})`);
         return;
       }
-      const viewUrl = req ? `${req.protocol}://${req.get('host')}/requests/${requestId}` : '';
+      const viewUrl = req ? `${publicAppOrigin(req)}/requests/${requestId}` : '';
       const { html, logoAttachment } = await buildRequestWorkflowHtml({ ...body, req, requestId, viewUrl });
       const text = buildRequestWorkflowText({ ...body, viewUrl });
       const info = await mailer.sendMail({ to, subject, text, html, ...(logoAttachment ? { attachments: [logoAttachment] } : {}) });
@@ -1632,6 +1704,155 @@ function fireWorkflowEmail({ to, subject, tag, req, requestId, body, recipientId
 
 function workflowCategoryOf(ctx) {
   return ctx.custom_category || ctx.category_name || 'N/A';
+}
+
+async function assignmentNotificationPermissions() {
+  try {
+    const r = await pool.query("SELECT key, value FROM system_settings WHERE key IN ('emailNotifications', 'inAppNotifications', 'notifyDeveloperAssignment')");
+    const settings = {};
+    for (const row of r.rows) settings[row.key] = row.value;
+    return {
+      email: settings.emailNotifications !== 'false' && settings.notifyDeveloperAssignment !== 'false',
+      inApp: settings.inAppNotifications !== 'false'
+    };
+  } catch (e) {
+    return { email: true, inApp: true };
+  }
+}
+
+function assignmentRequestDetails({ requestId, ctx, groupName }) {
+  const rows = [
+    ['Request ID', requestId],
+    ['Request Title', ctx.subject],
+    ['Category', workflowCategoryOf(ctx)],
+    ['Priority', ctx.priority_name],
+    ['Status', ctx.status_name],
+    ['Client Name', ctx.client_name],
+    ['Group', groupName || ctx.group_name],
+    ['Submission Date', formatEmailDateTime(ctx.created_at)]
+  ];
+  return {
+    infoRows: rows.map(([label, value]) => workflowInfoRow(label, value == null || value === '' ? 'N/A' : value)).join(''),
+    infoText: rows.map(([label, value]) => `- ${label}: ${value == null || value === '' ? 'N/A' : value}`).join('\n')
+  };
+}
+
+function assignmentEmailContent({ assignmentType, isSupport, ctx, actorName }) {
+  const clientName = ctx.client_name || 'Client';
+  const companyName = ctx.client_company || 'N/A';
+  const developerName = actorName || 'Developer';
+  if (assignmentType === 'company') {
+    if (isSupport) {
+      return {
+        subject: 'A Support Request Has Been Escalated to Your Group',
+        tag: 'company-group-escalation',
+        leadText: `A new support request has been escalated to your group by developer ${developerName}.`,
+        leadHtml: `A new support request has been escalated to your group by developer <strong style="color:#ffffff;">${escapeEmailHtml(developerName)}</strong>.`
+      };
+    }
+    return {
+      subject: 'A New Support Request Has Been Assigned to Your Group',
+      tag: 'company-group-assignment',
+      leadText: `A new support request has been assigned to your group by **${clientName} from ${companyName} company**.`,
+      leadHtml: `A new support request has been assigned to your group by <strong style="color:#ffffff;">${escapeEmailHtml(clientName)} from ${escapeEmailHtml(companyName)} company</strong>.`
+    };
+  }
+  if (isSupport) {
+    return {
+      subject: 'A Support Request Has Been Escalated to Your Group',
+      tag: 'client-group-escalation',
+      leadText: `A new support request has been escalated to your group by ${developerName}.`,
+      leadHtml: `A new support request has been escalated to your group by <strong style="color:#ffffff;">${escapeEmailHtml(developerName)}</strong>.`
+    };
+  }
+  return {
+    subject: 'A New Support Request Has Been Assigned to Your Group',
+    tag: 'client-group-assignment',
+    leadText: 'A new support request has been assigned to your group.',
+    leadHtml: 'A new support request has been assigned to your group.'
+  };
+}
+
+async function assignmentDeveloperName(ctx, groupId, req) {
+  if (ctx.assignee_role === 'developer' && ctx.assignee_name) return ctx.assignee_name;
+  try {
+    const r = await pool.query(
+      `SELECT u.name
+       FROM user_groups ug
+       JOIN users u ON u.id = ug.user_id
+       WHERE ug.group_id = $1
+         AND u.role = 'developer'
+         AND COALESCE(u.approved, TRUE) = TRUE
+       ORDER BY u.name
+       LIMIT 1`,
+      [groupId]
+    );
+    if (r.rows.length > 0 && r.rows[0].name) return r.rows[0].name;
+  } catch (e) {  }
+  return req.user?.name || 'Developer';
+}
+
+async function emailAssignmentGroupStaff({ requestId, groupId, groupName, req, assignmentType, actorName, actorId }) {
+  try {
+    const permissions = await assignmentNotificationPermissions();
+    if (!permissions.email && !permissions.inApp) return;
+    const ctx = await getRequestEmailContext(requestId);
+    if (!ctx) return;
+    const members = await getAssignmentGroupRecipients(groupId);
+    if (members.length === 0) return;
+    if (permissions.inApp) {
+      await notifyGroupMembers(groupId, `New support request #${requestId} assigned to your group`, {
+        type: 'group_assigned',
+        requestId,
+        groupId,
+        groupName,
+        userId: actorId
+      });
+    }
+    if (!permissions.email) return;
+    const details = assignmentRequestDetails({ requestId, ctx, groupName });
+    const developerName = await assignmentDeveloperName(ctx, groupId, req);
+    for (const m of members) {
+      const isSupport = m.role === 'support';
+      if (m.role !== 'developer' && !isSupport) continue;
+      const content = assignmentEmailContent({
+        assignmentType,
+        isSupport,
+        ctx,
+        actorName: isSupport ? developerName : actorName
+      });
+      fireWorkflowEmail({
+        to: m.email,
+        subject: content.subject,
+        tag: content.tag,
+        req,
+        requestId,
+        recipientId: m.id,
+        groupId,
+        eventType: assignmentType === 'company' ? 'company_group_assignment' : 'request_assigned_group',
+        dedupKey: `${assignmentType}-assignment:${requestId}:${groupId}:${m.id}:${isSupport ? 'support' : 'developer'}`,
+        body: {
+          title: content.subject,
+          salutation: 'Dear',
+          greetingName: m.name || (isSupport ? 'Escalation Team Member' : 'Developer'),
+          lead: content.leadText,
+          leadHtml: content.leadHtml,
+          leadText: content.leadText,
+          introClosing: ['Please review the request and take the necessary action.'],
+          infoTitle: 'Request Details:',
+          infoRows: details.infoRows,
+          infoText: details.infoText,
+          detailsBody: null,
+          resolution: null,
+          closing: [],
+          signature: RHMS_ASSIGNMENT_EMAIL_SIGNATURE,
+          viewLabel: 'View Request'
+        }
+      });
+    }
+  } catch (err) {
+    console.error('[WorkflowEmail:group-assignment] failed:', err.message);
+  }
 }
 
 
@@ -1682,9 +1903,6 @@ async function emailGroupMembersOnNewRequest(requestId, submitterId, req) {
     console.error('[WorkflowEmail:group-new] failed:', err.message);
   }
 }
-
-
-
 
 
 
@@ -1789,51 +2007,16 @@ async function emailGroupMembersOnCompanyAssignment(companyId, groupId, requestI
     if (!Array.isArray(requestIds) || requestIds.length === 0) return;
     const groupResult = await pool.query('SELECT name FROM groups WHERE id = $1', [groupId]);
     const groupName = groupResult.rows.length > 0 ? groupResult.rows[0].name : groupId;
-    const members = await getAssignmentGroupRecipients(groupId);
-    if (members.length === 0) return;
     for (const requestId of requestIds) {
-      const ctx = await getRequestEmailContext(requestId);
-      if (!ctx) continue;
-      const clientName = ctx.client_name || ctx.client_email || 'Client';
-      const companyName = ctx.client_company || (await getCompanyNameById(companyId)) || 'N/A';
-      const submittedOn = formatEmailDateTime(ctx.created_at);
-      const details = rhmsRequestDetails({
+      await emailAssignmentGroupStaff({
         requestId,
-        subject: ctx.subject,
-        companyName,
-        clientName,
-        submittedOn,
+        groupId,
+        groupName,
+        req,
+        assignmentType: 'company',
+        actorName: req.user?.name || 'Developer',
+        actorId: req.user?.id
       });
-      const leadText = `A new support request has been assigned to your group by **${clientName}** from **${companyName}**.`;
-      const leadHtml = `A new support request has been assigned to your group by <strong style="color:#ffffff;">${escapeEmailHtml(clientName)}</strong> from <strong style="color:#ffffff;">${escapeEmailHtml(companyName)}</strong>.`;
-      for (const m of members) {
-        if (m.role !== 'developer') continue;
-        fireWorkflowEmail({
-          to: m.email,
-          subject: `Company ${companyName} Assigned to ${groupName} - Request #${requestId}`,
-          tag: 'company-group-assigned', req, requestId,
-          recipientId: m.id,
-          groupId,
-          eventType: 'company_group_assignment',
-          dedupKey: `company-group-assignment:${companyId}:${groupId}:${requestId}:${m.id}`,
-          body: {
-            title: 'New Support Request Assigned to Your Group',
-            salutation: 'Dear',
-            greetingName: m.name || 'Developer',
-            lead: leadText,
-            leadHtml,
-            leadText,
-            infoTitle: 'Request Details:',
-            infoRows: details.infoRows,
-            infoText: details.infoText,
-            detailsBody: null,
-            resolution: null,
-            closing: ['Please review the request and take the necessary action.'],
-            signature: RHMS_EMAIL_SIGNATURE,
-            viewLabel: 'View Request',
-          },
-        });
-      }
     }
   } catch (err) {
     console.error('[WorkflowEmail:company-group-assigned] failed:', err.message);
@@ -2132,15 +2315,10 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
       );
     }
     if (grp.rows.length === 0) { console.log('[WorkflowEmail:escalated] skipped — request has no group'); return; }
-    const clientName = ctx.client_name || 'Client';
-    const clientCompany = ctx.client_company || 'N/A';
     const escalationEventId = ctx.updated_at ? new Date(ctx.updated_at).toISOString() : 'unknown';
-    const escalatedOn = formatEmailDateTime(ctx.updated_at);
-    const submittedOn = formatEmailDateTime(ctx.created_at);
-    const note = await getEscalationNote(requestId);
     const escalatorName = (escalator && escalator.name) || 'Developer';
     const escalatorId = escalator && escalator.id;
-    const subject = 'Support Request Escalated to Your Group';
+    const content = assignmentEmailContent({ assignmentType: 'client', isSupport: true, ctx, actorName: escalatorName });
     let sent = 0;
     const alreadyEmailed = new Set();
     for (const g of grp.rows) {
@@ -2156,45 +2334,30 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
         if (alreadyEmailed.has(key)) continue;
         alreadyEmailed.add(key);
         sent += 1;
-        const leadText = `A support request has been escalated to your group by **${escalatorName}**.`;
-        const leadHtml = `A support request has been escalated to your group by <strong style="color:#ffffff;">${escapeEmailHtml(escalatorName)}</strong>.`;
-        const details = rhmsRequestDetails({
-          requestId,
-          subject: ctx.subject,
-          companyName: clientCompany,
-          clientName,
-          submittedOn,
-          extraRows:
-            workflowInfoRow('Escalated By', escalatorName) +
-            workflowInfoRow('Escalation Date', escalatedOn) +
-            workflowInfoRow('Escalation Reason', note),
-          extraText:
-            `\nEscalated By: ${escalatorName}` +
-            `\nEscalation Date: ${escalatedOn}` +
-            `\nEscalation Reason: ${note}`,
-        });
+        const details = assignmentRequestDetails({ requestId, ctx, groupName: g.name });
         fireWorkflowEmail({
           to: m.email,
-          subject,
+          subject: content.subject,
           tag: 'escalated', req, requestId,
           recipientId: m.id,
           groupId: g.id,
           eventType: 'request_escalated_group',
           dedupKey: `request-escalated:${requestId}:${m.id}:${escalationEventId}`,
           body: {
-            title: 'Support Request Escalated to Your Group',
+            title: content.subject,
             salutation: 'Dear',
             greetingName: m.name || 'Escalation Team Member',
-            lead: leadText,
-            leadHtml,
-            leadText,
+            lead: content.leadText,
+            leadHtml: content.leadHtml,
+            leadText: content.leadText,
+            introClosing: ['Please review the request and take the necessary action.'],
             infoTitle: 'Request Details:',
             infoRows: details.infoRows,
             infoText: details.infoText,
             detailsBody: null,
             resolution: null,
-            closing: ['Please review the escalated request and take the necessary action.'],
-            signature: RHMS_ESCALATION_EMAIL_SIGNATURE,
+            closing: [],
+            signature: RHMS_ASSIGNMENT_EMAIL_SIGNATURE,
             viewLabel: 'View Request',
           },
         });
@@ -2448,7 +2611,7 @@ app.post('/api/auth/signup', async (req, res) => {
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       const safeName = escapeHtml(newUser.name);
-      const loginUrl = `${req.protocol}://${req.get('host')}/login`;
+      const loginUrl = `${publicAppOrigin(req)}/login`;
       const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
       const contactFooter = await getEmailContactFooter();
       await mailer.sendMail({
@@ -2838,7 +3001,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
       
       
-      const resetUrl = `${req.protocol}://${req.get('host')}/reset-password?token=${rawToken}`;
+      const resetUrl = `${publicAppOrigin(req)}/reset-password?token=${rawToken}`;
       console.log(`[PasswordReset] Reset link for ${user.email}: ${resetUrl}`);
       notifyUser(user.id, `Password reset requested. Use this link within ${ttlMinutes} minutes: ${resetUrl}`,
         { type: 'password_reset', title: 'Password Reset' });
@@ -3505,13 +3668,17 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
         }
       }
       
+      const assignedRequestIds = await assignAndNotifyGrouplessClientRequests(req.params.id, groupIds, req);
+      const assignedRequestSet = new Set(assignedRequestIds.map(String));
       const addedGroups = await syncUserRequestGroups(req.params.id, groupIds);
       for (const gid of Object.keys(addedGroups)) {
-        const count = addedGroups[gid].length;
+        const requestIds = addedGroups[gid].filter((requestId) => !assignedRequestSet.has(String(requestId)));
+        if (requestIds.length === 0) continue;
+        const count = requestIds.length;
         notifyGroupMembers(gid, `${count} new request${count > 1 ? 's' : ''} available for your group`, { groupId: gid });
         
         
-        emailGroupDevelopersForSyncedRequests(addedGroups[gid], gid, req, req.params.id);
+        emailGroupDevelopersForSyncedRequests(requestIds, gid, req, req.params.id);
       }
     } catch (e) { console.log('user_groups save error:', e.message); }
     const user = mapUser(result.rows[0]);
@@ -3935,10 +4102,6 @@ app.get('/api/requests', authMiddleware, async (req, res) => {
       if (myRequests) {
         query += ` AND r.assigned_to = $${paramIndex++}`;
         params.push(req.user.id);
-      } else if (req.user.role === 'support') {
-        
-        query += ` AND (r.assigned_to = $${paramIndex++} OR (r.status_id = '9' AND EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++})))`;
-        params.push(req.user.id, req.user.id);
       } else {
         query += ` AND (r.assigned_to = $${paramIndex++} OR EXISTS (SELECT 1 FROM request_groups rg INNER JOIN user_groups ug ON rg.group_id = ug.group_id WHERE rg.request_id = r.id AND ug.user_id = $${paramIndex++}))`;
         params.push(req.user.id, req.user.id);
@@ -4417,7 +4580,19 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
         notifyAdmins(`New request #${id} requires manual assignment (client has no assigned group)`, { type: 'manual_assignment_needed', requestId: id, userId: req.user.id, userName: req.user.name });
       }
     } catch (e) { console.error('[auto-assign] failed:', e.message); }
-    emailGroupMembersOnNewRequest(id, req.user.id, req);
+    if (autoAssignedGroup) {
+      await emailAssignmentGroupStaff({
+        requestId: id,
+        groupId: autoAssignedGroup.id,
+        groupName: autoAssignedGroup.name,
+        req,
+        assignmentType: autoAssignedGroup.source === 'company' ? 'company' : 'client',
+        actorName: req.user?.name || 'Developer',
+        actorId: req.user?.id
+      });
+    } else {
+      emailGroupMembersOnNewRequest(id, req.user.id, req);
+    }
 
     res.status(201).json({ id, subject: subjectText, description: descriptionText, clientId, categoryId: effectiveCategoryId, customCategory: customCategoryValue, priorityId: effectivePriorityId, statusId: effectiveStatusId, assignedTo: null, assignedGroup: autoAssignedGroup, assignmentSource: autoAssignedGroup ? autoAssignedGroup.source : null, assignmentWarning: autoAssignedGroup ? null : true, attachments: attachmentList, createdAt: now, updatedAt: now });
   } catch (err) {
@@ -6144,7 +6319,10 @@ app.post('/api/groups/:id/members', authMiddleware, roleMiddleware('admin'), asy
     await logGroupActivity('member_added', { id: req.params.id }, req.user, req, { memberId: user_id });
     
     
-    const syncedIds = await addUserRequestGroup(user_id, req.params.id);
+    const assignedRequestIds = await assignAndNotifyGrouplessClientRequests(user_id, [req.params.id], req);
+    const assignedRequestSet = new Set(assignedRequestIds.map(String));
+    const syncedIds = (await addUserRequestGroup(user_id, req.params.id))
+      .filter((requestId) => !assignedRequestSet.has(String(requestId)));
     if (syncedIds.length > 0) {
       notifyGroupMembers(req.params.id, `${syncedIds.length} new request${syncedIds.length > 1 ? 's' : ''} available for your group`);
       

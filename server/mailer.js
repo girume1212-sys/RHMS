@@ -21,6 +21,7 @@ function smtpSettings() {
     user: (process.env.SMTP_USER || '').trim(),
     pass: process.env.SMTP_PASS || '',
     from: (process.env.SMTP_FROM || '').trim(),
+    fromName: (process.env.SMTP_FROM_NAME || 'Request Handling Management System').trim(),
   };
 }
 
@@ -55,6 +56,10 @@ function getTransporter() {
   });
   cachedKey = key;
   return cachedTransporter;
+}
+
+function safeHeaderValue(value) {
+  return String(value || '').replace(/[\r\n]+/g, ' ').trim();
 }
 
 function withTimeout(promise, ms, label) {
@@ -136,17 +141,29 @@ async function sendMail({ to, subject, text, html, attachments }) {
   }
   assertDeliverableRecipients(to);
   const s = smtpSettings();
+  const senderAddress = s.user || s.from;
+  const senderDomain = (senderAddress.split('@')[1] || 'localhost').trim();
+  const displayName = safeHeaderValue(s.fromName || 'Request Handling Management System');
   try {
     const info = await withTimeout(
       getTransporter().sendMail({
-        from: `"Request Handling Management System" <${process.env.SMTP_FROM}>`,
-        
-        replyTo: `"Request Handling Management System" <${process.env.SMTP_FROM}>`,
+        from: `"${displayName}" <${senderAddress}>`,
+        sender: senderAddress,
+        envelope: { from: senderAddress, to },
+        replyTo: `"${displayName}" <${senderAddress}>`,
         to,
         subject,
         text,
         html,
         attachments,
+        headers: {
+          'Auto-Submitted': 'auto-generated',
+          'X-Auto-Response-Suppress': 'All',
+          'X-Mailer': 'RHMS Notification Service',
+          'Precedence': 'bulk',
+          'List-Id': `<RHMS Notifications.${senderDomain}>`,
+          'List-Unsubscribe': `<mailto:${senderAddress}?subject=Unsubscribe>`,
+        },
       }),
       SMTP_TIMEOUT_MS,
       'SMTP send timed out'
