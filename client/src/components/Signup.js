@@ -11,8 +11,7 @@ import { useAuth } from '../AuthContext';
 export default function Signup() {
   const { t } = useTranslation();
   const [name, setName] = useState('');
-  const [companies, setCompanies] = useState([]);
-  const [companyId, setCompanyId] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -32,12 +31,6 @@ export default function Signup() {
   const { darkMode, toggleDarkMode, googleLogin } = useAuth();
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleUnavailable, setGoogleUnavailable] = useState(!process.env.REACT_APP_GOOGLE_CLIENT_ID);
-
-  const companyName = companies.find(c => String(c.id) === String(companyId))?.name || '';
-
-  useEffect(() => {
-    api.get('/api/public/companies').then(data => setCompanies(Array.isArray(data) ? data : [])).catch(() => {});
-  }, []);
 
   useEffect(() => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
@@ -70,7 +63,7 @@ export default function Signup() {
           setGoogleLoading(true);
           setError('');
           try {
-            const user = await googleLogin(response.credential, 'signup', { companyId, companyName });
+            const user = await googleLogin(response.credential, 'signup', { companyName });
             if (user.role === 'client') navigate('/client');
             else navigate('/');
           } catch (err) {
@@ -136,7 +129,7 @@ export default function Signup() {
     }, 10000);
 
     return () => { cancelled = true; clearTimeout(timeoutId); };
-  }, [googleLogin, navigate, t, companyId, companyName]);
+  }, [googleLogin, navigate, t, companyName]);
 
   useEffect(() => {
     if (resendSeconds <= 0) return;
@@ -208,7 +201,7 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      const data = await api.post('/api/auth/request-email-verification', { name, email, password, companyId, companyName });
+      const data = await api.post('/api/auth/request-email-verification', { name, email, password, companyName });
       setStep('verify');
       setCode('');
       setResendSeconds(data.retryAfter || 60);
@@ -232,7 +225,7 @@ export default function Signup() {
     setLoading(true);
     setError('');
     try {
-      const data = await api.post('/api/auth/request-email-verification', { name, email, password, companyId, companyName });
+      const data = await api.post('/api/auth/request-email-verification', { name, email, password, companyName });
       setCode('');
       setResendSeconds(data.retryAfter || 60);
     } catch (err) {
@@ -300,7 +293,7 @@ export default function Signup() {
     setErrors(prev => ({ ...prev, code: '' }));
     setLoading(true);
     try {
-      await api.post('/api/auth/signup', { name, email, password, companyId, companyName, code: code.trim() });
+      await api.post('/api/auth/signup', { name, email, password, companyName, code: code.trim() });
       navigate('/login');
     } catch (err) {
       const msg = err.message || '';
@@ -400,17 +393,14 @@ export default function Signup() {
                 <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
                 <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
               </svg>
-              <select
-                value={companyId}
-                onChange={(e) => { setCompanyId(e.target.value); validateField('companyName', companies.find(c => String(c.id) === e.target.value)?.name || ''); }}
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => { setCompanyName(e.target.value); validateField('companyName', e.target.value); }}
+                placeholder={t('common.enterCompanyName')}
                 className={errors.companyName ? 'input-error' : ''}
                 required
-              >
-                <option value="">{t('common.selectCompany')}</option>
-                {companies.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              />
             </div>
             <ValidationError message={errors.companyName} />
           </div>
