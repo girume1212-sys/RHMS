@@ -410,9 +410,9 @@ export default function Company() {
                 {c.company_type && <div className="category-manage-desc">{t('company.typeLabel', { type: c.company_type })}</div>}
                 {c.email && <div className="category-manage-desc">{t('company.emailLabel', { email: c.email })}</div>}
                 {c.phone && <div className="category-manage-desc">{t('company.phoneLabel', { phone: c.phone })}</div>}
-                <div className="category-manage-actions">
-                  <button className="category-view-btn" onClick={(e) => { e.stopPropagation(); openEdit(c); }}>{t('common.edit')}</button>
-                  <button className="category-view-btn" style={{ background: '#ef4444' }} onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}>{t('common.delete')}</button>
+                <div className="actions-cell-inline" style={{ justifyContent: 'center' }}>
+                  <button className="action-btn-text edit" onClick={(e) => { e.stopPropagation(); openEdit(c); }}>{t('common.edit')}</button>
+                  <button className="action-btn-text delete" onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}>{t('common.delete')}</button>
                 </div>
               </div>
             ))}
