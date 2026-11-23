@@ -1471,7 +1471,7 @@ async function getEmailContactFooter() {
   }
   lines.push(`<p style="margin:12px 0 0;font-size:11px;color:#9ca3af;">This is an automated message. Please do not reply to this email.</p>`);
   return (
-    `<tr><td align="center" style="${EMAIL_FOOTER_STYLE}">` +
+    `<tr><td align="center" bgcolor="#0A1F44" style="${EMAIL_FOOTER_STYLE}">` +
     lines.join('') +
     `</td></tr>`
   );
@@ -1490,7 +1490,7 @@ const escapeEmailHtml = (v) => String(v == null ? '' : v)
 
 
 const EMAIL_CARD_STYLE = 'max-width:600px;width:100%;background:linear-gradient(160deg,#000000 0%,#0A1F44 55%,#1D4ED8 135%);background-color:#0A1F44;border-radius:12px;overflow:hidden;';
-const EMAIL_FOOTER_STYLE = 'background:linear-gradient(160deg,#000000 0%,#0A1F44 60%,#1E40AF 140%);background-color:#0A1F44;padding:20px 32px;text-align:center;';
+const EMAIL_FOOTER_STYLE = 'background:#0A1F44;padding:20px 32px;text-align:center;color:#d1d5db;';
 
 
 
@@ -1549,7 +1549,7 @@ function workflowSectionTitle(title) {
 
 
 
-async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hello', lead, leadHtml, introClosing = [], groupLine, statusBadge, infoTitle, infoRows, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature, viewLabel, viewUrl, req, requestId }) {
+async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hello', lead, leadHtml, introClosing = [], groupLine, statusBadge, infoTitle, infoRows, detailsSectionTitle, detailsTitle, detailsBody, resolution, extraSection, extraSections, closing = [], signature, viewLabel, viewUrl, req, requestId, hideFooter = false }) {
   const { logoBlock, logoAttachment } = await getEmailLogoBlock(req);
   const contactFooter = await getEmailContactFooter();
   const appLink = viewUrl || (req ? `${publicAppOrigin(req)}/requests/${requestId}` : '');
@@ -1621,8 +1621,7 @@ async function buildRequestWorkflowHtml({ title, greetingName, salutation = 'Hel
         `</td></tr></table></td></tr>`
       : '') +
     `<tr><td style="padding:18px 32px 0;">` + signatureBlock + `</td></tr>` +
-    `<tr><td style="padding:16px 32px 32px;"><p style="margin:0;font-size:12px;line-height:1.6;color:#9ca3af;">This is an automated message from the RHMS Support Request System.</p></td></tr>` +
-    contactFooter +
+    (hideFooter ? '' : contactFooter) +
     `</table></td></tr></table></body></html>`;
   return { html, logoAttachment };
 }
@@ -1769,7 +1768,7 @@ async function assignmentNotificationPermissions() {
   }
 }
 
-function assignmentRequestDetails({ requestId, ctx, groupName }) {
+function assignmentRequestDetails({ requestId, ctx, groupName, statusColor }) {
   const rows = [
     ['Request ID', requestId],
     ['Request Title', ctx.subject],
@@ -1781,7 +1780,13 @@ function assignmentRequestDetails({ requestId, ctx, groupName }) {
     ['Submission Date', formatEmailDateTime(ctx.created_at)]
   ];
   return {
-    infoRows: rows.map(([label, value]) => workflowInfoRow(label, value == null || value === '' ? 'N/A' : value)).join(''),
+    infoRows: rows.map(([label, value]) => {
+      const v = value == null || value === '' ? 'N/A' : value;
+      if (label === 'Status' && statusColor) {
+        return `<tr><td style="padding:6px 0;font-size:14px;line-height:1.6;color:#F1F5FF;"><span style="color:#60A5FA;">&#8226;&nbsp;&nbsp;</span><strong style="color:#BFDBFE;">${escapeEmailHtml(label)}:</strong> <span style="color:${escapeEmailHtml(statusColor)};font-weight:700;">${escapeEmailHtml(v)}</span></td></tr>`;
+      }
+      return workflowInfoRow(label, v);
+    }).join(''),
     infoText: rows.map(([label, value]) => `- ${label}: ${value == null || value === '' ? 'N/A' : value}`).join('\n')
   };
 }
@@ -2115,6 +2120,7 @@ async function emailAdminOnFeedback(requestId, rating, comment, req) {
           resolution: null,
           extraSection: { title: 'Client Feedback', body: comment || 'No comment provided.' },
           closing: ['Please review the feedback and take any necessary action.'],
+          hideFooter: true,
         },
       });
     }
@@ -2182,6 +2188,7 @@ async function emailAdminOnNewRequest(requestId, req) {
           detailsBody: ctx.description || 'N/A',
           resolution: null,
           closing: ['Please review the request and assign or process it according to the existing RHMS workflow.'],
+          hideFooter: true,
         },
       });
     }
@@ -2383,7 +2390,7 @@ async function emailEscalationTeamOnEscalation(requestId, escalator, req, previo
         if (alreadyEmailed.has(key)) continue;
         alreadyEmailed.add(key);
         sent += 1;
-        const details = assignmentRequestDetails({ requestId, ctx, groupName: g.name });
+        const details = assignmentRequestDetails({ requestId, ctx, groupName: g.name, statusColor: '#EF4444' });
         fireWorkflowEmail({
           to: m.email,
           subject: content.subject,
@@ -3755,9 +3762,17 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, r
 
 app.delete('/api/users/:id', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   try {
-    const existing = await pool.query('SELECT id, name, email FROM users WHERE id = $1', [req.params.id]);
+    const companyOnly = String(req.query.companyOnly || '').toLower() === 'true';
+    const existing = await pool.query('SELECT id, name, email, company_name, company_id FROM users WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const doomed = existing.rows[0];
+
+    if (companyOnly) {
+      await pool.query('UPDATE users SET company_name = $1, company_id = NULL WHERE id = $2', ['', req.params.id]);
+      await logUserActivity('user_updated', { id: req.params.id, name: doomed.name, email: doomed.email, companyName: '' }, req.user, req, { changes: { companyName: '', company_id: null, removedFromCompany: doomed.company_name || '' } });
+      return res.json({ message: 'User removed from company' });
+    }
+
     const doomedEmail = String(doomed.email || '').trim().toLowerCase();
     
     
@@ -4626,9 +4641,7 @@ app.post('/api/requests', authMiddleware, async (req, res) => {
         notifyAdmins(`New request #${id} requires manual assignment (client has no assigned group)`, { type: 'manual_assignment_needed', requestId: id, userId: req.user.id, userName: req.user.name });
       }
     } catch (e) { console.error('[auto-assign] failed:', e.message); }
-    if (!clientCompanyId) {
-      emailAdminOnNewRequest(id, req);
-    }
+    emailAdminOnNewRequest(id, req);
     if (autoAssignedGroup) {
       await emailAssignmentGroupStaff({
         requestId: id,
@@ -4740,21 +4753,31 @@ app.put('/api/requests/:id', authMiddleware, async (req, res) => {
 
     
     if (statusId) {
+      const currentStatusId = String(existing.rows[0].status_id);
+      const nextStatusId = String(statusId);
       const reopenResult = await pool.query("SELECT value FROM system_settings WHERE key = 'allowReopen'");
       const allowReopen = reopenResult.rows.length > 0 ? reopenResult.rows[0].value === 'true' : true;
       const closedStatusIds = ['5', '6', '8'];
-      if (closedStatusIds.includes(existing.rows[0].status_id) && closedStatusIds.includes(statusId)) {
+      if (closedStatusIds.includes(currentStatusId) && closedStatusIds.includes(nextStatusId)) {
         if (!allowReopen && req.user.role === 'client') {
           return res.status(403).json({ error: 'Reopening requests is not allowed. Contact an administrator.' });
         }
       }
-      
-      if (req.user.role === 'client' && (statusId === '6' || statusId === '8') && existing.rows[0].status_id !== '5') {
+
+      if (req.user.role === 'client' && (nextStatusId === '6' || nextStatusId === '8') && currentStatusId !== '5') {
         return res.status(400).json({ error: 'You can only close or reject a request that is in Resolved status.' });
       }
-      
-      if (req.user.role === 'developer' && existing.rows[0].status_id === '1' && statusId) {
+
+      if (req.user.role === 'developer' && currentStatusId === '1' && nextStatusId) {
         return res.status(403).json({ error: 'You must claim and assign this request to yourself before changing its status' });
+      }
+
+      if (req.user.role === 'developer' && nextStatusId !== currentStatusId && ['6', '8', '9'].includes(currentStatusId)) {
+        return res.status(403).json({ error: 'Developers cannot change Closed, Rejected, or Escalated requests to another status.' });
+      }
+
+      if (req.user.role === 'support' && nextStatusId !== currentStatusId && ['6', '8'].includes(currentStatusId)) {
+        return res.status(403).json({ error: 'Escalation team cannot change Closed or Rejected requests to another status.' });
       }
     }
 

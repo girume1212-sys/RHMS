@@ -27,6 +27,7 @@ export default function Company() {
   const [editingCompany, setEditingCompany] = useState(null);
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
+  const [deleteUserTarget, setDeleteUserTarget] = useState(null);
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'client' });
   const [userSort, setUserSort] = useState({ key: '', dir: 'asc' });
   const [userPage, setUserPage] = useState(1);
@@ -200,10 +201,12 @@ export default function Company() {
     }
   };
 
-  const handleDeleteUser = async (id, name) => {
-    if (!window.confirm(t('company.deleteUserConfirm', { name }))) return;
+  const confirmDeleteUser = async () => {
+    if (!deleteUserTarget) return;
+    const { id, name } = deleteUserTarget;
+    setDeleteUserTarget(null);
     try {
-      await api.delete(`/api/users/${id}`);
+      await api.delete(`/api/users/${id}?companyOnly=true`);
       loadData();
       addToast(t('company.userDeletedWithName', { name }));
       showStatusToast(t('company.userDeleted', { name }), 'request_deleted');
@@ -473,7 +476,7 @@ export default function Company() {
                             <td>
                               <div className="actions-cell-inline">
                                 <button className="action-btn-text edit" onClick={() => openEditUser(u)}>{t('common.edit')}</button>
-                                <button className="action-btn-text delete" onClick={() => handleDeleteUser(u.id, u.name)}>{t('common.delete')}</button>
+                                <button className="action-btn-text delete" onClick={() => setDeleteUserTarget({ id: u.id, name: u.name })}>{t('common.delete')}</button>
                               </div>
                             </td>
                             </tr>
@@ -544,6 +547,18 @@ export default function Company() {
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setEditingUser(null)}>{t('common.cancel')}</button>
               <button className="btn btn-primary" onClick={handleSaveUser}>{t('common.saveChanges')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteUserTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteUserTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <p style={{ fontSize: 18, color: '#fff', lineHeight: 1.6, margin: '32px 24px 24px' }}>{t('company.deleteUserConfirm', { name: deleteUserTarget.name })}</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '0 24px 32px' }}>
+              <button onClick={() => setDeleteUserTarget(null)} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: '1px solid #475569', background: '#334155', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.cancel')}</button>
+              <button onClick={confirmDeleteUser} style={{ flex: 1, padding: '10px 20px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{t('common.delete')}</button>
             </div>
           </div>
         </div>
